@@ -1,0 +1,38 @@
+[
+  {
+    "query_id": "hpa_diet_01",
+    "track": "vector",
+    "user_raw_input": "糖尿病平常飲食要注意什麼？",
+    "retrieval_queries": [
+      "糖尿病 飲食原則",
+      "糖尿病 均衡飲食"
+    ],
+    "expected_chunk_ids": [
+      "hpa-dm-book_sec1_10"
+    ]
+  },
+  {
+    "query_id": "hpa_diet_02",
+    "track": "vector",
+    "user_raw_input": "糖尿病病人烹調食物有什麼建議？",
+    "retrieval_queries": [
+      "糖尿病 低油烹調",
+      "糖尿病 烹調方式"
+    ],
+    "expected_chunk_ids": [
+      "hpa-dm-book_sec1_15"
+    ]
+  },
+  {
+    "query_id": "hpa_diet_03",
+    "track": "vector",
+    "user_raw_input": "糖尿病飲食中的醣類要怎麼選擇？",
+    "retrieval_queries": [
+      "糖尿病 全穀類 精緻糖",
+      "糖尿病 醣類選擇"
+    ],
+    "expected_chunk_ids": [
+      "hpa-dm-book_sec1_14"
+    ]
+  }
+]

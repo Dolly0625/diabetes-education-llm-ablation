@@ -1,0 +1,23 @@
+# Secrets — 絕不上傳
+.env
+.env.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# 運行殘留（病人資料、log）
+diabetes_chatbot/chat_logs.jsonl
+diabetes_chatbot/data/**/*.json
+!diabetes_chatbot/data/sessions/.gitkeep
+*.log
+ngrok.log
+server.log
+.DS_Store
+
+# 大檔走外部（1GB 語音模型，部署時用掛載或另外傳）
+models/
