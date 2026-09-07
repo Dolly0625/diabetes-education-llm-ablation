@@ -16,10 +16,20 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import pytest
 from fastapi.testclient import TestClient
 from diabetes_chatbot.server.app import app
 
 client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def clean_test_patient_data():
+    patient_file = ROOT_DIR / "diabetes_chatbot/data/line_grandpa_line_001.json"
+    if patient_file.exists():
+        patient_file.unlink()
+    yield
+    if patient_file.exists():
+        patient_file.unlink()
 
 def test_line_server_health_check():
     """測試 1：健康檢查端點"""

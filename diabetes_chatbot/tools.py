@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import secrets
 import sys
 import time
 from datetime import datetime, timezone
@@ -472,6 +474,7 @@ def generate_line_flex_bubble(
     evidence_links=None,
     patient_quote=None,
     glucose_range=None,
+    share_code: str = None,
 ) -> dict:
     meds_display = _to_clean_str(medications)
     if "藥袋" not in meds_display:
@@ -552,6 +555,16 @@ def generate_line_flex_bubble(
             {"type": "text", "text": "□抽 HbA1c  □聊調藥  □轉衛教", "wrap": True, "size": "sm", "color": "#333333"}
         ]
     })
+
+    # 格式化 6 位診間調閱短碼
+    if not share_code:
+        share_code = f"{secrets.randbelow(1_000_000):06d}"
+    clean_code = re.sub(r"[\s\-]", "", str(share_code)).strip()
+    if len(clean_code) == 6:
+        display_code = f"{clean_code[:3]} - {clean_code[3:]}"
+    else:
+        display_code = str(share_code)
+
     return {
         "type": "bubble",
         "size": "giga",
@@ -587,11 +600,47 @@ def generate_line_flex_bubble(
         "footer": {
             "type": "box",
             "layout": "vertical",
-            "spacing": "sm",
+            "spacing": "md",
+            "paddingAll": "16px",
+            "backgroundColor": "#F4F6FA",
             "contents": [
                 {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#194B8F",
+                    "cornerRadius": "10px",
+                    "paddingAll": "12px",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "【醫師診間調閱碼】",
+                            "color": "#BBDEFB",
+                            "size": "xs",
+                            "align": "center",
+                            "weight": "bold"
+                        },
+                        {
+                            "type": "text",
+                            "text": display_code,
+                            "color": "#FFFFFF",
+                            "size": "xxl",
+                            "align": "center",
+                            "weight": "bold",
+                            "margin": "xs"
+                        },
+                        {
+                            "type": "text",
+                            "text": "（有效期限 10 分鐘，出示給醫師輸入即可）",
+                            "color": "#E3F2FD",
+                            "size": "xxs",
+                            "align": "center",
+                            "margin": "xs"
+                        }
+                    ]
+                },
+                {
                     "type": "text",
-                    "text": "請於看診時直接出示本卡片或 QR Code 給醫護人員",
+                    "text": "請於看診時出示本卡片或提供上方調閱碼給醫護人員",
                     "align": "center",
                     "size": "xs",
                     "color": "#666666"
