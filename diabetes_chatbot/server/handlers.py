@@ -295,7 +295,9 @@ def process_patient_message(
 
         def _extract_definition_keyword(q: str) -> str:
             ql = q.lower()
-            if any(k in ql for k in ["成因", "形成", "原理", "怎麼形成", "怎麼來的", "機制", "為什麼", "為何"]):
+            if any(k in ql for k in ["脹", "胃", "肚子", "腹瀉", "噁心"]) and any(k in ql for k in ["藥", "吃"]):
+                return "糖尿病 腸胃不適 腹脹 衛教"
+            elif any(k in ql for k in ["成因", "形成", "原理", "怎麼形成", "怎麼來的", "機制", "為什麼", "為何"]):
                 return "糖尿病成因 胰島素阻抗"
             elif any(k in ql for k in ["是什麼", "什麼是", "定義", "分型", "種類"]):
                 return "糖尿病定義 血糖診斷標準"
@@ -305,13 +307,13 @@ def process_patient_message(
             ql = q.lower()
             def_kw = ["是什麼", "什麼是", "定義", "成因", "形成", "為什麼", "為何", "原理", "怎麼形成", "怎麼來的", "機制", "分型", "種類"]
             if any(k in ql for k in def_kw):
-                if "糖尿病" in ql or "diabetes" in ql or domain_val == "GENERAL_EDUCATION":
+                if "糖尿病" in ql or "diabetes" in ql or domain_val in ["GENERAL_EDUCATION", "DRUG_SAFETY"]:
                     return True
             return False
 
-        # 僅在長輩詢問「成因、定義、原理」（GENERAL_EDUCATION）時進行正規化輔助檢索，絕不拿病患長句口語整段搜尋！
+        # 在長輩詢問「成因、定義、原理」（GENERAL_EDUCATION 或 DRUG_SAFETY）時進行正規化輔助檢索，絕不拿病患長句口語整段搜尋！
         needs_forced = False
-        if not planner.is_visit_mode and planner.retrieval_domain == _RD.GENERAL_EDUCATION:
+        if not planner.is_visit_mode and planner.retrieval_domain in [_RD.GENERAL_EDUCATION, _RD.DRUG_SAFETY]:
             if _is_def_local(actual_text, planner.retrieval_domain.value):
                 needs_forced = True
 
@@ -333,16 +335,21 @@ def process_patient_message(
         _compact = forced_evidence[:1000]
         if planner.retrieval_domain == _RD.DRUG_SAFETY:
             guidance_task = (
-                "【副作用同理收話任務｜出處只印不念】\n"
+                "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
                 f"{_compact}\n"
-                "任務：病患正在反應西藥不適或疑慮。請用溫暖口語同理，2~3句內完成收話至就醫備忘錄第一條；嚴禁背誦仿單原文、嚴禁條列發生率/出處/來源/仿單，嚴禁說常見所以沒關係；出處只印在就醫備忘錄小字，口語對話絕不可念出或輸出 evidence_links 及網址。"
+                "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
+                "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
+                "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
+                "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處只印在就醫備忘錄小字，口語對話自然稱『依據衛福部仿單說明』即可，絕不可輸出 raw evidence_links 及網址。"
             )
         else:
             guidance_task = (
-                "【官方手冊衛教解說任務｜出處只印不念】\n"
+                "【官方手冊衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
                 f"{_compact}\n"
-                "任務：長輩正在詢問糖尿病成因、原理或衛教知識。請根據上述衛福部官方手冊重點，用生活化白話比喻（如搬運糖分的鑰匙或推車，當鑰匙變少或生鏽時，糖分進不去細胞就堆在血管裡）在2~3句內清楚溫暖地向長輩解釋成因！切勿把長輩的知識請教誤當成身體不適去收話！\n"
-                "嚴禁背誦生硬教科書條文，口語對話絕不可念出或輸出 evidence_links 及網址。"
+                "任務：長輩正在詢問糖尿病成因、原理或衛教知識。\n"
+                "1. 請根據上述衛福部官方手冊重點，清楚完整地向長輩解釋成因機轉，保留重要衛教細節。\n"
+                "2. 於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
+                "3. 口語對話自然說明即可，絕不可輸出 raw evidence_links 及網址。"
             )
         inference_ctx.append({
             "role": "system",
@@ -394,20 +401,20 @@ def process_patient_message(
             second_context = list(prune_conversation_history(messages, max_history_messages=8))
             if planner.retrieval_domain == _RD.DRUG_SAFETY:
                 second_task = (
-                    "【副作用同理收話任務｜出處只印不念】\n"
-                    "病患反映不適或詢問副作用時，請務必以「同理＋收話」固定句型回應，"
-                    "例如：『脹得不舒服齁，我幫您記在第一條，回診一起問醫師』或"
-                    "『這脹脹的感覺確實不舒服，我記起來幫您放在第一條問醫生好不好？』\n"
-                    "嚴禁背誦仿單原文、嚴禁條列發生率、嚴禁說常見所以沒關係、嚴禁解釋藥理機轉；"
-                    "出處只印不念，證據已保留至 evidence_links 僅供門診就醫備忘錄小字列印，絕不口頭念給病患，絕對禁止輸出 evidence_links。\n"
-                    "語氣溫暖繁體中文、2~3句內、同理後收話至就醫備忘錄第一條。"
+                    "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
+                    f"{tool_output[:800]}\n"
+                    "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
+                    "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
+                    "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
+                    "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處只印在就醫備忘錄小字，口語對話自然稱『依據衛福部仿單說明』即可，絕不可輸出 raw evidence_links 及網址。"
                 )
             else:
                 second_task = (
-                    "【官方手冊衛教解說任務｜出處只印不念】\n"
+                    "【官方手冊衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
                     f"{tool_output[:800]}\n"
-                    "長輩正在詢問糖尿病成因、原理或衛教知識。請根據上述手冊重點，用生活化比喻（如鑰匙、推車）在2~3句內清楚溫暖地向長輩解釋，切勿當成身體不適去收話！\n"
-                    "嚴禁背誦生硬教科書條文，絕對禁止輸出 evidence_links、網址或書名出處。"
+                    "長輩正在詢問糖尿病成因、原理或衛教知識。請根據上述衛福部官方手冊重點，清楚完整地向長輩解釋成因機轉，保留重要衛教細節。\n"
+                    "於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
+                    "口語對話自然說明即可，絕對禁止輸出 raw evidence_links、網址或未排版 JSON。"
                 )
             second_context.append({
                 "role": "system",
@@ -429,11 +436,6 @@ def process_patient_message(
                     final_text = "脹得不舒服齁，我幫您記在第一條，回診一起問醫師好不好？這段時間先照醫師原本的交代用藥，有變化我幫您記下來。"
                 else:
                     final_text = "糖尿病就像是身體裡幫忙把糖分送進細胞的『鑰匙』（胰島素）變少或生鏽了，糖分留在血管裡排不出去。我們平常飲食定時定量、配合同伴照護，就能維持得很穩定喔！"
-            if "官方臨床證據" in final_text or "來源：" in final_text or "仿單" in final_text:
-                if planner.retrieval_domain == _RD.DRUG_SAFETY:
-                    final_text = "脹得不舒服齁，我幫您記在第一條，回診一起問醫師好不好？這段時間先照醫師原本的交代用藥，有變化我幫您記下來。"
-                else:
-                    final_text = "糖尿病主要是因為胰島素分泌變少或是身體細胞產生阻抗，讓血液中的糖分無法順利被利用。我們平常好好配合醫師與生活調整，血糖都能控制得很棒喔！"
             out_guard = inspect_output_guard(final_text)
             if out_guard.is_blocked:
                 final_text = out_guard.blocked_message

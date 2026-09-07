@@ -54,9 +54,11 @@ class ClinicalSafetyGuard:
     )
 
     _PRESCRIPTION_BREACH_RE = re.compile(
-        r"(?:停藥|停用|不要吃藥|把.*?藥停掉|減藥|加藥|"
-        r"改吃[一二兩半\d]+顆|少吃[一二兩半\d]+顆|多吃[一二兩半\d]+顆|吃[一二兩半\d]+顆就好|每天改吃[一二兩半\d]+顆|"
-        r"自行加量|自行減量|自己少吃|自己多吃|自己停藥|自己調藥|增加劑量|減少劑量|加打[一二兩半\d]+單位|多打[一二兩半\d]+單位|少打[一二兩半\d]+單位)",
+        r"(?:(?:建議|可以|請|不妨|直接|先|暫時|決定)(?:您|你)?(?:把.*?藥停掉|不要吃藥|停藥|停用|減藥|加藥)|"
+        r"(?:建議|可以|請|不妨|直接|先|自行|自己)?(?:改吃|少吃|多吃)[一二兩半\d]+顆|"
+        r"吃[一二兩半\d]+顆就好|每天改吃[一二兩半\d]+顆|"
+        r"(?:建議|可以|請|不妨|直接|先)?(?:自行加量|自行減量|自己少吃|自己多吃|自行調藥|自己調藥|自行停藥|自己停藥)|"
+        r"(?:建議|可以|請|不妨|直接|先)?(?:增加劑量|減少劑量|加打[一二兩半\d]+單位|多打[一二兩半\d]+單位|少打[一二兩半\d]+單位))",
         re.IGNORECASE,
     )
 
@@ -104,12 +106,21 @@ class ClinicalSafetyGuard:
         if not text:
             return GuardResult(is_blocked=False, risk_category="NONE")
         if cls._PRESCRIPTION_BREACH_RE.search(text):
-            safe_override = (
-                "【臨床安全提醒】\n"
-                "貼心護理師提醒您：所有降血糖藥物或胰島素的劑量調整，都與您的血糖穩定及心腎器官保護密切相關。"
-                "臨床上絕對不能自行增減藥量或停藥喔！若您用藥後有任何不適或疑慮，請於回診時與主治專科醫師討論，由醫師為您評估調整。"
-            )
-            return GuardResult(is_blocked=True, risk_category="PRESCRIPTION_BREACH", blocked_message=safe_override)
+            neg_prefixes = ["不能", "不可", "不要", "切勿", "禁止", "避免", "防止", "千萬不能", "千萬不要", "絕對不能"]
+            is_negated_warning = False
+            for m in cls._PRESCRIPTION_BREACH_RE.finditer(text):
+                start = max(0, m.start() - 10)
+                prefix_context = text[start:m.start()]
+                if any(neg in prefix_context for neg in neg_prefixes):
+                    is_negated_warning = True
+                    break
+            if not is_negated_warning:
+                safe_override = (
+                    "【臨床安全提醒】\n"
+                    "貼心護理師提醒您：所有降血糖藥物或胰島素的劑量調整，都與您的血糖穩定及心腎器官保護密切相關。"
+                    "臨床上絕對不能自行增減藥量或停藥喔！若您用藥後有任何不適或疑慮，請於回診時與主治專科醫師討論，由醫師為您評估調整。"
+                )
+                return GuardResult(is_blocked=True, risk_category="PRESCRIPTION_BREACH", blocked_message=safe_override)
         if cls._DIAGNOSTIC_BREACH_RE.search(text):
             safe_override = (
                 "【臨床衛教提醒】\n"
