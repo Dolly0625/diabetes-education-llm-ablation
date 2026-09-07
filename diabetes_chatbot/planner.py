@@ -148,7 +148,7 @@ PLANNER_SYSTEM_PROMPT = """你是一位專精於糖尿病衛教與新陳代謝�
 狀態規範：KNOWN (已掌握), PARTIAL (部分掌握/待現場看藥袋), MISSING (未提及)。
 
 【第三維度：模式與門診摘要卡解鎖（2026 Agenda-Setting 議程門禁）】：
-- is_visit_mode: 是否提及看診、回診、醫院、拿慢箋、或要求整理備忘錄？若只是聊飲食生活，為 false。
+- is_visit_mode: 病患是否明確提及看診、回診、去醫院、拿慢箋、或主動要求整理備忘錄？若病患只是聊飲食生活、詢問特定藥物、反映藥物副作用（如胃脹、肚子痛）、或詢問能否自己停藥，只要未主動提及回診或看診，is_visit_mode 絕對必須為 false！
 - is_explicit_request: 是否明確要求整理就醫備忘錄？
 - is_agenda_confirmed: 本次回診的核心議程（Agenda）是否已被病患「明確確認」？
   * 若病患剛提出「開始看診前整理」或「幫我整理就醫備忘錄」，但先前對話中護理師從未核對過「這次回診主要想看什麼」，則 is_agenda_confirmed 必須為 false！
