@@ -17,6 +17,8 @@
 
 ## 任務
 
+WS1 Harness 已驗收。你只能接入既有 Harness，不得建立、複製或改寫另一套。
+
 1. 列出 C 的工具 gate 判定點、工具集合與議程門禁。
 2. 定義 C 如何在 B 上只增加動態工具暴露。
 3. 列出 D 的輸出檢查、覆寫與問句限制順序。
@@ -51,7 +53,7 @@
 - `cd_configuration.md`
 - C／D config 差異表。
 - logging schema 與範例。
-- harness 或 patch proposal。
+- 既有 WS1 Harness 接入說明；若無缺口，明確記錄「無接口需求」，若有缺口才附最小需求文件。
 - fault-injection 資料與測試。
 - 測試輸出。
 - 800–1,000 字方法章素材。

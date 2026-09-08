@@ -4,6 +4,8 @@
 
 你負責建立盲測 LLM Judge、驗證 Judge 基本可靠性、分析凍結後的結果，以及撰寫結果章。你不得修改原始軌跡，也不得在評分時得知 A–D 身分。
 
+Judge 固定使用 `gemini-3.7-flash`、temperature `0.0`。目前可先完成 rubric、schema、canary、runner 與 fake-data 統計測試；只有收到 WS1 凍結的 blinded transcripts 後才能正式評分。
+
 ## 指定閱讀
 
 - `../shared/RESEARCH_PROTOCOL.md`

@@ -19,17 +19,16 @@
 
 ## 任務
 
-1. 填妥並凍結 `shared/RESEARCH_PROTOCOL.md` 的 TBD。
-2. 決定 A–D 的實作方式，確保相鄰條件只差一層。
-3. 建立獨立 `AblationConfig` 與 harness；production 預設行為不得改變。
-4. 明確處理 Planner-off 時的 neutral state、forced retrieval 關閉與額外 post-processing 關閉。
-5. 實作每條軌跡獨立 process、temp state directory、唯一 user ID 與 session cache 隔離。
-6. 審核工作流 2、3 提出的 patch；不得無審核直接套用。
-7. 將核准的實驗程式整合到獨立實驗目錄，避免破壞 production path。
-8. 執行一個病患的 A–D dry run，驗證 config diff 與狀態隔離。
-9. 執行正式角色扮演並凍結 raw transcripts。
-10. 匿名化條件後交給工作流 5。
-11. 審核所有技術段落、結果主張與最終摘要。
+目前 `AblationConfig`、neutral state、獨立 Harness、狀態隔離、checkpoint/resume、盲測匯出與離線 dry run 均已驗收。除非整合測試證明 regression，不得重新實作這些項目。
+
+1. 凍結 `shared/RESEARCH_PROTOCOL.md` 尚未完成的 prompt、tool schema 與正式 Git commit 指紋。
+2. 維護既有 A–D 唯一差異，不重建或複製第二套 Harness。
+3. 審核工作流 2、3 的 config、事件欄位與測試；只有真正缺少接口時才統一做最小核心修改。
+4. 驗收工作流 4-B runner 與工作流 5 blinded contract／Judge runner 的接口。
+5. 四個工作流整合後，再執行一個 profile×4 conditions 的完整離線 dry run。
+6. 完整實驗指紋凍結後，執行正式角色扮演並凍結 raw transcripts。
+7. 匿名化條件後把 blinded transcripts 交給工作流 5，condition mapping 由技術主持人保管。
+8. 審核所有技術段落、結果主張與最終摘要。
 
 ## 允許修改
 
@@ -47,11 +46,12 @@
 
 ## 必交付
 
-- 凍結後的研究協議。
-- A–D configuration diff 表。
-- `AblationConfig`、neutral planner state 與獨立 harness。
-- 狀態隔離、checkpoint、retry 與 resume 測試。
-- dry run 審核紀錄。
+已完成且只需維護：A–D configuration diff、`AblationConfig`、neutral planner state、獨立 Harness、狀態隔離與既有 dry-run 審核紀錄。
+
+剩餘必交付：
+
+- 完整凍結的研究協議與實驗指紋。
+- WS2–WS5 整合驗收紀錄及最終整合 dry run。
 - 正式 raw transcripts 與 blinded mapping。
 - 技術主張核准清單。
 - 自己負責的正文：摘要素材、系統總覽、討論、限制與結論。

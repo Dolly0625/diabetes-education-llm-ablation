@@ -68,6 +68,8 @@
 
 Judge 只能看到 opaque condition ID，不能知道 A、B、C、D 真實身分。Judge 的分數不等於醫師評審或臨床安全率。
 
+已凍結模型設定：Talker/Planner 使用 `gemini-3.5-flash-lite`（temperature 分別為 0.3／0.1），Patient Agent 使用 `gemini-2.5-flash-lite`（0.3），Judge 使用 `gemini-3.7-flash`（0.0）。每條軌跡最多 6 輪，seed 為 42；不得由各組自行替換。
+
 ## 5. 目前進度
 
 | 工作流 | 目前狀態 | 下一步 |
@@ -157,7 +159,7 @@ AI 第一輪只能閱讀與回報，不得修改檔案。成員將這份回報�
 - 禁止直接修改其他人的 Workstream。
 - 禁止上傳 `.env`、API key、真實病患資料、模型檔或 cache。
 - 禁止捏造正式 transcripts、Judge 分數或 A–D 結果。
-- 禁止在模型、temperature、prompt 版本與 commit 尚未凍結時啟動正式 12×4 批次。
+- 模型與 temperature 已凍結；禁止在 prompt、tool schema、正式 commit 與 opaque mapping 尚未完整記錄時啟動正式 12×4 批次。
 
 ## 10. 什麼時候才能正式跑實驗？
 

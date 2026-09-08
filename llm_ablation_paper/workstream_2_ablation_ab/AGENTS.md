@@ -16,12 +16,14 @@
 
 ## 任務
 
+WS1 Harness 已驗收。你只能接入既有 Harness，不得建立、複製或改寫另一套。
+
 1. 列出現有 Planner 的輸入、輸出、fallback 與 Talker guidance 注入點。
 2. 定義 A 如何略過 Planner，而不改變其他 prompt、工具、模型與回覆流程。
 3. 定義 B 如何使用 Planner，但仍維持所有工具暴露。
 4. 定義 A 的 neutral planner state，確保 logging schema 完整但沒有執行或注入 Planner。
 5. 確認 A、B 均停用 forced retrieval、證據 system-prompt 注入與其他未建模輔助行為。
-6. 提出獨立實驗 harness 或最小 patch；不得直接改核心程式。
+6. 直接使用既有 WS1 Harness；只有確認缺少必要接口時，才以需求文件提出最小修改，不得自行修改核心程式。
 7. 建立 A／B configuration test，證明唯一差異是 Planner。
 8. 寫出可直接併入方法章的 A／B 描述。
 
@@ -48,7 +50,7 @@
 
 - `ab_configuration.md`
 - A／B config 差異表。
-- harness 或 patch proposal。
+- 既有 WS1 Harness 接入說明；若無缺口，明確記錄「無接口需求」，若有缺口才附最小需求文件。
 - 可重跑的 configuration tests。
 - 測試輸出。
 - 800–1,000 字方法章素材。

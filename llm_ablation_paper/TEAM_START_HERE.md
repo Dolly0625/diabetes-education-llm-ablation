@@ -31,13 +31,13 @@
 
 | 成員 | 工作流 | 主要交付物 | 可以先做什麼 |
 |---|---|---|---|
-| 1 | 技術主持 | A–D 實驗控制器、狀態隔離、整合測試、正式執行入口 | 先建立 Harness 並跑通離線 dry run |
+| 1 | 技術主持 | 維護已核准 Harness、凍結實驗指紋、整合驗收與正式執行 | 驗收 WS2–WS5，不得重建 Harness |
 | 2 | A／B | A 與 B 的設定驗證、Planner 效果事件、方法章素材 | 先定義 A/B 驗收測試與事件欄位 |
 | 3 | C／D | Tool Gate 與 Output Guard 的驗證、故障案例 | 先定義 C/D 驗收測試與違規事件 |
-| 4 | 模擬病患 | 12 個 profiles、Patient Agent、終止條件、checkpoint runner | 先完成 profiles 與離線 runner 骨架 |
+| 4 | 模擬病患 | 維護已驗收 profiles，完成 Patient Agent runner、終止條件與 checkpoint | 只做 WS4-B runner，不得重做 profiles |
 | 5 | Judge 與分析 | 盲評 rubric、Judge runner、統計表與論文結果素材 | 先完成 rubric、schema 與假資料測試 |
 
-成員 2–5 不必等成員 1 全部完成才開始，但 Harness 完成前不得宣稱已完成正式 A–D 實驗，也不得自行修改核心 production pipeline。
+WS1 Harness 已完成。成員 2–5 可立即開始各自的離線開發，但不得自行修改核心 production pipeline，也不得在完整實驗指紋凍結前啟動正式 A–D 批次。
 
 ## 你要怎麼把專案交給其他人？
 
@@ -47,6 +47,14 @@
 - WS4-A profiles、schema 與來源驗證已完成；成員 4 下一步只做 WS4-B runner。
 - WS2、WS3、WS5 可立即使用離線 fake data 開發與測試。
 - 正式模型、各角色 temperature、max turns 與 seed 已凍結於 `shared/RESEARCH_PROTOCOL.md`；prompt、工具 schema 與正式 commit 指紋尚未凍結，因此所有人仍不得自行啟動 12×4 正式批次。
+
+### 固定協作順序
+
+1. WS2、WS3、WS4-B、WS5 可平行完成程式、契約與 fake-data 測試。
+2. WS1 逐一驗收並整合上述成果，接著凍結 prompt、tool schema 與正式 Git commit 指紋。
+3. 指紋凍結後，由 WS1 使用 WS4 runner 執行正式 12×4 軌跡並凍結 raw transcripts。
+4. WS1 產生不含 A/B/C/D 身分的 blinded transcripts，再交給 WS5；WS5 不得接觸 condition mapping。
+5. WS5 完成盲評與統計後，由 WS1 解盲、驗收主張並整合論文。
 
 每個人都必須取得完整 repository，不能只傳自己的工作流資料夾。目錄應保持：
 

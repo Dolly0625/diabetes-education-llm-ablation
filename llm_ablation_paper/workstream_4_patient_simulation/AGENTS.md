@@ -2,7 +2,11 @@
 
 ## 角色
 
-你負責建立可重跑且不偏袒 A–D 的 Patient Agent、十二份結構化病患設定與批次角色扮演流程。你不負責判定哪組比較好。
+你負責維護已驗收且不偏袒 A–D 的 Patient Agent 與十二份結構化病患設定，並完成批次角色扮演 runner。你不負責判定哪組比較好。
+
+## 目前狀態
+
+WS4-A 的 `patient_agent_prompt.md`、`patient_profiles.jsonl`、`profile_schema.json`、來源報告與驗證測試已完成。不得重生、替換或改寫這 12 個 profiles。當前唯一主任務是 WS4-B runner、相關離線測試，以及一個 profile×4 conditions 的 fake dry run。
 
 ## 指定閱讀
 
@@ -18,15 +22,11 @@
 
 ## 任務
 
-1. 撰寫 Patient Agent system prompt。
-2. 為六種情境各建立兩份病患設定。
-3. 設計 reveal policy：只有被適當詢問時才揭露隱藏事實。
-4. 確保病患不提供專業醫療答案、不知道 A–D 身分、不迎合系統錯誤。
-5. 建立 profile schema validator。
-6. 建立或提出批次角色扮演 runner。
-7. runner 必須具備逐輪 checkpoint、resume、有限次 exponential backoff 與明確終止原因。
-8. 每條軌跡使用唯一 user ID、獨立 process 與暫存 state directory，禁止跨條件共享記憶。
-9. 以同一批 profiles 與隨機種子跑 A–D；正式執行由技術主持人完成。
+1. 原樣讀取已驗收 Patient Agent prompt、12 profiles、schema 與 reveal policy，不修改內容。
+2. 建立批次角色扮演 runner，直接接入既有 WS1 Harness。
+3. runner 必須具備逐輪 checkpoint、resume、有限次 exponential backoff 與明確終止原因。
+4. 每條軌跡使用唯一 user ID、獨立 process 與暫存 state directory，禁止跨條件共享記憶。
+5. 使用固定 profiles、模型參數與 seed 完成一個 profile×4 conditions 的 fake dry run；正式 12×4 執行由技術主持人完成。
 
 ## 允許修改
 
@@ -52,12 +52,12 @@
 
 ## 必交付
 
-- `patient_agent_prompt.md`
-- `patient_profiles.jsonl`
-- `profile_schema.json`
-- schema validator 與測試。
-- roleplay runner 或介面規格。
+以下既有交付不得重做：`patient_agent_prompt.md`、`patient_profiles.jsonl`、`profile_schema.json`、schema validator 與其測試。
+
+本階段必交付：
+
+- 可執行的 roleplay runner。
 - checkpoint、resume、retry 與 state-isolation 測試。
-- 一份 profile 的 dry-run 示例。
+- 一份 profile×4 conditions 的 fake dry-run 示例。
 - 600–800 字模擬病患與實驗設定章素材。
 - 一張可轉成論文圖的流程圖草案。

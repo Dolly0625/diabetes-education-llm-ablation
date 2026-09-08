@@ -52,7 +52,7 @@ Input Guard 固定為四組共同基礎設施，不屬於 A–D 消融。依目�
 - forced retrieval：主要實驗固定 `OFF`
 - 固定停藥警語追加：主要實驗固定 `OFF`
 - question-budget post-processing：主要實驗固定 `OFF`
-- Input Guard：四組固定 `ON`，觸發案例獨立報告
+- Input Guard：四組每一輪固定 `ON`，觸發案例獨立報告
 - 狀態隔離策略：每條軌跡獨立 process、temp state directory 與唯一 run ID
 - 程式版本／commit：`TBD`
 
