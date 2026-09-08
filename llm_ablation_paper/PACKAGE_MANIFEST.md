@@ -24,6 +24,7 @@ diabetes-chatbot/
 ## 共同文件
 
 - `README.md`：五份工作的入口與啟動方式。
+- `GROUP_HANDOFF_GUIDE.md`：可直接傳到大群的完整實驗、資料集、分工、操作與回傳說明。
 - `TEAM_START_HERE.md`：給全體成員的白話研究說明、交付方式與共同執行流程。
 - `AGENTS.md`：所有 AI 共同遵守的上層規則。
 - `STATUS.md`：負責人、狀態、里程碑與決策紀錄。
