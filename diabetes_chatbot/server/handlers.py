@@ -8,10 +8,18 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, TYPE_CHECKING
 
 from dotenv import load_dotenv
 from openai import OpenAI
+
+if TYPE_CHECKING:
+    from llm_ablation_paper.workstream_1_technical_lead.harness.config import AblationConfig
+else:
+    try:
+        from llm_ablation_paper.workstream_1_technical_lead.harness.config import AblationConfig  # type: ignore
+    except Exception:  # TODO: harness not yet created — resilient fallback for backward compat
+        AblationConfig = None  # type: ignore
 
 from diabetes_chatbot.guard import (
     enforce_single_question_budget,
@@ -39,6 +47,7 @@ from diabetes_chatbot.tools import (
     generate_visit_summary,
     search_handbook,
 )
+from diabetes_chatbot.server.ablation_core import execute_ablation_turn as _core_execute, get_canonical_tool_snapshot
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(ROOT_DIR / ".env")
@@ -153,25 +162,17 @@ def process_patient_message(
     user_id: str,
     text_input: Optional[str] = None,
     audio_path: Optional[Union[str, Path]] = None,
-    image_path: Optional[Union[str, Path]] = None
+    image_path: Optional[Union[str, Path]] = None,
+    ablation_config: Optional["AblationConfig"] = None,
 ) -> dict[str, Any]:
     """
     V2 臨床大腦入口：處理來自 LINE 的文字、語音或圖片，並產出回覆內容。
-    回傳格式：
-    {
-        "reply_type": "text" | "flex",
-        "reply_text": str,
-        "flex_bubble": dict | None,
-        "qr_payload": str | None,
-        "audit_log": str | None
-    }
+    Delegates core pipeline to ablation_core.execute_ablation_turn for unified logic.
     """
     start_time = time.time()
-    tool_name_used = "無 (常規對話)"
     patient_file = get_patient_file_path(f"line_{user_id}")
     messages = get_user_messages(user_id, patient_file)
     client = get_openai_client()
-    
     actual_text = ""
     prefix_note = ""
     input_modality = "文字輸入"
@@ -224,10 +225,26 @@ def process_patient_message(
             "audit_log": None
         }
 
-    # 4. 第一級：物理安全守護斷路器
-    guard_res = inspect_safety_guard(actual_text)
-    if guard_res.is_blocked:
-        latency = time.time() - start_time
+    # Delegate to shared core
+    core_res = _core_execute(
+        user_text=actual_text,
+        patient_file=patient_file,
+        messages=messages,
+        ablation_config=ablation_config,
+        talker_client=client,
+        planner_client=client,
+        model=model,
+        temperature=0.3,
+        max_tokens=250,
+        image_path=Path(image_path) if image_path else None,
+        modality=input_modality,
+    )
+    planner = core_res["planner"]
+    final_reply = core_res["final_output"]
+    latency = time.time() - start_time
+
+    # Input guard blocked special audit
+    if core_res["termination_reason"] == "COMMON_INPUT_BLOCK":
         guard_audit_lines = [
             "----------------------------------",
             "【專科臨床大腦審計日誌】",
@@ -243,375 +260,71 @@ def process_patient_message(
         audit_log = "\n".join(guard_audit_lines)
         return {
             "reply_type": "text",
-            "reply_text": f"{guard_res.blocked_message}\n\n{audit_log}",
+            "reply_text": f"{core_res['final_output']}\n\n{audit_log}",
             "flex_bubble": None,
             "qr_payload": None,
             "audit_log": audit_log
         }
 
-    # 5. 第二級：非侵入式客觀事實背景入庫
-    extract_clinical_facts_from_text(actual_text, file_path=patient_file)
-    messages.append({"role": "user", "content": actual_text})
+    # Determine tool display and rag_hit
+    called = core_res.get("called_tools", [])
+    tool_display = ", ".join(called) if called else "無 (常規對話)"
+    # If forced retrieval or search handbook second path, mark rag_hit
+    # Core tracks via planner domain but we approximate: if called contains search_handbook or forced evidence existed
+    rag_hit = "search_handbook" in called or core_res.get("tool_results") and any(r.get("tool")=="search_handbook" for r in core_res.get("tool_results",[]))
+    # For card generation, tool_display update
+    if core_res.get("flex_bubble") is not None or core_res.get("text_summary"):
+        tool_display = "generate_visit_summary(產出門診預問診就醫備忘錄)"
 
-    # 6. 第三級：臨床衛教大腦 Planner 臨床資訊缺口評估與工具閥門 — LLM-first hot path (A-zone) with timeout fallback
-    try:
-        patient_record_hot = load_patient_record(patient_file)
-        planner = evaluate_clinical_planner_llm(messages, patient_record_hot, client, model, timeout=3.0)
-    except Exception as _e:
-        planner = evaluate_clinical_planner(messages, patient_file_path=patient_file)
-        try:
-            planner.engine = f"python_fallback({str(_e)[:30]})"
-        except Exception:
-            planner.engine = "python_fallback"
-    try:
-        if not planner.can_unlock_summary_tool and planner.is_explicit_request:
-            from diabetes_chatbot.planner import SlotStatus as _SS
-            # 選項 A：嚴格收緊後門 —— 必須同時具備明確具體的回診訴求，而非空泛未填
-            has_explicit_reason = (
-                planner.slots.visit_reason_status in (_SS.KNOWN, _SS.PARTIAL) and
-                bool(planner.slots.visit_reason) and
-                planner.slots.visit_reason not in ("門診定期追蹤", "定期回診", "")
-            )
-            has_med = planner.slots.medications_status in (_SS.KNOWN, _SS.PARTIAL)
-            has_data = planner.slots.glucose_metrics_status in (_SS.KNOWN, _SS.PARTIAL)
-            has_hypo = planner.slots.hypo_history_status in (_SS.KNOWN, _SS.PARTIAL)
-            has_concern = planner.slots.concerns_status == _SS.KNOWN
-            if has_explicit_reason and has_med and (has_data or has_hypo or has_concern):
-                planner.is_agenda_confirmed = True
-                planner.can_unlock_summary_tool = True
-                planner.talker_guidance = "【臨床導引就醫備忘錄】：病患看診議程已具備明確主訴，核心資訊已達充分度！請立刻調用 generate_previsit_intake_summary 工具為病患生成門診摘要，嚴禁再拋出任何問題追問病患；生成完成後，親切告知已整理完畢並叮嚀看診時出示即可。"
-    except Exception:
-        pass
-    active_tools = get_active_tools(messages, patient_file_path=patient_file, planner_assessment=planner)
-    if image_path:
-        # 上傳藥袋照片為感知登記環節，物理收起產卡工具，回歸親切確認藥品文字
-        active_tools = [t for t in active_tools if t.get("function", {}).get("name") not in ["generate_previsit_intake_summary", "generate_visit_summary"]]
-
-    # 6b. 定義/成因型查詢正規化輔助檢索（出處只印不念）
-    forced_evidence = None
-    forced_tool_display = None
-    try:
-        from diabetes_chatbot.planner import RetrievalDomain as _RD
-
-        def _extract_definition_keyword(q: str) -> str:
-            ql = q.lower()
-            if any(k in ql for k in ["脹", "胃", "肚子", "腹瀉", "噁心"]) and any(k in ql for k in ["藥", "吃"]):
-                return "糖尿病 腸胃不適 腹脹 衛教"
-            elif any(k in ql for k in ["成因", "形成", "原理", "怎麼形成", "怎麼來的", "機制", "為什麼", "為何"]):
-                return "糖尿病成因 胰島素阻抗"
-            elif any(k in ql for k in ["是什麼", "什麼是", "定義", "分型", "種類"]):
-                return "糖尿病定義 血糖診斷標準"
-            return "糖尿病衛教"
-
-        def _is_def_local(q: str, domain_val: str) -> bool:
-            ql = q.lower()
-            def_kw = ["是什麼", "什麼是", "定義", "成因", "形成", "為什麼", "為何", "原理", "怎麼形成", "怎麼來的", "機制", "分型", "種類"]
-            if any(k in ql for k in def_kw):
-                if "糖尿病" in ql or "diabetes" in ql or domain_val in ["GENERAL_EDUCATION", "DRUG_SAFETY"]:
-                    return True
-            return False
-
-        # 在長輩詢問「成因、定義、原理」（GENERAL_EDUCATION 或 DRUG_SAFETY）時進行正規化輔助檢索，絕不拿病患長句口語整段搜尋！
-        needs_forced = False
-        if not planner.is_visit_mode and planner.retrieval_domain in [_RD.GENERAL_EDUCATION, _RD.DRUG_SAFETY]:
-            if _is_def_local(actual_text, planner.retrieval_domain.value):
-                needs_forced = True
-
-        if needs_forced:
-            rule_q = _extract_definition_keyword(actual_text)
-            if rule_q:
-                forced_evidence = search_handbook(rule_q, user_raw_input=actual_text, domain=planner.retrieval_domain.value)
-                forced_tool_display = f"search_handbook(關鍵字: '{rule_q}', domain={planner.retrieval_domain.value}, evidence_links已保留至就醫備忘錄小字{len(forced_evidence)}字/出處只印不念)"
-                tool_name_used = forced_tool_display
-    except Exception:
-        forced_evidence = None
-
-    # 7. 第四級：滑動視窗修剪與指揮訊息注入
-    pruned_ctx = prune_conversation_history(messages, max_history_messages=8)
-    inference_ctx = list(pruned_ctx)
-    if planner.talker_guidance:
-        inference_ctx.append({"role": "system", "content": planner.talker_guidance})
-    if forced_evidence:
-        _compact = forced_evidence[:1000]
-        if planner.retrieval_domain == _RD.DRUG_SAFETY:
-            guidance_task = (
-                "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
-                f"{_compact}\n"
-                "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
-                "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
-                "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
-                "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處只印在就醫備忘錄小字，口語對話自然稱『依據衛福部仿單說明』即可，絕不可輸出 raw evidence_links 及網址。"
-            )
-        else:
-            guidance_task = (
-                "【官方手冊衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
-                f"{_compact}\n"
-                "任務：長輩正在詢問糖尿病成因、原理或衛教知識。\n"
-                "1. 請根據上述衛福部官方手冊重點，清楚完整地向長輩解釋成因機轉，保留重要衛教細節。\n"
-                "2. 於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
-                "3. 口語對話自然說明即可，絕不可輸出 raw evidence_links 及網址。"
-            )
-        inference_ctx.append({
-            "role": "system",
-            "content": guidance_task
-        })
-
-    # 8. 第五級：Talker 專科護理師大腦推論 (關閉 thinking 模式以確保極速回覆)
-    extra_body = {"reasoning": {"effort": "none"}} if "mimo" in model.lower() else None
-    max_tokens_to_use = 500 if "gemini" in model.lower() else 250
-    resp = client.chat.completions.create(
-        model=model,
-        messages=inference_ctx,
-        tools=active_tools if active_tools else None,
-        extra_body=extra_body,
-        max_tokens=max_tokens_to_use,
-        temperature=0.3
-    )
-    msg = resp.choices[0].message
-
-    # 9. 工具調用分支 (查手冊 或 產門診卡，支援原生 tool_calls 或 XML 格式解析)
-    raw_content = (msg.content or "").strip()
-    is_xml_tool_call = "<tool_call>" in raw_content and "search_handbook" in raw_content
-    
-    if msg.tool_calls or is_xml_tool_call:
-        if msg.tool_calls:
-            tool_call = msg.tool_calls[0]
-            func_name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
-            tc_id = tool_call.id
-            tool_name_used = func_name
-        else:
-            func_name = "search_handbook"
-            import re
-            m = re.search(r"<parameter=keyword>(.*?)</parameter>", raw_content)
-            kw_val = m.group(1).strip() if m else "糖尿病飲食 碳水化合物"
-            args = {"keyword": kw_val}
-            tc_id = "call_fallback_xml"
-            msg.tool_calls = None
-            tool_name_used = "search_handbook"
-
-        if func_name == "search_handbook":
-            import re
-            kw = args.get("keyword", "")
-            from diabetes_chatbot.planner import _sanitize_search_keyword
-            kw_clean = _sanitize_search_keyword(kw, actual_text)
-            tool_output = search_handbook(kw_clean, user_raw_input=actual_text, domain=planner.retrieval_domain.value)
-            evidence_links = tool_output
-            tool_display = f"search_handbook(關鍵字: '{kw_clean}', evidence_links已保留至就醫備忘錄小字{len(evidence_links)}字/出處只印不念)"
-            second_context = list(prune_conversation_history(messages, max_history_messages=8))
-            if planner.retrieval_domain == _RD.DRUG_SAFETY:
-                second_task = (
-                    "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
-                    f"{tool_output[:800]}\n"
-                    "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
-                    "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
-                    "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
-                    "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處只印在就醫備忘錄小字，口語對話自然稱『依據衛福部仿單說明』即可，絕不可輸出 raw evidence_links 及網址。"
-                )
-            else:
-                second_task = (
-                    "【官方手冊衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
-                    f"{tool_output[:800]}\n"
-                    "長輩正在詢問糖尿病成因、原理或衛教知識。請根據上述衛福部官方手冊重點，清楚完整地向長輩解釋成因機轉，保留重要衛教細節。\n"
-                    "於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
-                    "口語對話自然說明即可，絕對禁止輸出 raw evidence_links、網址或未排版 JSON。"
-                )
-            second_context.append({
-                "role": "system",
-                "content": second_task
-            })
-
-            second_resp = client.chat.completions.create(
-                model=model,
-                messages=second_context,
-                extra_body=extra_body,
-                max_tokens=max_tokens_to_use,
-                temperature=0.7
-            )
-            final_text = (second_resp.choices[0].message.content or "").strip()
-            final_text = re.sub(r"<tool_call>.*?</tool_call>", "", final_text, flags=re.DOTALL).strip()
-            final_text = _strip_evidence_links_leak(final_text)
-            if not final_text:
-                if planner.retrieval_domain == _RD.DRUG_SAFETY:
-                    final_text = "脹得不舒服齁，我幫您記在第一條，回診一起問醫師好不好？這段時間先照醫師原本的交代用藥，有變化我幫您記下來。"
-                else:
-                    final_text = "糖尿病就像是身體裡幫忙把糖分送進細胞的『鑰匙』（胰島素）變少或生鏽了，糖分留在血管裡排不出去。我們平常飲食定時定量、配合同伴照護，就能維持得很穩定喔！"
-            out_guard = inspect_output_guard(final_text)
-            if out_guard.is_blocked:
-                final_text = out_guard.blocked_message
-            else:
-                final_text = enforce_single_question_budget(final_text)
-                import re
-                if re.search(r"不想吃|不敢吃|想停|不吃了|沒在吃", actual_text):
-                    if not re.search(r"不能自己停|不可自行停|切勿自行停|不要擅自停|不能擅自停|不要自己停|不要停藥|不能停", final_text):
-                        final_text = final_text.rstrip("。") + "。在醫師評估前，降血糖藥物千萬不能自己停掉喔，突然停藥血糖容易飆高有危險。"
-
-            messages.append({"role": "assistant", "content": final_text})
-            latency = time.time() - start_time
-            log_turn(actual_text, final_text, latency=latency, tool_used=tool_display)
-            print(f"[LINE Webhook] 使用者 {user_id} 手冊衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
-
-            audit_log = build_audit_log(
-                latency=latency,
-                modality=input_modality,
-                guard_passed=True,
-                tool_used=tool_display,
-                rag_hit=True,
-                slots=planner.slots,
-                talker_guidance=planner.talker_guidance,
-                can_unlock=planner.can_unlock_summary_tool
-            )
-
-            full_reply_text = f"{prefix_note}{final_text}\n\n{audit_log}"
-            return {
-                "reply_type": "text",
-                "reply_text": full_reply_text,
-                "flex_bubble": None,
-                "qr_payload": None,
-                "audit_log": audit_log
-            }
-
-        elif func_name in ["generate_previsit_intake_summary", "generate_visit_summary"]:
-            tool_display = "generate_visit_summary(產出門診預問診就醫備忘錄)"
-            text_summary = generate_visit_summary(
-                visit_reason=args.get("visit_reason", "定期回診追蹤"),
-                medications=args.get("medications", "未特別說明"),
-                glucose_metrics=args.get("glucose_metrics", "未特別說明"),
-                hypo_history=args.get("hypo_history", "近期未提及或無發生"),
-                side_effects_or_concerns=args.get("side_effects_or_concerns", "無特別異常"),
-                ddx_candidates=args.get("ddx_candidates"),
-                evidence_links=args.get("evidence_links"),
-                patient_quote=args.get("patient_quote"),
-                glucose_range=args.get("glucose_range"),
-            )
-            update_previsit_summary(text_summary, file_path=patient_file)
-            flex_bubble = generate_line_flex_bubble(
-                visit_reason=args.get("visit_reason", "定期回診追蹤"),
-                medications=args.get("medications", "未特別說明"),
-                glucose_metrics=args.get("glucose_metrics", "未特別說明"),
-                hypo_history=args.get("hypo_history", "近期未提及或無發生"),
-                side_effects_or_concerns=args.get("side_effects_or_concerns", "無特別異常"),
-                ddx_candidates=args.get("ddx_candidates"),
-                evidence_links=args.get("evidence_links"),
-                patient_quote=args.get("patient_quote"),
-                glucose_range=args.get("glucose_range"),
-            )
-            qr_payload = generate_clinic_qr_payload(
-                visit_reason=args.get("visit_reason", "定期回診追蹤"),
-                medications=args.get("medications", "未特別說明"),
-                glucose_metrics=args.get("glucose_metrics", "未特別說明"),
-                hypo_history=args.get("hypo_history", "近期未提及或無發生"),
-                side_effects_or_concerns=args.get("side_effects_or_concerns", "無特別異常"),
-                ddx_candidates=args.get("ddx_candidates"),
-                evidence_links=args.get("evidence_links"),
-                patient_quote=args.get("patient_quote"),
-                glucose_range=args.get("glucose_range"),
-            )
-
-            messages.append(msg)
-            messages.append({"role": "tool", "tool_call_id": tc_id, "content": text_summary})
-
-            vr = args.get("visit_reason", "定期回診追蹤")
-            meds = args.get("medications", "未特別說明")
-            gm = args.get("glucose_metrics", "未特別說明")
-            hypo = args.get("hypo_history", "近期未提及或無發生")
-            concerns = args.get("side_effects_or_concerns", "無特別異常")
-            final_hint = (
-                f"跟您確認一下我幫您整理的就醫備忘："
-                f"第一，回診訴求是「{vr}」；"
-                f"第二，目前用藥是「{meds}」；"
-                f"第三，血糖與不適狀況是「{gm}／{hypo}／{concerns}」。"
-                f"這樣記對嗎，可以嗎？確認後我幫您產生 QR 就醫備忘錄，回診直接出示給醫師看就可以了。"
-            )
-            out_guard_hint = inspect_output_guard(final_hint)
-            out_guard_summary = inspect_output_guard(text_summary)
-            card_guard_passed = (not out_guard_hint.is_blocked) and (not out_guard_summary.is_blocked)
-            if out_guard_hint.is_blocked:
-                final_hint = out_guard_hint.blocked_message
-            elif out_guard_summary.is_blocked:
-                final_hint = out_guard_summary.blocked_message
-            else:
-                final_hint = enforce_single_question_budget(final_hint)
-            if not card_guard_passed:
-                flex_bubble = None
-                qr_payload = None
-                reply_type = "text"
-            else:
-                reply_type = "flex"
-            messages.append({"role": "assistant", "content": final_hint})
-
-            latency = time.time() - start_time
-            log_turn(actual_text, final_hint, latency=latency, tool_used=tool_display)
-            print(f"[LINE Webhook] 使用者 {user_id} 門診卡生成完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
-
-            audit_log = build_audit_log(
-                latency=latency,
-                modality=input_modality,
-                guard_passed=card_guard_passed,
-                tool_used=tool_display,
-                rag_hit=False,
-                slots=planner.slots,
-                talker_guidance=planner.talker_guidance,
-                can_unlock=planner.can_unlock_summary_tool
-            )
-
-            return {
-                "reply_type": reply_type,
-                "reply_text": final_hint,
-                "flex_bubble": flex_bubble,
-                "qr_payload": qr_payload,
-                "audit_log": audit_log
-            }
-
-    # 10. 常規親切衛教對話（若已強制檢索，證據已注入 Talker，無需再調 tool）
-    final_reply = _strip_evidence_links_leak(msg.content.strip())
-    out_guard = inspect_output_guard(final_reply)
-    if out_guard.is_blocked:
-        final_reply = out_guard.blocked_message
+    # Flex vs text decision
+    flex_bubble = core_res.get("flex_bubble")
+    qr_payload = core_res.get("qr_payload")
+    if flex_bubble is not None and core_res["output_guard_result"].is_blocked:
+        flex_bubble = None
+        qr_payload = None
+        reply_type = "text"
+    elif flex_bubble is not None:
+        reply_type = "flex"
     else:
-        final_reply = enforce_single_question_budget(final_reply)
-        import re
-        if re.search(r"不想吃|不敢吃|想停|不吃了|沒在吃", actual_text):
-            if not re.search(r"不能自己停|不可自行停|切勿自行停|不要擅自停|不能擅自停|不要自己停|不要停藥|不能停", final_reply):
-                final_reply = final_reply.rstrip("。") + "。在醫師評估前，降血糖藥物千萬不能自己停掉喔，突然停藥血糖容易飆高有危險。"
-    messages.append({"role": "assistant", "content": final_reply})
+        reply_type = "text"
 
-    def _bg_persist_hot(planner_hot, p_file, msgs_snapshot):
-        try:
-            if planner_hot.engine == "llm":
-                update_from_planner_assessment(planner_hot, file_path=p_file)
-            else:
-                cur_rec = load_patient_record(p_file)
-                llm_eval = evaluate_clinical_planner_llm(msgs_snapshot, cur_rec, client, model, timeout=3.0)
-                if llm_eval.engine == "llm":
-                    update_from_planner_assessment(llm_eval, file_path=p_file)
-        except Exception:
-            pass
+    # Log and audit
+    tool_used_log = tool_display
+    log_turn(actual_text, final_reply, latency=latency, tool_used=tool_used_log)
+    is_card = flex_bubble is not None
+    if is_card:
+        print(f"[LINE Webhook] 使用者 {user_id} 門診卡生成完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
+    elif rag_hit:
+        print(f"[LINE Webhook] 使用者 {user_id} 手冊衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
+    else:
+        print(f"[LINE Webhook] 使用者 {user_id} 常規衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
 
-    bg = threading.Thread(target=_bg_persist_hot, args=(planner, patient_file, list(messages)), daemon=True)
-    bg.start()
-
-    latency = time.time() - start_time
-    log_turn(actual_text, final_reply, latency=latency, tool_used=tool_name_used)
-    print(f"[LINE Webhook] 使用者 {user_id} 常規衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
-
+    guard_passed = not core_res["output_guard_result"].is_blocked if not core_res["termination_reason"]=="COMMON_INPUT_BLOCK" else True
     audit_log = build_audit_log(
         latency=latency,
         modality=input_modality,
-        guard_passed=not out_guard.is_blocked,
-        tool_used=tool_name_used,
-        rag_hit=forced_evidence is not None,
+        guard_passed=guard_passed,
+        tool_used=tool_used_log,
+        rag_hit=bool(rag_hit),
         slots=planner.slots,
         talker_guidance=planner.talker_guidance,
         can_unlock=planner.can_unlock_summary_tool
     )
 
-    full_reply_text = f"{prefix_note}{final_reply}\n\n{audit_log}"
-
-    return {
-        "reply_type": "text",
-        "reply_text": full_reply_text,
-        "flex_bubble": None,
-        "qr_payload": None,
-        "audit_log": audit_log
-    }
+    if reply_type == "flex":
+        return {
+            "reply_type": reply_type,
+            "reply_text": final_reply,
+            "flex_bubble": flex_bubble,
+            "qr_payload": qr_payload,
+            "audit_log": audit_log
+        }
+    else:
+        full_reply_text = f"{prefix_note}{final_reply}\n\n{audit_log}"
+        return {
+            "reply_type": "text",
+            "reply_text": full_reply_text,
+            "flex_bubble": None,
+            "qr_payload": None,
+            "audit_log": audit_log
+        }

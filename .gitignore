@@ -21,3 +21,11 @@ server.log
 
 # 大檔走外部（1GB 語音模型，部署時用掛載或另外傳）
 models/
+
+# Local agent state and handoff archives
+.omo/
+*.zip
+
+# Generated ablation runs: keep only the compact engineering summary
+llm_ablation_paper/artifacts/workstream_1/*
+!llm_ablation_paper/artifacts/workstream_1/dry_run_summary.json

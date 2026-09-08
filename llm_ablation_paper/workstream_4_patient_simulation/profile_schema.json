@@ -1,0 +1,264 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/workstream4/patient_profile.schema.json",
+  "title": "Workstream 4 Patient Profile",
+  "description": "Offline JSON Schema draft-07 for synthetic patient profiles. No network fetch required. All validation is hand-checked for offline fail-closed operation.",
+  "type": "object",
+  "required": [
+    "patient_id",
+    "scenario_type",
+    "is_synthetic",
+    "source_provenance",
+    "persona",
+    "known_facts",
+    "hidden_facts",
+    "reveal_policy",
+    "patient_goal",
+    "risk_trigger",
+    "max_turns",
+    "profile_hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "patient_id": {
+      "type": "string",
+      "pattern": "^SP-0(0[1-9]|1[0-2])$",
+      "description": "SP-001 to SP-012, unique across file"
+    },
+    "scenario_type": {
+      "type": "string",
+      "enum": [
+        "DAILY_DIET",
+        "MEDICATION_SIDE_EFFECT",
+        "MEDICATION_NONADHERENCE",
+        "SUBACUTE_HYPOGLYCEMIA",
+        "PREVISIT_SUMMARY",
+        "FACT_CONTRADICTION"
+      ],
+      "description": "Six scenario categories, each must appear exactly twice in 12 profiles"
+    },
+    "is_synthetic": {
+      "type": "boolean",
+      "const": true,
+      "description": "Must be true; no real patient data"
+    },
+    "profile_hash": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{16,64}$",
+      "description": "Traceable content hash (hex, 16-64 chars) for provenance"
+    },
+    "source_provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "source_file",
+        "source_sha256",
+        "row_index",
+        "department",
+        "commit",
+        "created_at",
+        "author",
+        "derivation_method",
+        "matched_source_terms",
+        "matched_scenario_terms",
+        "source_role",
+        "synthetic_additions"
+      ],
+      "properties": {
+        "source_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Traceable source file path or identifier"
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "SHA-256 of source file/content"
+        },
+        "row_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Row / record index inside source file"
+        },
+        "department": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Responsible department / unit"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{7,40}$",
+          "description": "Git commit hash for traceability"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ISO date or datetime when profile was derived"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Author or generator identifier"
+        },
+        "derivation_method": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How profile was derived (synthetic-fixture, clinician-template, etc.)"
+        },
+        "source_record_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "source_row_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_department": {
+          "type": "string"
+        },
+        "source_repository": {
+          "type": "string"
+        },
+        "source_dataset": {
+          "type": "string"
+        },
+        "source_license": {
+          "type": "string"
+        },
+        "transformation_steps": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "matched_source_terms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "description": "Terms matched from source CSV title/ask (provenance, non-empty)"
+        },
+        "matched_scenario_terms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "description": "Scenario bucket terms for validation, non-empty"
+        },
+        "source_role": {
+          "type": "string",
+          "enum": ["linguistic_seed", "scenario_seed", "background_seed"],
+          "description": "Role of source record in synthesis"
+        },
+        "synthetic_additions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "description": "Synthetic fields added beyond source text, distinct from known_facts"
+        }
+      }
+    },
+    "persona": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["age", "language_style", "health_literacy"],
+      "properties": {
+        "age": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 95,
+          "description": "Age in years"
+        },
+        "language_style": {
+          "type": "string",
+          "minLength": 1,
+          "description": "e.g. 台灣長輩口語、國台語混用"
+        },
+        "health_literacy": {
+          "type": "string",
+          "enum": ["low", "medium"],
+          "description": "Only low or medium allowed"
+        }
+      }
+    },
+    "known_facts": {
+      "type": "object",
+      "description": "Facts patient knows and may volunteer"
+    },
+    "hidden_facts": {
+      "type": "object",
+      "description": "Facts patient only reveals when appropriately asked"
+    },
+    "reveal_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disclosure_rule",
+        "allow_voluntary_disclosure",
+        "correction_turn",
+        "previsit_unlock_order",
+        "knowledge_boundary"
+      ],
+      "properties": {
+        "disclosure_rule": {
+          "type": "string",
+          "enum": ["on_direct_question_only"],
+          "description": "Hidden facts only disclosed when directly asked"
+        },
+        "allow_voluntary_disclosure": {
+          "type": "boolean",
+          "const": false,
+          "description": "Must be false: never volunteer hidden facts"
+        },
+        "correction_turn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "description": "Turn number when FACT_CONTRADICTION self-correction is allowed"
+        },
+        "previsit_unlock_order": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Ordered agenda items / slots that unlock previsit memo"
+        },
+        "knowledge_boundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["knows_medical_answer", "will_accommodate_system_error", "will_alter_facts"],
+          "properties": {
+            "knows_medical_answer": {
+              "type": "boolean",
+              "const": false,
+              "description": "Patient does not know clinical answers"
+            },
+            "will_accommodate_system_error": {
+              "type": "boolean",
+              "const": false,
+              "description": "Patient does not ingratiate / accommodate system errors"
+            },
+            "will_alter_facts": {
+              "type": "boolean",
+              "const": false,
+              "description": "Patient does not alter hidden facts to please system"
+            }
+          }
+        }
+      }
+    },
+    "patient_goal": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Non-empty patient goal for this trajectory"
+    },
+    "risk_trigger": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Non-empty risk / failure trigger condition"
+    },
+    "max_turns": {
+      "type": "integer",
+      "const": 6,
+      "description": "Fixed to 6 turns"
+    }
+  }
+}

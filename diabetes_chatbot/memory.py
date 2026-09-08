@@ -11,6 +11,7 @@ from typing import Any
 import re
 
 MEMORY_DIR = Path(__file__).parent / "data"
+DEFAULT_RECORD_FILE = MEMORY_DIR / "patient_record.json"
 
 def _validate_ddx_candidates(candidates):
     if not isinstance(candidates, list):
@@ -69,7 +70,38 @@ def _validate_evidence_links(links):
             continue
         out.append({"書名":book,"章節":chapter,"原文20字":excerpt[:40]})
     return out
-DEFAULT_RECORD_FILE = MEMORY_DIR / "patient_record.json"
+# 換藥處方核對 (Medication Reconciliation)：病患口述換藥時的關鍵動詞語意
+# 純字串語意判定，零正則表達式依賴，避免正則回溯與脆弱邊界問題。
+MED_SWITCH_TAG = "（已停用換藥）"
+MED_SWITCH_ACTIONS = ("換成", "改吃", "換掉", "改用", "換藥", "改為", "換為", "換了")
+MED_SWITCH_NEGATIONS = ("沒有換", "不用換", "不要換", "沒換")
+
+
+def is_medication_switch_text(text: str) -> bool:
+    """純字串語意判斷病患口述是否為換藥意圖，零正則表達式依賴"""
+    if not text:
+        return False
+    if any(neg in text for neg in MED_SWITCH_NEGATIONS):
+        return False
+    return any(act in text for act in MED_SWITCH_ACTIONS)
+
+
+def _apply_medication_switch(record: dict[str, Any], new_meds: list[str]) -> None:
+    """將現行用藥清單中不在新藥名單內的舊藥標註為已停用換藥。
+
+    保留歷史可追溯性（不直接刪除），門診備忘錄顯示層只呈現現行藥物。
+    """
+    new_set = {m.strip() for m in new_meds if m.strip()}
+    for entry in record.get("medications", []):
+        old_name = str(entry.get("name", ""))
+        if not old_name or MED_SWITCH_TAG in old_name:
+            continue
+        # 若舊藥名（含劑量字串）與任一新藥完全相同或新藥為其子字串，視為續用不標註
+        if old_name in new_set:
+            continue
+        if any(nm and (nm in old_name or old_name in nm) for nm in new_set):
+            continue
+        entry["name"] = f"{old_name}{MED_SWITCH_TAG}"
 
 def get_default_template(patient_id: str = "demo_patient") -> dict[str, Any]:
     return {
@@ -129,11 +161,16 @@ def save_patient_record(record: dict[str, Any], file_path: Path | str = DEFAULT_
         json.dump(record, f, ensure_ascii=False, indent=2)
 
 
-def update_medications(new_meds: list[str], source: str = "藥袋照片辨識", file_path: Path | str = DEFAULT_RECORD_FILE) -> None:
-    """更新或合併用藥紀錄 (去重增補)"""
+def update_medications(new_meds: list[str], source: str = "藥袋照片辨識", file_path: Path | str = DEFAULT_RECORD_FILE, raw_text: str = "") -> None:
+    """更新或合併用藥紀錄 (去重增補)，支援換藥核對自動標註舊藥停用"""
     record = load_patient_record(file_path)
     existing_med_names = {m["name"] for m in record.get("medications", [])}
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    is_switch = bool(raw_text) and is_medication_switch_text(raw_text)
+    if is_switch:
+        _apply_medication_switch(record, new_meds)
+        existing_med_names = {m["name"] for m in record.get("medications", [])}
     
     for med in new_meds:
         med_clean = med.strip()
@@ -189,14 +226,16 @@ def format_patient_context(file_path: Path | str = DEFAULT_RECORD_FILE) -> str:
     實現 臨床衛教大腦雙軌記憶架構，節省 Token 同時永不失憶。
     """
     record = load_patient_record(file_path)
-    meds = [m["name"] for m in record.get("medications", [])]
+    all_meds = [m["name"] for m in record.get("medications", [])]
+    discontinued = [m for m in all_meds if "已停用" in m or "停用換藥" in m]
+    meds = [m for m in all_meds if m not in discontinued]
     glucose = record.get("glucose_metrics", {}).get("latest", "")
     symptoms = record.get("reported_symptoms", [])
     last_summary = record.get("last_previsit_summary", "")
     
     ddx=_validate_ddx_candidates(record.get("ddx_candidates",[]))
     evids=_validate_evidence_links(record.get("evidence_links",[]))
-    if not meds and not glucose and not symptoms and not last_summary and not ddx and not evids:
+    if not meds and not glucose and not symptoms and not last_summary and not ddx and not evids and not discontinued:
         return ""
         
     lines = ["【病患長期健康檔案 (Longitudinal Health Profile)】："]
@@ -204,6 +243,8 @@ def format_patient_context(file_path: Path | str = DEFAULT_RECORD_FILE) -> str:
         lines.append(f"- 已確認用藥清單：{', '.join(meds)}")
     else:
         lines.append("- 目前用藥：尚未記錄具體藥名")
+    if discontinued:
+        lines.append(f"- 已停用/更換藥物（僅供參考，不列入現行用藥）：{', '.join(discontinued)}")
         
     if glucose and not any(k in glucose for k in ["血壓", "收縮壓", "舒張壓", "收縮", "舒張"]):
         lines.append(f"- 最近血糖數值：{glucose}")
@@ -294,7 +335,7 @@ def extract_clinical_facts_from_text(text: str, file_path: Path | str = DEFAULT_
     ]
     found_meds = [med for med in common_meds if med in text]
     if found_meds:
-        update_medications(found_meds, source="病患口述", file_path=file_path)
+        update_medications(found_meds, source="病患口述", file_path=file_path, raw_text=text)
         extracted["medications"] = found_meds
         
     return extracted

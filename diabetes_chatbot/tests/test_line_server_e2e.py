@@ -87,7 +87,7 @@ def test_line_server_med_bag_image():
     print("[測試 4 通過] LINE 健保藥袋照片 QR/OCR 解析並持久化存檔成功。")
 
 def test_line_server_flex_card_generation():
-    """測試 5：長輩要求整理看診備忘錄，觸發 LINE Flex 卡片與診間 QR Code"""
+    """測試 5：就醫備忘錄二階段核對交付 — 第一輪覆誦核對（純文字），點頭確認後才交付 Flex 卡片與 QR Code"""
     payload = {
         "user_id": "grandpa_line_001",
         "text": "護理師，我下週要回診，我有在吃庫魯化，幫我整理就醫備忘錄好嗎？"
@@ -95,8 +95,18 @@ def test_line_server_flex_card_generation():
     resp = client.post("/mock/chat", json=payload)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["reply_type"] == "flex"
-    assert data["flex_bubble"] is not None
-    assert data["flex_bubble"]["type"] == "bubble"
-    assert "TFDA-INTAKE-V2" in data["qr_payload"]
-    print("[測試 5 通過] 成功產生 LINE 官方大字體 Flex 卡片與診間快掃 QR Code！")
+    assert data["reply_type"] == "text"
+    assert data["flex_bubble"] is None
+    assert data["qr_payload"] is None
+    assert "這樣記對嗎" in data["reply_text"] or "確認" in data["reply_text"]
+    confirm_resp = client.post("/mock/chat", json={
+        "user_id": "grandpa_line_001",
+        "text": "對，這樣記對"
+    })
+    assert confirm_resp.status_code == 200
+    confirm_data = confirm_resp.json()
+    assert confirm_data["reply_type"] == "flex"
+    assert confirm_data["flex_bubble"] is not None
+    assert confirm_data["flex_bubble"]["type"] == "bubble"
+    assert "TFDA-INTAKE-V2" in confirm_data["qr_payload"]
+    print("[測試 5 通過] 二階段核對交付成功：先覆誦確認，點頭後才產生 LINE 官方大字體 Flex 卡片與診間快掃 QR Code！")
