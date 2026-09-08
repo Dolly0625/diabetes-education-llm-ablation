@@ -4,10 +4,10 @@
 
 | 工作流 | 負責人 | 狀態 | 當前交付 | 下一步 | Blocker |
 |---|---|---|---|---|---|
-| 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、狀態隔離、checkpoint/resume、盲測匯出與離線 dry-run 已通過 | 凍結正式模型與版本；整合審核各 WS | 正式模型設定尚未凍結 |
+| 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、狀態隔離、checkpoint/resume、盲測匯出、離線 dry-run 及正式模型設定已通過 | 凍結 prompt、工具 schema 與正式 commit 指紋；整合審核各 WS | 正式指紋尚未凍結 |
 | 2 A／B | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 A/B config 與事件驗收 | 依 `member_prompts/member_2_ablation_ab.md` 開工 | 無 |
 | 3 C／D | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 C/D logging 與 fault injection | 依 `member_prompts/member_3_ablation_cd.md` 開工 | 無 |
-| 4 模擬病患 | 待指派 | IN_PROGRESS | WS4-A：Patient prompt、12 profiles、schema 與 72 項測試已通過 | WS4-B：只建 roleplay runner、checkpoint/resume/retry 與 dry-run | 正式模型尚未凍結，不影響離線開發 |
+| 4 模擬病患 | 待指派 | IN_PROGRESS | WS4-A：Patient prompt、12 profiles、schema 與 72 項測試已通過 | WS4-B：只建 roleplay runner、checkpoint/resume/retry 與 dry-run | 無；正式批次仍須等完整實驗指紋凍結 |
 | 5 Judge／分析 | 待指派 | NOT_STARTED | Judge rubric、schema、canary、統計程式與結果樣板 | 依 `member_prompts/member_5_judge_analysis.md` 開工 | 正式 transcripts 尚未產生 |
 
 ## 里程碑
@@ -28,6 +28,7 @@
 | 2026-09-07 | Stage 2 採用 deterministic fake model 完成離線測試與 dry run | 正式模型可設定不寫死，避免付費 API 阻塞 | 技術主持 |
 | 2026-09-07 | AblationConfig 映射凍結：A OFF-OFF-OFF / B ON-OFF-OFF / C ON-ON-OFF / D ON-ON-ON，三輔助強制 OFF | 滿足唯一差異原則 | Sisyphus |
 | 2026-09-07 | Harness 獨立於 `workstream_1_technical_lead/harness/`，production 僅加 optional `ablation_config` injection | 向後相容，不複製四份 handlers.py | Sisyphus |
+| 2026-09-08 | 凍結模型：Talker/Planner=`gemini-3.5-flash-lite`、Patient Agent=`gemini-2.5-flash-lite`、Judge=`gemini-3.7-flash`；角色 temperature 分別為 0.3/0.1/0.3/0.0，max turns=6，seed=42 | 維持既有受測系統，同時以低成本模型生成病患對話並用不同、較強模型盲評 | 技術主持 |
 
 ## Workstream 1 交付清單（2026-09-07）
 
@@ -55,5 +56,5 @@
 - 驗證：A planner False / BCD True；A/B 兩輪皆 full tools；C/D diet 首輪隱藏、藥物次輪僅 search；D 次輪 raw `少吃一顆庫魯化` 被 Output Guard 覆寫為 `【臨床安全提醒】`，C 不覆寫
 
 ### 尚未解決風險
-- `RESEARCH_PROTOCOL.md` 的 Talker、Patient Agent、Judge 模型、temperature、prompt 版本、tool schema 版本與正式 commit 尚未凍結。
-- 在上述設定凍結前，各組可建立程式、測試與 fake-data dry-run，但禁止啟動正式 12×4 批次或宣稱模型實驗結果。
+- `RESEARCH_PROTOCOL.md` 的模型、各角色 temperature、max turns 與 seed 已凍結；Talker/Planner prompt 版本、tool schema 版本與正式 commit 尚未凍結。
+- 在完整實驗指紋凍結前，各組可建立程式、測試與 fake-data dry-run，但禁止啟動正式 12×4 批次或宣稱模型實驗結果。

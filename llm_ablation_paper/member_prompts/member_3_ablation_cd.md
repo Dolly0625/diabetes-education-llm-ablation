@@ -24,5 +24,5 @@
 5. blocking issues。
 
 第一輪不要修改檔案。等待成員回覆「確認開工」後再執行，所有成果寫回 workstream_3_ablation_cd 或協議指定的 artifacts 位置。
-只允許離線 fake-data 測試；正式模型與 temperature 未凍結前不得啟動正式實驗。
+正式模型與 temperature 已凍結於 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；完整實驗指紋尚未凍結前，只允許離線 fake-data 測試，不得啟動正式實驗。
 ```

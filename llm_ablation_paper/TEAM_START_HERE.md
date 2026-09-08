@@ -46,7 +46,7 @@
 - WS1 Harness 已驗收，不得重建或另做一套控制器。
 - WS4-A profiles、schema 與來源驗證已完成；成員 4 下一步只做 WS4-B runner。
 - WS2、WS3、WS5 可立即使用離線 fake data 開發與測試。
-- 正式模型、temperature 與版本尚未凍結；所有人均不得自行啟動 12×4 正式批次。
+- 正式模型、各角色 temperature、max turns 與 seed 已凍結於 `shared/RESEARCH_PROTOCOL.md`；prompt、工具 schema 與正式 commit 指紋尚未凍結，因此所有人仍不得自行啟動 12×4 正式批次。
 
 每個人都必須取得完整 repository，不能只傳自己的工作流資料夾。目錄應保持：
 
@@ -74,7 +74,7 @@ diabetes-chatbot/
 - 不把其他 AI 的自我評估當成完成證明；要看實際檔案、測試與 artifacts。
 - 不寫死任何人的電腦路徑。
 - 不把 RAG 組的研究結果混入這篇 LLM 消融論文。
-- 遇到未凍結的模型名稱時，先用可替換設定或 fake model，不要自行宣布正式模型。
+- 模型名稱與參數一律讀取 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；正式指紋完成前先用 fake model 測試。
 - 成員 2–5 不得直接修改 `diabetes_chatbot/handlers.py`；需要接口時記錄需求，由成員 1 統一處理。
 
 ## 群組公告範本

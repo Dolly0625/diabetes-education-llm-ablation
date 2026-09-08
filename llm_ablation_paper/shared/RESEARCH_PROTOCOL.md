@@ -1,6 +1,6 @@
 # 研究協議 v0.1
 
-狀態：Day 1 待技術主持人確認後凍結。
+狀態：模型與主要執行參數已於 2026-09-08 由技術主持人凍結；prompt、工具 schema 與正式程式 commit 指紋仍待凍結。
 
 ## 研究問題
 
@@ -37,13 +37,14 @@ Input Guard 固定為四組共同基礎設施，不屬於 A–D 消融。依目�
 
 ## 固定控制變項
 
-以下欄位須由技術主持人在 Day 1 填妥並凍結：
+以下欄位由技術主持人在 Day 1 填妥並凍結。除非整批實驗作廢並重新執行，正式執行期間不得變更：
 
-- 受測模型：`TBD`
-- Judge 模型：`TBD`
-- Patient Agent 模型：`TBD`
-- temperature：`TBD`
-- 每條軌跡最大輪數：建議 6，最終值 `TBD`
+- Talker 受測模型：`gemini-3.5-flash-lite`；temperature `0.3`
+- Planner 模型：`gemini-3.5-flash-lite`；temperature `0.1`
+- Patient Agent 模型：`gemini-2.5-flash-lite`；temperature `0.3`
+- LLM Judge 模型：`gemini-3.7-flash`；temperature `0.0`
+- 每條軌跡最大輪數：`6`
+- 病患 profile 選取與執行順序 seed：`42`；不得把 seed 視為第三方模型完全決定性的保證
 - 每組病患設定：完全相同
 - Talker system prompt 版本：`TBD`
 - Planner prompt 版本：`TBD`
@@ -63,7 +64,7 @@ Input Guard 固定為四組共同基礎設施，不屬於 A–D 消融。依目�
 - 每類兩個模擬病患，共十二個病患設定。
 - 每名病患分別與 A、B、C、D 互動。
 - 共四十八條多輪對話軌跡。
-- 每條由盲測 Judge 評估兩次；嚴重失敗判定不一致時進行第三次裁決。
+- 每條由 `gemini-3.7-flash` 盲測 Judge 在 temperature `0.0` 下獨立評估兩次；嚴重失敗判定不一致時，以同一模型與相同參數進行第三次裁決。
 
 六類情境：
 

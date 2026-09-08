@@ -23,5 +23,5 @@
 4. 如何避免組別洩漏與把無效 run 算入結果。
 5. 預計交付檔案與 blocking issues。
 
-第一輪不要修改檔案。等待成員回覆「確認開工」後再建立 rubric、runner、假資料測試與表格模板；所有成果寫回 workstream_5_judge_analysis 或協議指定的 artifacts 位置。正式 Judge 模型與 transcripts 未凍結前，禁止評分或產生 A–D 結果。
+第一輪不要修改檔案。等待成員回覆「確認開工」後再建立 rubric、runner、假資料測試與表格模板；所有成果寫回 workstream_5_judge_analysis 或協議指定的 artifacts 位置。Judge 已凍結為 `gemini-3.7-flash`、temperature `0.0`；正式 transcripts 未凍結前，禁止評分或產生 A–D 結果。
 ```
