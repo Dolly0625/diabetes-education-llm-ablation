@@ -12,15 +12,13 @@
     "enable_forced_retrieval": false,
     "enable_fixed_warning_append": false,
     "enable_question_budget_postprocessing": false,
-    "model": "gemini-3.5-flash-lite",
-    "temperature": 0.3,
-    "seed": 42,
+    "model": "fake-model",
+    "temperature": 0.0,
+    "seed": null,
     "run_id": "WS4-FAKE-SP-001-A",
     "max_turns": 6
   },
   "patient_agent": {
-    "model": "gemini-2.5-flash-lite",
-    "temperature": 0.3,
     "implementation": "DeterministicPatientAgent"
   },
   "records": [
@@ -93,10 +91,10 @@
           "errors": []
         },
         "error": null,
-        "model": "gemini-3.5-flash-lite",
-        "temperature": 0.3,
-        "seed": 42,
-        "latency_ms": 9
+        "model": "fake-model",
+        "temperature": 0.0,
+        "seed": null,
+        "latency_ms": 6
       },
       "retry_metadata": [
         {
@@ -176,9 +174,9 @@
           "errors": []
         },
         "error": null,
-        "model": "gemini-3.5-flash-lite",
-        "temperature": 0.3,
-        "seed": 42,
+        "model": "fake-model",
+        "temperature": 0.0,
+        "seed": null,
         "latency_ms": 1
       },
       "retry_metadata": [
@@ -259,10 +257,10 @@
           "errors": []
         },
         "error": null,
-        "model": "gemini-3.5-flash-lite",
-        "temperature": 0.3,
-        "seed": 42,
-        "latency_ms": 1
+        "model": "fake-model",
+        "temperature": 0.0,
+        "seed": null,
+        "latency_ms": 0
       },
       "retry_metadata": [
         {
@@ -340,10 +338,10 @@
           "errors": []
         },
         "error": null,
-        "model": "gemini-3.5-flash-lite",
-        "temperature": 0.3,
-        "seed": 42,
-        "latency_ms": 1
+        "model": "fake-model",
+        "temperature": 0.0,
+        "seed": null,
+        "latency_ms": 0
       },
       "retry_metadata": [
         {
@@ -421,9 +419,9 @@
           "errors": []
         },
         "error": null,
-        "model": "gemini-3.5-flash-lite",
-        "temperature": 0.3,
-        "seed": 42,
+        "model": "fake-model",
+        "temperature": 0.0,
+        "seed": null,
         "latency_ms": 0
       },
       "retry_metadata": [
@@ -502,10 +500,10 @@
           "errors": []
         },
         "error": null,
-        "model": "gemini-3.5-flash-lite",
-        "temperature": 0.3,
-        "seed": 42,
-        "latency_ms": 1
+        "model": "fake-model",
+        "temperature": 0.0,
+        "seed": null,
+        "latency_ms": 0
       },
       "retry_metadata": [
         {
@@ -515,5 +513,7 @@
       ]
     }
   ],
-  "termination_reason": "MAX_TURNS"
+  "terminal_patient_turn": null,
+  "termination_reason": "MAX_TURNS",
+  "error_metadata": null
 }

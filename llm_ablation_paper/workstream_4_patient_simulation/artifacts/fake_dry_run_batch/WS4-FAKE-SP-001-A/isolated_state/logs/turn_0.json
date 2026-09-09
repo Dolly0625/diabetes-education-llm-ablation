@@ -13,8 +13,8 @@
     "is_blocked": false,
     "risk_category": "NONE"
   },
-  "latency_ms": 9,
-  "model": "gemini-3.5-flash-lite",
+  "latency_ms": 6,
+  "model": "fake-model",
   "output_guard_result": {
     "blocked_message": "",
     "is_blocked": false,
@@ -54,8 +54,8 @@
     "errors": []
   },
   "run_id": "WS4-FAKE-SP-001-A",
-  "seed": 42,
-  "temperature": 0.3,
+  "seed": null,
+  "temperature": 0.0,
   "termination_reason": null,
   "token_usage": null,
   "tool_rejections": [],

@@ -2,23 +2,9 @@
   "execution_mode": "deterministic_fake_dry_run",
   "formal_experiment_started": false,
   "patient_id": "SP-001",
-  "models_frozen_for_formal_run": {
-    "talker": {
-      "model": "gemini-3.5-flash-lite",
-      "temperature": 0.3
-    },
-    "planner": {
-      "model": "gemini-3.5-flash-lite",
-      "temperature": 0.1
-    },
-    "patient_agent": {
-      "model": "gemini-2.5-flash-lite",
-      "temperature": 0.3
-    },
-    "judge": {
-      "model": "gemini-3.7-flash",
-      "temperature": 0.0
-    }
+  "runtime_configuration_source": "WS1 AblationConfig supplied to WS4 runner",
+  "patient_agent": {
+    "implementation": "DeterministicPatientAgent"
   },
   "runs": [
     {

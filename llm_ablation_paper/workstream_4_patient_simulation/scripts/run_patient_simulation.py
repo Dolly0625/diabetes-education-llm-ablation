@@ -21,7 +21,7 @@ import sys
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional, Protocol
+from typing import Any, Callable, Iterable, Optional, Protocol, TypeVar
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -36,17 +36,6 @@ PATIENT_PROMPT_PATH = WS4_ROOT / "patient_agent_prompt.md"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# These values are frozen in shared/RESEARCH_PROTOCOL.md.  They are repeated
-# here only as runtime assertions/metadata; this runner does not change them.
-TALKER_MODEL = "gemini-3.5-flash-lite"
-TALKER_TEMPERATURE = 0.3
-PLANNER_MODEL = "gemini-3.5-flash-lite"
-PLANNER_TEMPERATURE = 0.1
-PATIENT_MODEL = "gemini-2.5-flash-lite"
-PATIENT_TEMPERATURE = 0.3
-JUDGE_MODEL = "gemini-3.7-flash"
-JUDGE_TEMPERATURE = 0.0
-PROTOCOL_SEED = 42
 MAX_RETRY_DELAYS_SECONDS = (1, 2, 4, 8)
 TERMINATION_REASONS = {
     "PATIENT_GOAL_MET",
@@ -67,6 +56,17 @@ class PatientAgent(Protocol):
         turn_number: int,
         prior_turns: list[dict[str, Any]],
     ) -> dict[str, Any]: ...
+
+
+T = TypeVar("T")
+
+
+class RetryExhaustedError(RuntimeError):
+    """Raised after a bounded call fails, retaining every attempt for artifacts."""
+
+    def __init__(self, attempts: list[dict[str, Any]]) -> None:
+        self.attempts = attempts
+        super().__init__(json.dumps(attempts, ensure_ascii=False))
 
 
 def _write_json_atomic(path: Path, data: Any) -> None:
@@ -230,12 +230,16 @@ class DeterministicPatientAgent:
 class GeminiPatientAgent:
     """Optional real Patient Agent.  It is not selected by the fake dry run."""
 
-    def __init__(self, client: Any, prompt_text: str) -> None:
+    def __init__(self, client: Any, prompt_text: str, *, model: str, temperature: float) -> None:
+        if not model.strip():
+            raise ValueError("Patient Agent model must be supplied by the frozen experiment configuration")
         self.client = client
         self.prompt_text = prompt_text
+        self.model = model
+        self.temperature = temperature
 
     @classmethod
-    def from_environment(cls) -> "GeminiPatientAgent":
+    def from_environment(cls, *, model: str, temperature: float) -> "GeminiPatientAgent":
         from dotenv import load_dotenv
         from openai import OpenAI
 
@@ -244,7 +248,12 @@ class GeminiPatientAgent:
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY is absent; the key is never accepted via command arguments")
         base_url = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
-        return cls(OpenAI(api_key=api_key.strip('"'), base_url=base_url), PATIENT_PROMPT_PATH.read_text(encoding="utf-8"))
+        return cls(
+            OpenAI(api_key=api_key.strip('"'), base_url=base_url),
+            PATIENT_PROMPT_PATH.read_text(encoding="utf-8"),
+            model=model,
+            temperature=temperature,
+        )
 
     def next_turn(
         self,
@@ -261,8 +270,8 @@ class GeminiPatientAgent:
             "prior_disclosed_facts": [x["patient_turn"]["disclosed_facts"] for x in prior_turns],
         }
         response = self.client.chat.completions.create(
-            model=PATIENT_MODEL,
-            temperature=PATIENT_TEMPERATURE,
+            model=self.model,
+            temperature=self.temperature,
             messages=[
                 {"role": "system", "content": self.prompt_text},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -281,25 +290,41 @@ def _is_transient_error(exc: Exception) -> bool:
     )
 
 
-def _build_config(condition: str, run_id: str, max_turns: int):
+def _default_config_factory(condition: str):
     from llm_ablation_paper.workstream_1_technical_lead.harness import AblationConfig
+
+    return AblationConfig.for_condition(condition)
+
+
+def _build_config(
+    condition: str,
+    run_id: str,
+    max_turns: int,
+    config_factory: Callable[[str], Any] = _default_config_factory,
+):
 
     if condition not in {"A", "B", "C", "D"}:
         raise ValueError(f"condition must be one of A/B/C/D, got {condition!r}")
-    return replace(
-        AblationConfig.for_condition(condition),
-        run_id=run_id,
-        model=TALKER_MODEL,
-        temperature=TALKER_TEMPERATURE,
-        seed=PROTOCOL_SEED,
-        max_turns=max_turns,
-    )
+    config = config_factory(condition)
+    if getattr(config, "condition", None) != condition:
+        raise ValueError("WS1 config_factory returned a config for the wrong condition")
+    return replace(config, run_id=run_id, max_turns=max_turns)
+
+
+def _patient_agent_metadata(patient_agent: PatientAgent) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"implementation": type(patient_agent).__name__}
+    if hasattr(patient_agent, "model"):
+        metadata["model"] = getattr(patient_agent, "model")
+    if hasattr(patient_agent, "temperature"):
+        metadata["temperature"] = getattr(patient_agent, "temperature")
+    return metadata
 
 
 @dataclass
 class RoleplayRunner:
     patient_agent: PatientAgent
     output_root: Path
+    config_factory: Callable[[str], Any] = _default_config_factory
     retry_delays: tuple[int, ...] = MAX_RETRY_DELAYS_SECONDS
     sleep: Callable[[float], None] = time.sleep
 
@@ -330,7 +355,7 @@ class RoleplayRunner:
             timeout=30.0,
         )
 
-    def _run_with_retry(self, call: Callable[[], list[dict[str, Any]]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def _run_with_retry(self, call: Callable[[], T]) -> tuple[T, list[dict[str, Any]]]:
         attempts: list[dict[str, Any]] = []
         for attempt in range(len(self.retry_delays) + 1):
             try:
@@ -346,9 +371,61 @@ class RoleplayRunner:
                     "error": str(exc),
                 })
                 if not retryable:
-                    raise RuntimeError(json.dumps(attempts, ensure_ascii=False)) from exc
+                    raise RetryExhaustedError(attempts) from exc
                 self.sleep(self.retry_delays[attempt])
         raise AssertionError("unreachable")
+
+    def _result_payload(
+        self,
+        *,
+        run_id: str,
+        patient_id: str,
+        condition: str,
+        user_id: str,
+        state_dir: Path,
+        config: Any,
+        records: list[dict[str, Any]],
+        termination_reason: str,
+        terminal_patient_turn: Optional[dict[str, Any]] = None,
+        error_metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return {
+            "run_id": run_id,
+            "patient_id": patient_id,
+            "condition": condition,
+            "user_id": user_id,
+            "state_dir_id": state_dir.name,
+            "config": config.to_dict(),
+            "patient_agent": _patient_agent_metadata(self.patient_agent),
+            "records": records,
+            "terminal_patient_turn": terminal_patient_turn,
+            "termination_reason": termination_reason,
+            "error_metadata": error_metadata,
+        }
+
+    def _persist_terminal_state(
+        self,
+        *,
+        run_dir: Path,
+        checkpoint_path: Path,
+        result: dict[str, Any],
+        pending_patient_turn: Optional[dict[str, Any]] = None,
+        pending_patient_retry_metadata: Optional[list[dict[str, Any]]] = None,
+    ) -> None:
+        checkpoint = {
+            "run_id": result["run_id"],
+            "patient_id": result["patient_id"],
+            "condition": result["condition"],
+            "user_id": result["user_id"],
+            "records": result["records"],
+            "pending_patient_turn": pending_patient_turn,
+            "pending_patient_retry_metadata": pending_patient_retry_metadata or [],
+            "terminal_patient_turn": result["terminal_patient_turn"],
+            "termination_reason": result["termination_reason"],
+            "error_metadata": result["error_metadata"],
+        }
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_json_atomic(run_dir / "roleplay_result.json", result)
 
     def run_condition(
         self,
@@ -364,12 +441,18 @@ class RoleplayRunner:
         run_dir = self.output_root / run_id
         state_dir = run_dir / "isolated_state"
         checkpoint_path = self._checkpoint_path(run_id)
-        config = _build_config(condition, run_id, int(profile["max_turns"]))
+        config = _build_config(condition, run_id, int(profile["max_turns"]), self.config_factory)
+        if run_suffix.upper() != "FAKE" and getattr(config, "model", "fake-model") == "fake-model":
+            raise ValueError("formal execution requires a frozen WS1 config_factory; fake-model is dry-run only")
         user_id = f"ws4_{patient_id.lower()}_{condition.lower()}_{run_suffix.lower()}"
 
         records: list[dict[str, Any]] = []
         patient_messages: list[str] = []
         last_assistant: Optional[str] = None
+        pending_patient_turn: Optional[dict[str, Any]] = None
+        pending_patient_retry_metadata: list[dict[str, Any]] = []
+        terminal_patient_turn: Optional[dict[str, Any]] = None
+        termination_reason: Optional[str] = None
         if resume:
             if not checkpoint_path.exists():
                 raise FileNotFoundError(f"resume requested but checkpoint is missing: {checkpoint_path}")
@@ -379,23 +462,49 @@ class RoleplayRunner:
             records = saved["records"]
             patient_messages = [record["patient_turn"]["patient_utterance"] for record in records]
             last_assistant = records[-1]["harness_turn"]["assistant_response"] if records else None
+            pending_patient_turn = saved.get("pending_patient_turn")
+            pending_patient_retry_metadata = saved.get("pending_patient_retry_metadata", [])
+            if pending_patient_turn is not None:
+                patient_messages.append(pending_patient_turn["patient_utterance"])
+            saved_reason = saved.get("termination_reason")
+            if saved_reason != "ERROR":
+                termination_reason = saved_reason
+                terminal_patient_turn = saved.get("terminal_patient_turn")
         elif run_dir.exists():
             raise FileExistsError(f"run directory already exists; use resume=True: {run_dir}")
 
-        termination_reason: Optional[str] = None
-        while len(records) < int(profile["max_turns"]):
+        while termination_reason is None and len(records) < int(profile["max_turns"]):
             turn_number = len(records) + 1
-            patient_turn = validate_patient_turn(self.patient_agent.next_turn(
-                profile=profile,
-                assistant_output=last_assistant,
-                turn_number=turn_number,
-                prior_turns=records,
-            ))
+            if pending_patient_turn is None:
+                try:
+                    patient_turn, pending_patient_retry_metadata = self._run_with_retry(
+                        lambda: validate_patient_turn(self.patient_agent.next_turn(
+                            profile=profile,
+                            assistant_output=last_assistant,
+                            turn_number=turn_number,
+                            prior_turns=records,
+                        ))
+                    )
+                except RetryExhaustedError as exc:
+                    error_metadata = {"stage": "patient_agent", "turn": turn_number, "attempts": exc.attempts}
+                    result = self._result_payload(
+                        run_id=run_id, patient_id=patient_id, condition=condition, user_id=user_id,
+                        state_dir=state_dir, config=config, records=records,
+                        termination_reason="ERROR", error_metadata=error_metadata,
+                    )
+                    self._persist_terminal_state(
+                        run_dir=run_dir, checkpoint_path=checkpoint_path, result=result,
+                    )
+                    raise
+                pending_patient_turn = patient_turn
+            patient_turn = pending_patient_turn
             if patient_turn["should_end"]:
                 termination_reason = patient_turn["termination_reason"]
+                terminal_patient_turn = patient_turn
                 break
 
-            patient_messages.append(patient_turn["patient_utterance"])
+            if not patient_messages or patient_messages[-1] != patient_turn["patient_utterance"]:
+                patient_messages.append(patient_turn["patient_utterance"])
             one_response = None
             if fake_talker_responses is not None:
                 if len(fake_talker_responses) <= len(records):
@@ -403,24 +512,43 @@ class RoleplayRunner:
                 # A fresh subprocess creates a fresh fake client, so provide only
                 # the response for this exact Harness turn.
                 one_response = [fake_talker_responses[len(records)]]
-            harness_result, retry_metadata = self._run_with_retry(lambda: self._call_harness(
-                config=config,
-                patient_id=user_id,
-                messages=patient_messages,
-                state_dir=state_dir,
-                run_id=run_id,
-                resume=bool(records),
-                fake_responses=one_response,
-            ))
+            try:
+                harness_result, retry_metadata = self._run_with_retry(lambda: self._call_harness(
+                    config=config,
+                    patient_id=user_id,
+                    messages=patient_messages,
+                    state_dir=state_dir,
+                    run_id=run_id,
+                    resume=bool(records),
+                    fake_responses=one_response,
+                ))
+            except RetryExhaustedError as exc:
+                error_metadata = {"stage": "harness", "turn": turn_number, "attempts": exc.attempts}
+                result = self._result_payload(
+                    run_id=run_id, patient_id=patient_id, condition=condition, user_id=user_id,
+                    state_dir=state_dir, config=config, records=records,
+                    termination_reason="ERROR", error_metadata=error_metadata,
+                )
+                self._persist_terminal_state(
+                    run_dir=run_dir,
+                    checkpoint_path=checkpoint_path,
+                    result=result,
+                    pending_patient_turn=patient_turn,
+                    pending_patient_retry_metadata=pending_patient_retry_metadata,
+                )
+                raise
             harness_turn = harness_result[-1]
             record = {
                 "turn": turn_number,
                 "patient_turn": patient_turn,
                 "harness_turn": harness_turn,
+                "patient_retry_metadata": pending_patient_retry_metadata,
                 "retry_metadata": retry_metadata,
             }
             records.append(record)
             last_assistant = harness_turn["assistant_response"]
+            pending_patient_turn = None
+            pending_patient_retry_metadata = []
 
             if harness_turn.get("termination_reason") in {"COMMON_INPUT_BLOCK", "ERROR"}:
                 termination_reason = harness_turn["termination_reason"]
@@ -433,29 +561,29 @@ class RoleplayRunner:
                 "condition": condition,
                 "user_id": user_id,
                 "records": records,
+                "pending_patient_turn": None,
+                "pending_patient_retry_metadata": [],
+                "terminal_patient_turn": None,
                 "termination_reason": termination_reason,
+                "error_metadata": None,
             })
             if termination_reason:
                 break
 
         if termination_reason is None:
             termination_reason = "MAX_TURNS"
-        result = {
-            "run_id": run_id,
-            "patient_id": patient_id,
-            "condition": condition,
-            "user_id": user_id,
-            "state_dir_id": state_dir.name,
-            "config": config.to_dict(),
-            "patient_agent": {
-                "model": PATIENT_MODEL,
-                "temperature": PATIENT_TEMPERATURE,
-                "implementation": type(self.patient_agent).__name__,
-            },
-            "records": records,
-            "termination_reason": termination_reason,
-        }
-        _write_json_atomic(run_dir / "roleplay_result.json", result)
+        result = self._result_payload(
+            run_id=run_id,
+            patient_id=patient_id,
+            condition=condition,
+            user_id=user_id,
+            state_dir=state_dir,
+            config=config,
+            records=records,
+            terminal_patient_turn=terminal_patient_turn,
+            termination_reason=termination_reason,
+        )
+        self._persist_terminal_state(run_dir=run_dir, checkpoint_path=checkpoint_path, result=result)
         return result
 
 
@@ -493,7 +621,7 @@ def _run_deterministic_fake_condition(
         raise FileExistsError(f"fake run already exists: {run_dir}")
     state_dir = run_dir / "isolated_state"
     user_id = f"ws4_{patient_id.lower()}_{condition.lower()}_fake"
-    config = _build_config(condition, run_id, int(profile["max_turns"]))
+    config = _build_config(condition, run_id, int(profile["max_turns"]), runner.config_factory)
 
     simulated_turns: list[dict[str, Any]] = []
     messages: list[str] = []
@@ -540,7 +668,11 @@ def _run_deterministic_fake_condition(
         "condition": condition,
         "user_id": user_id,
         "records": records,
+        "pending_patient_turn": None,
+        "pending_patient_retry_metadata": [],
+        "terminal_patient_turn": None,
         "termination_reason": termination_reason,
+        "error_metadata": None,
     })
     result = {
         "run_id": run_id,
@@ -549,13 +681,11 @@ def _run_deterministic_fake_condition(
         "user_id": user_id,
         "state_dir_id": state_dir.name,
         "config": config.to_dict(),
-        "patient_agent": {
-            "model": PATIENT_MODEL,
-            "temperature": PATIENT_TEMPERATURE,
-            "implementation": type(runner.patient_agent).__name__,
-        },
+        "patient_agent": _patient_agent_metadata(runner.patient_agent),
         "records": records,
+        "terminal_patient_turn": None,
         "termination_reason": termination_reason,
+        "error_metadata": None,
     }
     _write_json_atomic(run_dir / "roleplay_result.json", result)
     return result
@@ -577,12 +707,8 @@ def run_fake_dry_run(output_root: Path, patient_id: str = "SP-001") -> dict[str,
         "execution_mode": "deterministic_fake_dry_run",
         "formal_experiment_started": False,
         "patient_id": patient_id,
-        "models_frozen_for_formal_run": {
-            "talker": {"model": TALKER_MODEL, "temperature": TALKER_TEMPERATURE},
-            "planner": {"model": PLANNER_MODEL, "temperature": PLANNER_TEMPERATURE},
-            "patient_agent": {"model": PATIENT_MODEL, "temperature": PATIENT_TEMPERATURE},
-            "judge": {"model": JUDGE_MODEL, "temperature": JUDGE_TEMPERATURE},
-        },
+        "runtime_configuration_source": "WS1 AblationConfig supplied to WS4 runner",
+        "patient_agent": results[0]["patient_agent"],
         "runs": [{
             "run_id": item["run_id"],
             "condition": item["condition"],
