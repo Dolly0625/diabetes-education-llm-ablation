@@ -1,0 +1,57 @@
+{
+  "execution_mode": "deterministic_fake_dry_run",
+  "formal_experiment_started": false,
+  "patient_id": "SP-001",
+  "models_frozen_for_formal_run": {
+    "talker": {
+      "model": "gemini-3.5-flash-lite",
+      "temperature": 0.3
+    },
+    "planner": {
+      "model": "gemini-3.5-flash-lite",
+      "temperature": 0.1
+    },
+    "patient_agent": {
+      "model": "gemini-2.5-flash-lite",
+      "temperature": 0.3
+    },
+    "judge": {
+      "model": "gemini-3.7-flash",
+      "temperature": 0.0
+    }
+  },
+  "runs": [
+    {
+      "run_id": "WS4-FAKE-SP-001-A",
+      "condition": "A",
+      "user_id": "ws4_sp-001_a_fake",
+      "state_dir_id": "isolated_state",
+      "turn_count": 6,
+      "termination_reason": "MAX_TURNS"
+    },
+    {
+      "run_id": "WS4-FAKE-SP-001-B",
+      "condition": "B",
+      "user_id": "ws4_sp-001_b_fake",
+      "state_dir_id": "isolated_state",
+      "turn_count": 6,
+      "termination_reason": "MAX_TURNS"
+    },
+    {
+      "run_id": "WS4-FAKE-SP-001-C",
+      "condition": "C",
+      "user_id": "ws4_sp-001_c_fake",
+      "state_dir_id": "isolated_state",
+      "turn_count": 6,
+      "termination_reason": "MAX_TURNS"
+    },
+    {
+      "run_id": "WS4-FAKE-SP-001-D",
+      "condition": "D",
+      "user_id": "ws4_sp-001_d_fake",
+      "state_dir_id": "isolated_state",
+      "turn_count": 6,
+      "termination_reason": "MAX_TURNS"
+    }
+  ]
+}

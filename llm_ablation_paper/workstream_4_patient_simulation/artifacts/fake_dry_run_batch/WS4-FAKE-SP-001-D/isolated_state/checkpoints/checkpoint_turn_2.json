@@ -1,0 +1,64 @@
+{
+  "assistant_response": "我會把這些飲食狀況整理好，回診時也可以和醫師或衛教師討論。",
+  "called_tools": [],
+  "condition": "D",
+  "error": null,
+  "events": [],
+  "exposed_tools": [
+    "search_handbook"
+  ],
+  "input_guard_result": {
+    "blocked_message": "",
+    "is_blocked": false,
+    "risk_category": "NONE"
+  },
+  "latency_ms": 2,
+  "model": "gemini-3.5-flash-lite",
+  "output_guard_result": {
+    "blocked_message": "",
+    "is_blocked": false,
+    "risk_category": "NONE"
+  },
+  "patient_id": "ws4_sp-001_d_fake",
+  "planner_enabled": true,
+  "planner_result_or_neutral": {
+    "can_unlock_summary_tool": false,
+    "ddx_candidates": [],
+    "detected_intent": "GENERAL_HEALTH",
+    "engine": "llm",
+    "evidence_links": [],
+    "highest_priority_gap": null,
+    "is_agenda_confirmed": false,
+    "is_explicit_request": false,
+    "is_visit_mode": false,
+    "retrieval_domain": "NONE",
+    "slots": {
+      "concerns_or_side_effects": "",
+      "concerns_status": "MISSING",
+      "glucose_metrics": "",
+      "glucose_metrics_status": "MISSING",
+      "hypo_history": "",
+      "hypo_history_status": "MISSING",
+      "medications": "",
+      "medications_status": "MISSING",
+      "visit_reason": "",
+      "visit_reason_status": "MISSING"
+    },
+    "talker_guidance": ""
+  },
+  "raw_talker_output": "我會把這些飲食狀況整理好，回診時也可以和醫師或衛教師討論。",
+  "retry_metadata": {
+    "attempts": 1,
+    "backoffs": [],
+    "errors": []
+  },
+  "run_id": "WS4-FAKE-SP-001-D",
+  "seed": 42,
+  "temperature": 0.3,
+  "termination_reason": null,
+  "token_usage": null,
+  "tool_rejections": [],
+  "tool_results": [],
+  "turn_index": 2,
+  "user_message": "晚上會喝含糖飲料但不好意思講"
+}

@@ -1,0 +1,85 @@
+{
+  "sha256": "5c5fe88de44c72a7ae1ec5072e48b02333b75da01ba26fc8182f961e9428cd00",
+  "tools": [
+    {
+      "function": {
+        "description": "查詢衛生福利部國民健康署《糖尿病與我》手冊與 TFDA 官方藥品安全指引。僅在病患詢問特定西藥名稱（如庫魯化、SGLT2）、藥物副作用/不良反應、血糖診斷數值標準、或糖尿病定義/成因/形成機制時調用。長輩分享日常飲食、家常菜、吃喝點心時，請直接以專業護理師常識親切同理與關心份量，嚴禁調用此工具！",
+        "name": "search_handbook",
+        "parameters": {
+          "properties": {
+            "keyword": {
+              "description": "提煉出的專業臨床關鍵字，例如：SGLT2抑制劑、空腹血糖標準、二甲雙胍",
+              "type": "string"
+            }
+          },
+          "required": [
+            "keyword"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    },
+    {
+      "function": {
+        "description": "產出新陳代謝科門診預問診摘要（就醫備忘錄）台灣 7 欄醫師交班就醫備忘錄。當已經了解病患就醫訴求、用藥狀況與有無低血糖/不適，準備正式整理門診重點時使用。切勿在剛提到看診、尚未了解用藥與症狀前過早呼叫。",
+        "name": "generate_previsit_intake_summary",
+        "parameters": {
+          "properties": {
+            "ddx_candidates": {
+              "description": "待確認方向 2-3 條人話，每條含待做檢查，僅用待確認語氣禁止確診字眼",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "evidence_links": {
+              "description": "RAG 真查到才提供的出處（國健署/TFDA 人話），無則留空不可捏造頁碼",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "glucose_metrics": {
+              "description": "近期居家空腹/餐後血糖範圍，或最近一季 HbA1c 數據",
+              "type": "string"
+            },
+            "glucose_range": {
+              "description": "糖線三數字：最高/最低/平常與不適故事，例如：最高180 最低65 平常110 週三晨空腹65暈10分鐘3顆糖緩解",
+              "type": "string"
+            },
+            "hypo_history": {
+              "description": "近一個月有無低血糖事件（冒冷汗、心悸、手抖、頭暈等），若無請寫「近期無低血糖事件」",
+              "type": "string"
+            },
+            "medications": {
+              "description": "目前固定服用的降血糖藥物或胰島素，以及服藥規律性（若記不得請寫「病患自述記不得藥名，建議攜帶藥袋至現場核對」）",
+              "type": "string"
+            },
+            "patient_quote": {
+              "description": "阿嬤原話不潤飾，保留病患原句",
+              "type": "string"
+            },
+            "side_effects_or_concerns": {
+              "description": "服藥後有無不適（如脹氣腹瀉），或足部麻木/視力變化等併發症警訊",
+              "type": "string"
+            },
+            "visit_reason": {
+              "description": "本次門診的核心訴求，例如：定期回診拿慢箋、想諮詢是否調整劑量、為了解決特定不適",
+              "type": "string"
+            }
+          },
+          "required": [
+            "visit_reason",
+            "medications",
+            "glucose_metrics",
+            "hypo_history",
+            "side_effects_or_concerns"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    }
+  ]
+}
