@@ -1,0 +1,13 @@
+{
+  "condition": "D",
+  "created_at": "2026-09-09T21:51:03",
+  "git_dirty": true,
+  "git_head": "daa839bb31f2f4b679c6873b8e50b5b3b6f431bf",
+  "last_latency_ms": 1,
+  "last_turn": 5,
+  "model": "fake-model",
+  "run_id": "WS4-FAKE-SP-001-D",
+  "seed": null,
+  "temperature": 0.0,
+  "tool_sha256": "5c5fe88de44c72a7ae1ec5072e48b02333b75da01ba26fc8182f961e9428cd00"
+}

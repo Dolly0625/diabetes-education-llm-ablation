@@ -1,0 +1,14 @@
+{
+  "condition": "D",
+  "enable_dynamic_tool_gate": true,
+  "enable_fixed_warning_append": false,
+  "enable_forced_retrieval": false,
+  "enable_output_guard": true,
+  "enable_planner": true,
+  "enable_question_budget_postprocessing": false,
+  "max_turns": 6,
+  "model": "fake-model",
+  "run_id": "WS4-FAKE-SP-001-D",
+  "seed": null,
+  "temperature": 0.0
+}
