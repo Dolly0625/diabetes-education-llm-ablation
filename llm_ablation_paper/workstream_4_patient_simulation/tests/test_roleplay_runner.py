@@ -14,8 +14,8 @@ from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simu
     DeterministicPatientAgent,
     FAKE_TALKER_RESPONSES,
     RoleplayRunner,
-    _run_deterministic_fake_condition,
     load_profiles,
+    run_fake_dry_run,
 )
 from llm_ablation_paper.workstream_1_technical_lead.harness import AblationConfig
 
@@ -133,26 +133,25 @@ def test_resume_continues_from_runner_checkpoint(tmp_path, monkeypatch):
     assert resumed["termination_reason"] == "MAX_TURNS"
 
 
-def test_fake_trajectory_uses_one_harness_call_and_all_turns(tmp_path, monkeypatch):
-    runner = RoleplayRunner(patient_agent=DeterministicPatientAgent(), output_root=tmp_path)
-    captured = {"calls": 0}
-
-    def fake_harness(**kwargs):
-        captured["calls"] += 1
-        return [_harness_turn(message, index) for index, message in enumerate(kwargs["messages"])]
-
-    monkeypatch.setattr(runner, "_call_harness", fake_harness)
-    result = _run_deterministic_fake_condition(
-        runner=runner,
-        profile=load_profiles()["SP-001"],
-        condition="D",
-        fake_talker_responses=FAKE_TALKER_RESPONSES,
-    )
-
-    assert captured["calls"] == 1
-    assert len(result["records"]) == 6
-    assert result["config"]["enable_output_guard"] is True
-    assert result["termination_reason"] == "MAX_TURNS"
+def test_fake_dry_run_uses_formal_per_turn_path(tmp_path):
+    summary = run_fake_dry_run(tmp_path, patient_id="SP-001")
+    assert len(summary["runs"]) == 4
+    assert summary["formal_experiment_started"] is False
+    total_turns = 0
+    for run in summary["runs"]:
+        assert run["turn_count"] == 6
+        assert run["termination_reason"] == "MAX_TURNS"
+        total_turns += run["turn_count"]
+        result_path = tmp_path / run["run_id"] / "roleplay_result.json"
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        assert len(result["records"]) == 6
+        for record in result["records"]:
+            assert record["harness_turn"].get("research_patient_id") == "SP-001"
+    assert total_turns == 24
+    user_ids = {run["user_id"] for run in summary["runs"]}
+    state_dirs = {run["state_dir_id"] for run in summary["runs"]}
+    assert len(user_ids) == 4
+    assert summary["runs"][0]["user_id"] != summary["runs"][1]["user_id"]
 
 
 def test_patient_goal_met_is_taken_from_structured_patient_agent(tmp_path, monkeypatch):

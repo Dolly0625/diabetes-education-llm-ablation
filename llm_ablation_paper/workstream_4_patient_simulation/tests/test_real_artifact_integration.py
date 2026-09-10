@@ -3,6 +3,7 @@ import csv
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -61,6 +62,14 @@ def _has_source_csv() -> bool:
 SOURCE_CSV_SKIP_REASON = "repository 未包含上游大型來源 CSV"
 
 
+def _require_source_csv_or_skip() -> None:
+    if _has_source_csv():
+        return
+    if os.environ.get("WS4_REQUIRE_SOURCE_CSV") == "1":
+        pytest.fail("WS4_REQUIRE_SOURCE_CSV=1 但來源 CSV 缺席，fail closed (never auto-download or fabricate)")
+    pytest.skip(SOURCE_CSV_SKIP_REASON)
+
+
 @lru_cache(maxsize=1)
 def _load_source_records():
     _, _, _, _, records = builder.read_csv_records(_source_csv_path())
@@ -76,8 +85,8 @@ def _raw_record_for(profile):
     return records[row_index]
 
 
-@pytest.mark.skipif(not _has_source_csv(), reason=SOURCE_CSV_SKIP_REASON)
 def test_01_all_endocrinology():
+    _require_source_csv_or_skip()
     profiles = _load_profiles()
     assert len(profiles) == 12, f"需12筆 got {len(profiles)}"
     for p in profiles:
@@ -85,8 +94,8 @@ def test_01_all_endocrinology():
         assert builder._is_strict_endocrinology(record["department"]), f"{p.get('patient_id')} 原始 department 非內分泌科: {record['department']!r}"
 
 
-@pytest.mark.skipif(not _has_source_csv(), reason=SOURCE_CSV_SKIP_REASON)
 def test_02_all_hit_strict():
+    _require_source_csv_or_skip()
     profiles = _load_profiles()
     for p in profiles:
         record = _raw_record_for(p)
@@ -98,8 +107,8 @@ def test_02_all_hit_strict():
         assert sorted(recomputed) == sorted(stored), f"{p.get('patient_id')} matched_source_terms 不一致: raw={recomputed}, stored={stored}"
 
 
-@pytest.mark.skipif(not _has_source_csv(), reason=SOURCE_CSV_SKIP_REASON)
 def test_03_bucket_terms():
+    _require_source_csv_or_skip()
     profiles = _load_profiles()
     for p in profiles:
         scen = p.get("scenario_type")
@@ -113,8 +122,8 @@ def test_03_bucket_terms():
         assert sorted(recomputed) == sorted(stored), f"{p.get('patient_id')} matched_scenario_terms 不一致: raw={recomputed}, stored={stored}"
 
 
-@pytest.mark.skipif(not _has_source_csv(), reason=SOURCE_CSV_SKIP_REASON)
 def test_04_source_record_sha256_consistency():
+    _require_source_csv_or_skip()
     profiles = _load_profiles()
     assert REPORT_PATH.exists(), f"缺 {REPORT_PATH}"
     report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
