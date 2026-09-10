@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-WS4-A 的 `patient_agent_prompt.md`、`patient_profiles.jsonl`、`profile_schema.json`、來源報告與驗證測試已完成。不得重生、替換或改寫這 12 個 profiles。當前唯一主任務是 WS4-B runner、相關離線測試，以及一個 profile×4 conditions 的 fake dry run。
+WS4-A 的 `patient_agent_prompt.md`、`patient_profiles.jsonl`、`profile_schema.json`、來源報告與驗證測試已完成。不得重生、替換或改寫這 12 個 profiles。WS4-B runner、相關離線測試與 profile×4 conditions 的 fake dry run 已完成並經 WS1 驗收合併至 main（2026-09-10）；正式 12×4 批次仍待整體實驗指紋凍結後由技術主持人執行。
 
 ## 指定閱讀
 

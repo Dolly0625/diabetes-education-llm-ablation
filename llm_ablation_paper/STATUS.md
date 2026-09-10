@@ -7,7 +7,7 @@
 | 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、狀態隔離、checkpoint/resume、盲測匯出、離線 dry-run 及正式模型設定已通過 | 凍結 prompt、工具 schema 與正式 commit 指紋；整合審核各 WS | 正式指紋尚未凍結 |
 | 2 A／B | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 A/B config 與事件驗收 | 依 `member_prompts/member_2_ablation_ab.md` 開工 | 無 |
 | 3 C／D | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 C/D logging 與 fault injection | 依 `member_prompts/member_3_ablation_cd.md` 開工 | 無 |
-| 4 模擬病患 | 待指派 | IN_PROGRESS | WS4-A：Patient prompt、12 profiles、schema 與 72 項測試已通過 | WS4-B：只建 roleplay runner、checkpoint/resume/retry 與 dry-run | 無；正式批次仍須等完整實驗指紋凍結 |
+| 4 模擬病患 | 待指派 | APPROVED | WS4-A profiles/schema/驗證 + WS4-B runner、checkpoint/resume/retry 與 fake dry-run 已驗收（84 tests passed）並合併至 main | 無；待整體實驗指紋凍結後由 WS1 執行正式 12×4 批次 | 正式指紋尚未凍結 |
 | 5 Judge／分析 | 待指派 | NOT_STARTED | Judge rubric、schema、canary、統計程式與結果樣板 | 依 `member_prompts/member_5_judge_analysis.md` 開工 | 正式 transcripts 尚未產生 |
 
 ## 里程碑
@@ -29,6 +29,7 @@
 | 2026-09-07 | AblationConfig 映射凍結：A OFF-OFF-OFF / B ON-OFF-OFF / C ON-ON-OFF / D ON-ON-ON，三輔助強制 OFF | 滿足唯一差異原則 | Sisyphus |
 | 2026-09-07 | Harness 獨立於 `workstream_1_technical_lead/harness/`，production 僅加 optional `ablation_config` injection | 向後相容，不複製四份 handlers.py | Sisyphus |
 | 2026-09-08 | 凍結模型：Talker/Planner=`gemini-3.5-flash-lite`、Patient Agent=`gemini-2.5-flash-lite`、Judge=`gemini-3.7-flash`；角色 temperature 分別為 0.3/0.1/0.3/0.0，max turns=6，seed=42 | 維持既有受測系統，同時以低成本模型生成病患對話並用不同、較強模型盲評 | 技術主持 |
+| 2026-09-10 | 驗收並合併 `ws4-runner`（`e9d0ac7`）至 `main`：WS4-B runner、checkpoint/resume/retry、fake dry-run | 離線測試 84 passed（含來源追溯 test_01–test_04，以固定上游 CSV SHA-256 驗證）；無越界修改；獨立稽核判定部分通過且無硬性 blocker | 技術主持 |
 
 ## Workstream 1 交付清單（2026-09-07）
 

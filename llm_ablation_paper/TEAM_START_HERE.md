@@ -41,10 +41,10 @@ WS1 Harness 已完成。成員 2–5 可立即開始各自的離線開發，但�
 
 ## 你要怎麼把專案交給其他人？
 
-### 目前交接狀態（2026-09-08）
+### 目前交接狀態（2026-09-10）
 
 - WS1 Harness 已驗收，不得重建或另做一套控制器。
-- WS4-A profiles、schema 與來源驗證已完成；成員 4 下一步只做 WS4-B runner。
+- WS4-A profiles、schema 與來源驗證，以及 WS4-B runner、checkpoint／resume／retry 與 fake dry-run 均已完成並經 WS1 驗收合併至 main。
 - WS2、WS3、WS5 可立即使用離線 fake data 開發與測試。
 - 正式模型、各角色 temperature、max turns 與 seed 已凍結於 `shared/RESEARCH_PROTOCOL.md`；prompt、工具 schema 與正式 commit 指紋尚未凍結，因此所有人仍不得自行啟動 12×4 正式批次。
 

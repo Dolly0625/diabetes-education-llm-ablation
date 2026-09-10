@@ -1,12 +1,12 @@
-# Workstream 4-A 狀態報告
+# Workstream 4 狀態報告（WS4-A 與 WS4-B）
 
-> 範圍：資料篩選、12 份合成 profiles、schema 與驗證。本報告不把模擬情境稱為真實臨床驗證。
+> 範圍：資料篩選、12 份合成 profiles、schema 與驗證，以及 WS4-B roleplay runner。本報告不把模擬情境稱為真實臨床驗證。
 
 ## 1. 目前判定
 
-`READY_FOR_TECHNICAL_APPROVAL`
+`APPROVED`（WS4-A 與 WS4-B）
 
-WS4-A 核心產物已重新產生並通過本機驗證。本階段尚未建立 roleplay runner，也未執行 A–D 正式實驗。
+WS4-A 核心產物已重新產生並通過本機驗證。WS4-B roleplay runner、checkpoint／resume／retry 與 fake dry-run 已完成，經 WS1 技術驗收後合併至 `main`。正式 12×4 批次仍未執行，須待整體實驗指紋凍結。
 
 ## 2. 本輪修正與產物
 
@@ -78,8 +78,43 @@ python3 -m pytest llm_ablation_paper/workstream_4_patient_simulation/tests -q
 
 ## 7. 尚未執行與風險
 
-- 未執行 A、B、C、D 正式角色扮演或比較。
-- 未建立 WS4-B runner、checkpoint、resume、retry 或 transcripts。
+- 未執行 A、B、C、D 正式角色扮演或比較；未產生任何正式 transcripts。
+- WS4-B runner、checkpoint／resume／retry 與 fake dry-run 已完成（見第 8 節），但只使用 deterministic fake model。
 - 上游網路問答權利與去識別方式不明，只能稱為 background seeds。
 - 合成 persona 並未經臨床驗證。
-- 未寫入正式 `artifacts/`，未呼叫付費 API，未 commit。
+- 未寫入正式 `llm_ablation_paper/artifacts/`，未呼叫付費 API。
+
+## 8. WS4-B 交付與 WS1 驗收（2026-09-10）
+
+分支 `ws4-runner`（`daa839b`、`e9d0ac7`）經 WS1 技術主持驗收，無越界修改（全部變更集中於本工作流目錄）。驗收於 `e9d0ac7` 的獨立 worktree 執行，未觸動正式資料或其他工作流。
+
+交付：
+
+- `scripts/run_patient_simulation.py`：批次 roleplay runner，透過既有 WS1 Harness 的 `run_trajectory_subprocess` 執行，未另寫控制器；CLI 僅開放 `--fake-dry-run`，正式模式在指紋凍結前被硬性拒絕。
+- `tests/test_roleplay_runner.py`：checkpoint／resume／retry／state isolation／config injection 測試。
+- `artifacts/fake_dry_run_batch/`：1 個 profile × 4 條件（A/B/C/D）的 deterministic fake dry-run 產物。
+- `METHODS_DRAFT.md`（約 700 字）與 `FLOWCHART_DRAFT.md`。
+
+驗收指令與結果：
+
+```bash
+python3 llm_ablation_paper/workstream_4_patient_simulation/scripts/validate_profiles.py
+python3 -m pytest llm_ablation_paper/workstream_4_patient_simulation/tests -q
+python3 llm_ablation_paper/workstream_4_patient_simulation/scripts/run_patient_simulation.py --fake-dry-run --output-root <fresh-temp-dir>
+```
+
+- Validator：`PASS: 12 profiles validated (6 types x2, IDs unique, max_turns=6, no PII/flags, glucose context ok)`
+- Pytest：`84 passed`（WS4-A 72 項 + runner 12 項）。
+- 來源追溯：本機以固定上游 CSV（Toyhom commit `26724a4`，SHA-256 `9fd5a19c…f2f4db20`）完整重跑 `test_01`–`test_04` 並全數通過。此四項測試在未提供該 100 MB 上游 CSV 的機器上會 **skip（非 fail）**，其餘 `test_05`–`test_10` 與 runner 測試不受影響；此為可攜性取捨，並不代表來源追溯被弱化，正式論文引用前應於具 CSV 的環境重跑。
+- Fake dry-run：A/B/C/D 四條軌跡各 6 輪、終止原因 `MAX_TURNS`；config 唯一差異映射為 A OFF-OFF-OFF／B ON-OFF-OFF／C ON-ON-OFF／D ON-ON-ON，三項輔助固定 OFF；A/B 兩工具全暴露、C/D 經 gate 收斂。
+
+驗收判定：**部分通過（可合併）**。無越界修改、測試通過、dry-run 可重現；惟來源追溯測試的可攜性 skip 語意已如上明示，且正式執行前仍有待強化項目（詳見第 9 節），故不宣稱正式批次就緒。
+
+## 9. 正式執行前待強化（WS1 記錄，不阻擋本次合併）
+
+- `run_patient_simulation.py` fake 路徑以輪數推斷 `PATIENT_GOAL_MET`（第 664 行）而非讀取結構化 `termination_reason`；目前不可達，但正式化前應改為推導並斷言。
+- `_is_transient_error` 僅認得內建 `TimeoutError`／`ConnectionError` 與字串標記，正式 API 例外（如 `openai.APIConnectionError`）可能未被重試；正式執行前應放寬。
+- 正式路徑 `run_condition` 為逐輪 subprocess，fake dry-run 走單一 subprocess 軌跡路徑，兩者拓撲不同，dry-run 未端到端覆蓋正式路徑。
+- Harness 的 `patient_id` 實際寫入合成的 `user_id`；下游消費者需知悉此映射。
+- 30 秒 subprocess timeout 對正式多工具回合可能偏緊。
+- 是否為來源追溯測試加入 `WS4_REQUIRE_SOURCE_CSV` 環境變數以在 CI／驗收強制 fail-closed，待團隊決定。

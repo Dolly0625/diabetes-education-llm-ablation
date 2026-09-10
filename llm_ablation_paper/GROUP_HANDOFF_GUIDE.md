@@ -77,7 +77,7 @@ Judge 只能看到 opaque condition ID，不能知道 A、B、C、D 真實身分
 | WS1 技術主持 | `APPROVED` | 保持 Harness 不重做；驗收其他組與凍結正式設定 |
 | WS2 A/B | `NOT_STARTED` | 建立 A/B config、事件與公平性驗收 |
 | WS3 C/D | `NOT_STARTED` | 建立 C/D logging、guard 事件與 fault injection |
-| WS4 模擬病患 | `IN_PROGRESS` | WS4-A profiles 已完成；現在只做 WS4-B runner |
+| WS4 模擬病患 | `APPROVED` | WS4-B runner、checkpoint／resume／retry 與 fake dry-run 已驗收並合併至 main；待整體指紋凍結後由 WS1 執行正式批次 |
 | WS5 Judge/分析 | `NOT_STARTED` | 建 rubric、schema、canary、runner 與假資料統計 |
 
 WS1 Harness 是全組唯一的共用實驗控制器。WS2、WS3 與 WS4 不得另寫一套 Harness。
