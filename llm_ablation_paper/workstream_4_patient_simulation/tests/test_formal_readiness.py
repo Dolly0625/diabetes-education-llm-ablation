@@ -185,7 +185,8 @@ def test_formal_run_without_env_key_fails_before_subprocess(tmp_path, monkeypatc
     import llm_ablation_paper.workstream_1_technical_lead.harness as harness_pkg
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-must-not-be-used")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     called = {"count": 0}
 
     def spy_subprocess(**kwargs):
@@ -198,7 +199,7 @@ def test_formal_run_without_env_key_fails_before_subprocess(tmp_path, monkeypatc
         output_root=tmp_path,
         config_factory=_formal_config_factory,
     )
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY.*OPENAI_API_KEY"):
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         runner.run_condition(
             profile=load_profiles()["SP-001"],
             condition="A",
@@ -299,34 +300,94 @@ def test_ws4_require_source_csv_fail_closed(tmp_path, monkeypatch):
         module._require_source_csv_or_skip()
 
 
-def test_base_url_precedence(monkeypatch):
+def test_base_url_precedence_and_gemini_only(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "sk-test")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
 
     _, default_url = resolve_provider_credentials({})
-    assert "generativelanguage.googleapis.com" in default_url
+    assert default_url == "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-    monkeypatch.setenv("GEMINI_BASE_URL", "https://gemini.example/v1beta/openai/")
+    monkeypatch.setenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/proxy")
     _, url = resolve_provider_credentials({})
-    assert url == "https://gemini.example/v1beta/openai/"
+    assert url == "https://generativelanguage.googleapis.com/v1beta/openai/proxy"
 
     monkeypatch.delenv("GEMINI_BASE_URL", raising=False)
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://openai.example/v1")
-    _, url = resolve_provider_credentials({})
-    assert url == "https://openai.example/v1"
-
-    _, url = resolve_provider_credentials({"base_url": "https://explicit.example/v1"})
-    assert url == "https://explicit.example/v1"
+    _, url = resolve_provider_credentials({"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"})
+    assert url == "https://generativelanguage.googleapis.com/v1beta/openai/"
 
     _, url = resolve_provider_credentials({"base_url": "   "})
-    assert url == "https://openai.example/v1"
+    assert url == "https://generativelanguage.googleapis.com/v1beta/openai/"
 
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    _, url = resolve_provider_credentials({})
+    assert url == "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+def test_openai_key_is_never_accepted_as_gemini(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-fallback")
-    key, _ = resolve_provider_credentials({})
-    assert key == "sk-openai-fallback"
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-should-not-work")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        resolve_provider_credentials({})
+
+
+def test_gemini_key_pairs_with_gemini_endpoint(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini-good")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    recorded = {}
+
+    class _Recorder:
+        def __init__(self, **kwargs):
+            recorded.update(kwargs)
+
+    with patch("openai.OpenAI", _Recorder):
+        _build_client_from_provider_config({})
+    assert recorded["api_key"] == "sk-gemini-good"
+    assert "generativelanguage.googleapis.com" in recorded["base_url"]
+
+
+def test_non_gemini_provider_rejected(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini-good")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(RuntimeError, match="僅支援 Gemini"):
+        resolve_provider_credentials({"provider": "openai"})
+
+
+@pytest.mark.parametrize("bad_url", [
+    "https://api.openai.com/v1",
+    "https://generativelanguage.googleapis.com.evil.com/v1",
+    "https://generativelanguage.googleapis.com-malicious.com/v1",
+    "https://evil.com/?q=generativelanguage.googleapis.com",
+    "https://notgenerativelanguage.googleapis.com/v1",
+    "generativelanguage.googleapis.com/v1beta/openai/",
+])
+def test_non_gemini_endpoint_with_gemini_key_rejected(bad_url, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini-good")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(RuntimeError, match="非 Gemini endpoint"):
+        resolve_provider_credentials({"base_url": bad_url})
+
+
+def test_non_gemini_gemini_base_url_env_rejected(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini-good")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("GEMINI_BASE_URL", "https://evil.com/generativelanguage.googleapis.com")
+    with pytest.raises(RuntimeError, match="非 Gemini endpoint"):
+        resolve_provider_credentials({})
+
+
+def test_gemini_subdomain_endpoint_allowed(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini-good")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    _, url = resolve_provider_credentials({"base_url": "https://gemini.generativelanguage.googleapis.com/v1beta/openai/"})
+    assert url == "https://gemini.generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def test_provider_key_never_leaks_into_exception(monkeypatch):
@@ -335,6 +396,7 @@ def test_provider_key_never_leaks_into_exception(monkeypatch):
     sentinel = "SENTINEL-KEY-DO-NOT-LEAK-12345"
     monkeypatch.setenv("GEMINI_API_KEY", sentinel)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     with patch("openai.OpenAI", side_effect=Exception("boom")):
         with pytest.raises(RuntimeError) as exc_info:
             _build_client_from_provider_config({})
@@ -359,9 +421,10 @@ def test_subprocess_formal_preflight_fails_closed_before_spawn(tmp_path, monkeyp
     from llm_ablation_paper.workstream_1_technical_lead.harness import run_trajectory_subprocess
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-must-not-be-used")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     config = _formal_config_factory("A")
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY.*OPENAI_API_KEY"):
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         run_trajectory_subprocess(
             config=config, patient_id="p_preflight", messages=["hi"], state_dir=tmp_path
         )
@@ -380,3 +443,56 @@ def test_subprocess_rejects_callable_model_client(tmp_path):
             state_dir=tmp_path,
             model_client=lambda: None,
         )
+
+
+def _stub_run_condition(self, **kwargs):
+    condition = kwargs["condition"]
+    return {
+        "run_id": f"STUB-{condition}",
+        "patient_id": "SP-001",
+        "condition": condition,
+        "user_id": f"u_{condition}",
+        "state_dir_id": "isolated_state",
+        "records": [{}] * 6,
+        "termination_reason": "MAX_TURNS",
+        "patient_agent": {"implementation": "stub"},
+        "config": {},
+        "error_metadata": None,
+    }
+
+
+def test_fake_dry_run_summary_marks_canary_excluded(tmp_path, monkeypatch):
+    import llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation as sim
+
+    monkeypatch.setattr(sim.RoleplayRunner, "run_condition", _stub_run_condition)
+    monkeypatch.setattr(sim, "run_input_block_canary", lambda *a, **k: {
+        "run_id": "WS4-FAKE-SP-CANARY-INPUT-BLOCK-A",
+        "condition": "A",
+        "termination_reason": "COMMON_INPUT_BLOCK",
+        "canary": True,
+        "is_canary": True,
+        "canary_label": "COMMON_INPUT_BLOCK-canary-not-a-condition-comparison",
+    })
+    summary = sim.run_fake_dry_run(tmp_path)
+    canary = summary["canary"]
+    assert canary["termination_reason"] == "COMMON_INPUT_BLOCK"
+    assert canary["canary"] is True
+    assert canary["is_canary"] is True
+    assert canary["counted_in_comparison"] is False
+    assert canary["excluded_from_analysis"] is True
+    assert [r["condition"] for r in summary["runs"]] == ["A", "B", "C", "D"]
+
+
+def test_fake_dry_run_fails_closed_when_canary_not_blocked(tmp_path, monkeypatch):
+    import llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation as sim
+
+    monkeypatch.setattr(sim.RoleplayRunner, "run_condition", _stub_run_condition)
+    monkeypatch.setattr(sim, "run_input_block_canary", lambda *a, **k: {
+        "run_id": "WS4-FAKE-SP-CANARY-INPUT-BLOCK-A",
+        "condition": "A",
+        "termination_reason": "MAX_TURNS",
+        "canary": True,
+        "is_canary": True,
+    })
+    with pytest.raises(RuntimeError, match="COMMON_INPUT_BLOCK"):
+        sim.run_fake_dry_run(tmp_path)

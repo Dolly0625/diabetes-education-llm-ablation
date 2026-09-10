@@ -39,5 +39,15 @@
       "turn_count": 6,
       "termination_reason": "MAX_TURNS"
     }
-  ]
+  ],
+  "canary": {
+    "run_id": "WS4-FAKE-SP-CANARY-INPUT-BLOCK-A",
+    "condition": "A",
+    "termination_reason": "COMMON_INPUT_BLOCK",
+    "canary": true,
+    "is_canary": true,
+    "counted_in_comparison": false,
+    "excluded_from_analysis": true,
+    "canary_label": "COMMON_INPUT_BLOCK-canary-not-a-condition-comparison"
+  }
 }

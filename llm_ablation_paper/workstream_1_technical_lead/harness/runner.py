@@ -906,6 +906,7 @@ def to_blinded_contract_trajectory(
 
 _PROVIDER_SECRET_MARKERS = ("api_key", "apikey", "api-key", "token", "secret", "password", "authorization")
 _GEMINI_OPENAI_COMPAT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+_GEMINI_ENDPOINT_HOST = "generativelanguage.googleapis.com"
 
 
 def _reject_provider_secrets(provider_config: Optional[dict]) -> dict:
@@ -921,28 +922,55 @@ def _reject_provider_secrets(provider_config: Optional[dict]) -> dict:
     return cfg
 
 
-def resolve_provider_credentials(provider_config: Optional[dict]) -> tuple[str, str]:
-    """Resolve (api_key, base_url) for a formal provider client, fail-closed.
+def _is_gemini_endpoint(base_url: str) -> bool:
+    from urllib.parse import urlsplit
+    raw = (base_url or "").strip()
+    if not raw:
+        return False
+    try:
+        parts = urlsplit(raw)
+    except Exception:
+        return False
+    if parts.scheme not in ("http", "https"):
+        return False
+    host = (parts.hostname or "").lower()
+    if not host:
+        return False
+    return host == _GEMINI_ENDPOINT_HOST or host.endswith("." + _GEMINI_ENDPOINT_HOST)
 
-    provider_config may contain ONLY non-secret settings (provider/base_url/timeout).
-    API key is ENV-ONLY: GEMINI_API_KEY first, then OPENAI_API_KEY.
-    Never returns secrets inside config/checkpoint/log artifacts; callers must not
-    embed the key in any exception message, config, checkpoint, log or artifact.
+
+def resolve_provider_credentials(provider_config: Optional[dict]) -> tuple[str, str]:
+    """Resolve (api_key, base_url) for the formal Gemini client, fail-closed.
+
+    The formal experiment is Gemini-only. provider_config may carry only
+    non-secret settings (provider/base_url/timeout). The key is read from the
+    GEMINI_API_KEY environment variable only; OPENAI_API_KEY is never accepted.
+    A non-Gemini provider or a non-Gemini endpoint is rejected so a Gemini key
+    can never be paired with the wrong service.
     """
     import os
     cfg = _reject_provider_secrets(provider_config)
-    api_key = (os.environ.get("GEMINI_API_KEY", "") or "").strip() or (os.environ.get("OPENAI_API_KEY", "") or "").strip()
+    provider = str(cfg.get("provider") or os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
+    if provider != "gemini":
+        raise RuntimeError(
+            f"正式實驗僅支援 Gemini provider，收到 provider={provider!r}，拒絕連線 (fail-closed)。"
+        )
+    explicit_base = str(cfg.get("base_url", "") or "").strip()
+    if explicit_base and not _is_gemini_endpoint(explicit_base):
+        raise RuntimeError(
+            "provider_config.base_url 指向非 Gemini endpoint，禁止與 GEMINI_API_KEY 配對，拒絕連線 (fail-closed)。"
+        )
+    env_base = (os.environ.get("GEMINI_BASE_URL", "") or "").strip()
+    if env_base and not _is_gemini_endpoint(env_base):
+        raise RuntimeError(
+            "GEMINI_BASE_URL 指向非 Gemini endpoint，拒絕連線 (fail-closed)。"
+        )
+    base_url = explicit_base or env_base or _GEMINI_OPENAI_COMPAT_BASE_URL
+    api_key = (os.environ.get("GEMINI_API_KEY", "") or "").strip()
     if not api_key:
         raise RuntimeError(
-            "正式模型連線缺少 API 金鑰，GEMINI_API_KEY 與 OPENAI_API_KEY 均未設置，拒絕連線 (fail-closed)。"
+            "正式模型連線缺少 GEMINI_API_KEY，拒絕連線 (fail-closed)；正式實驗僅接受 Gemini。"
         )
-    cfg_base_url = str(cfg.get("base_url", "") or "").strip()
-    base_url = (
-        cfg_base_url
-        or (os.environ.get("GEMINI_BASE_URL", "") or "").strip()
-        or (os.environ.get("OPENAI_BASE_URL", "") or "").strip()
-        or _GEMINI_OPENAI_COMPAT_BASE_URL
-    )
     return api_key, base_url
 
 
@@ -957,8 +985,8 @@ def _build_client_from_provider_config(provider_config: Optional[dict]) -> Any:
     try:
         import openai
         return openai.OpenAI(api_key=api_key, base_url=base_url)
-    except Exception as e:
-        raise RuntimeError("建立正式 Gemini（OpenAI-compatible）模型客戶端失敗，拒絕連線 (fail-closed)") from e
+    except Exception:
+        raise RuntimeError("建立正式 Gemini（OpenAI-compatible）模型客戶端失敗，拒絕連線 (fail-closed)") from None
 
 
 def _subprocess_target(

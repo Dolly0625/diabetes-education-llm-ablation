@@ -729,23 +729,34 @@ def run_input_block_canary(output_root: Path, condition: str = "A") -> dict[str,
 
 
 def run_fake_dry_run(output_root: Path, patient_id: str = "SP-001") -> dict[str, Any]:
-    """Required WS4 1-profile x 4-condition deterministic fake dry run.
+    """Required WS4 1-profile x 4-condition deterministic fake dry run plus Input Guard canary.
 
     Each condition runs through the formal per-turn run_condition path, so every
     condition performs real per-turn harness subprocesses with the in-process
     FakeClient (fake_responses). Termination comes from structured
-    patient/harness state, never from inferred turn counts.
+    patient/harness state, never from inferred turn counts. A separate canary run
+    must trigger COMMON_INPUT_BLOCK or the dry run fails closed.
     """
     profiles = load_profiles()
     if patient_id not in profiles:
         raise KeyError(f"unknown frozen profile: {patient_id}")
-    runner = RoleplayRunner(patient_agent=DeterministicPatientAgent(), output_root=Path(output_root))
+    output_root = Path(output_root)
+    summary_path = output_root / "fake_dry_run_summary.json"
+    if summary_path.exists():
+        summary_path.unlink()
+    runner = RoleplayRunner(patient_agent=DeterministicPatientAgent(), output_root=output_root)
     results = [runner.run_condition(
         profile=profiles[patient_id],
         condition=condition,
         fake_talker_responses=list(FAKE_TALKER_RESPONSES),
         run_suffix="FAKE",
     ) for condition in ("A", "B", "C", "D")]
+    canary = run_input_block_canary(output_root, condition="A")
+    if canary["termination_reason"] != "COMMON_INPUT_BLOCK":
+        raise RuntimeError(
+            "Input Guard canary did not trigger COMMON_INPUT_BLOCK; got "
+            f"{canary['termination_reason']!r}. Aborting fake dry run (fail-closed)."
+        )
     summary = {
         "execution_mode": "deterministic_fake_dry_run",
         "formal_experiment_started": False,
@@ -760,6 +771,16 @@ def run_fake_dry_run(output_root: Path, patient_id: str = "SP-001") -> dict[str,
             "turn_count": len(item["records"]),
             "termination_reason": item["termination_reason"],
         } for item in results],
+        "canary": {
+            "run_id": canary["run_id"],
+            "condition": canary["condition"],
+            "termination_reason": canary["termination_reason"],
+            "canary": True,
+            "is_canary": True,
+            "counted_in_comparison": False,
+            "excluded_from_analysis": True,
+            "canary_label": canary.get("canary_label"),
+        },
     }
     _write_json_atomic(output_root / "fake_dry_run_summary.json", summary)
     return summary

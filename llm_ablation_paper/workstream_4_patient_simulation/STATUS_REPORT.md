@@ -4,9 +4,9 @@
 
 ## 1. 目前判定
 
-`APPROVED`（WS4-A 與 WS4-B）
+`READY_FOR_REVIEW`（WS4-B 正式就緒強化；WS4-A 維持已通過）
 
-WS4-A 核心產物已重新產生並通過本機驗證。WS4-B roleplay runner、checkpoint／resume／retry 與 fake dry-run 已完成，經 WS1 技術驗收後合併至 `main`。正式 12×4 批次仍未執行，須待整體實驗指紋凍結。
+WS4-A 核心產物維持已通過。WS4-B roleplay runner 已於 `ws1-formal-readiness` 分支完成正式就緒強化（Gemini-only provider 配對、fake dry-run 改走逐輪正式路徑、retry 分類、可注入 timeout、`research_patient_id` 解耦、Input Guard canary、`WS4_REQUIRE_SOURCE_CSV`），等待 WS1 審核。**正式 12×4 批次仍禁止執行**：須先完成 P0-1 核心 production 髒檔審核，並凍結正式 commit、prompt SHA、tool schema SHA、opaque mapping 與 timeout 正式值。
 
 ## 2. 本輪修正與產物
 
@@ -104,17 +104,42 @@ python3 llm_ablation_paper/workstream_4_patient_simulation/scripts/run_patient_s
 ```
 
 - Validator：`PASS: 12 profiles validated (6 types x2, IDs unique, max_turns=6, no PII/flags, glucose context ok)`
-- Pytest：`84 passed`（WS4-A 72 項 + runner 12 項）。
-- 來源追溯：本機以固定上游 CSV（Toyhom commit `26724a4`，SHA-256 `9fd5a19c…f2f4db20`）完整重跑 `test_01`–`test_04` 並全數通過。此四項測試在未提供該 100 MB 上游 CSV 的機器上會 **skip（非 fail）**，其餘 `test_05`–`test_10` 與 runner 測試不受影響；此為可攜性取捨，並不代表來源追溯被弱化，正式論文引用前應於具 CSV 的環境重跑。
-- Fake dry-run：A/B/C/D 四條軌跡各 6 輪、終止原因 `MAX_TURNS`；config 唯一差異映射為 A OFF-OFF-OFF／B ON-OFF-OFF／C ON-ON-OFF／D ON-ON-ON，三項輔助固定 OFF；A/B 兩工具全暴露、C/D 經 gate 收斂。
+- Pytest：`139 passed`（WS4 目錄全套，含 WS4-A profiles/validator 與 WS4-B runner／formal-readiness；最新數字見第 10 節）。
+- 來源追溯：本機以固定上游 CSV（Toyhom commit `26724a4`，SHA-256 `9fd5a19c…f2f4db20`）完整重跑 `test_01`–`test_04` 並全數通過。未提供該 100 MB 上游 CSV 的機器上，未設 `WS4_REQUIRE_SOURCE_CSV` 時此四項會 **skip（非 fail）**；設為 `1` 時缺 CSV 或 SHA 不符則 **fail closed**（見第 10 節）。
+- Fake dry-run：A/B/C/D 四條軌跡各 6 輪、終止原因 `MAX_TURNS`；config 唯一差異映射為 A OFF-OFF-OFF／B ON-OFF-OFF／C ON-ON-OFF／D ON-ON-ON，三項輔助固定 OFF；A/B 兩工具全暴露、C/D 經 gate 收斂；另含一條獨立 Input Guard canary（`COMMON_INPUT_BLOCK`，不列入 A–D 比較）。
 
 驗收判定：**部分通過（可合併）**。無越界修改、測試通過、dry-run 可重現；惟來源追溯測試的可攜性 skip 語意已如上明示，且正式執行前仍有待強化項目（詳見第 9 節），故不宣稱正式批次就緒。
 
-## 9. 正式執行前待強化（WS1 記錄，不阻擋本次合併）
+## 9. 正式執行前待強化（原始 WS1 記錄）—狀態更新
 
-- `run_patient_simulation.py` fake 路徑以輪數推斷 `PATIENT_GOAL_MET`（第 664 行）而非讀取結構化 `termination_reason`；目前不可達，但正式化前應改為推導並斷言。
-- `_is_transient_error` 僅認得內建 `TimeoutError`／`ConnectionError` 與字串標記，正式 API 例外（如 `openai.APIConnectionError`）可能未被重試；正式執行前應放寬。
-- 正式路徑 `run_condition` 為逐輪 subprocess，fake dry-run 走單一 subprocess 軌跡路徑，兩者拓撲不同，dry-run 未端到端覆蓋正式路徑。
-- Harness 的 `patient_id` 實際寫入合成的 `user_id`；下游消費者需知悉此映射。
-- 30 秒 subprocess timeout 對正式多工具回合可能偏緊。
-- 是否為來源追溯測試加入 `WS4_REQUIRE_SOURCE_CSV` 環境變數以在 CI／驗收強制 fail-closed，待團隊決定。
+原列六項已於 `ws1-formal-readiness` 分支（`4039992` 與本次 commit）解決：
+
+- ~~fake 路徑以輪數推斷 `PATIENT_GOAL_MET`~~ → 已移除單一 subprocess 路徑，fake dry-run 改走正式逐輪 `run_condition`，終止原因一律取自結構化 state。
+- ~~`_is_transient_error` 未涵蓋正式 API 例外~~ → 已改為類別判斷（`openai.APITimeoutError/APIConnectionError/RateLimitError/InternalServerError` 與 status `{408,409,429,500,502,503,504}`），4xx 與 schema 錯誤永不重試。
+- ~~fake 與正式路徑拓撲不同~~ → 已統一為逐輪 subprocess；fake dry-run 端到端覆蓋正式路徑。
+- ~~Harness `patient_id` 被寫成 `user_id`~~ → 已解耦 `research_patient_id`（`SP-001`）與狀態隔離 `user_id`，blinded export 明確帶研究 ID 且不含 `ws4_*`。
+- ~~30 秒 timeout 偏緊~~ → 已改為可注入 `subprocess_timeout_seconds`（預設 30s 向後相容、非正數 fail-closed）；正式值待真實單病患 pilot 後由 WS1 決定，尚未凍結。
+- ~~`WS4_REQUIRE_SOURCE_CSV` 待決定~~ → 已實作；未設定時缺 CSV 允許 skip，設為 `1` 時 fail closed。
+
+仍待處理（**正式實驗 blocker**）：
+
+- P0-1：核心 production 髒檔（`ablation_core.py`、`guard.py`、`state.py`、`planner.py`、`tools.py`、`handlers.py`）尚未逐項審核、未納入 frozen candidate，故 `ab30eff` 仍不代表可執行行為。
+
+## 10. WS1／WS4 正式就緒強化（2026-09-10，分支 `ws1-formal-readiness`）
+
+本輪在乾淨 worktree 完成，未動原 working tree 既有修改、未動 frozen profiles、未修改 production、未呼叫付費 API、未執行正式 12×4。
+
+修正：
+
+- **Provider 配對（Gemini-only）**：正式執行只接受 `GEMINI_API_KEY`，不使用 `OPENAI_API_KEY`；`provider_config.provider` 非 `gemini` 一律 fail-closed；`provider_config.base_url` 或 `GEMINI_BASE_URL` 指向非 Gemini endpoint 時拒絕，避免 Gemini 金鑰被配到其他服務；金鑰只從環境讀取，不寫入 artifact／checkpoint／log／錯誤訊息。
+- **Fake dry-run 走正式逐輪路徑**：`run_condition` 每條件 6 次 subprocess，共 24 assistant turns；終止原因取自結構化 state。
+- **artifact 隔離**：新增向後相容 `artifacts_dir` override，run 完整自治於自身 `state_dir`，不再回退共用 `artifacts/workstream_1/<run_id>`。
+- **Retry**：類別＋status 分類，保留 1/2/4/8s 與 attempts metadata。
+- **Timeout**：可注入、預設 30s、非正數 fail-closed。
+- **`research_patient_id`**：與狀態 `user_id` 解耦。
+- **Input Guard canary**：`run_input_block_canary` 併入 `--fake-dry-run`；summary 記錄 `termination_reason=COMMON_INPUT_BLOCK`、`canary=true`、`is_canary=true`、`counted_in_comparison=false`；若 canary 未觸發 `COMMON_INPUT_BLOCK`，dry-run 直接 fail-closed，不得靜默成 `MAX_TURNS`。
+- **`WS4_REQUIRE_SOURCE_CSV`**：fail-closed 模式。
+
+重新產生 checked-in artifact：`artifacts/fake_dry_run_batch/`（含 `canary_input_block/`）。新 artifact 的 `harness_turn.patient_id`／`research_patient_id` 皆為 `SP-001`、`user_id` 保留條件隔離 ID、records 含 `patient_retry_metadata`、A/B/C/D 各 6 輪且各自獨立 user_id 與 state directory。
+
+測試（乾淨 worktree，`PYTHONPATH="$PWD"`）：WS1 `59 passed`；WS4 `139 passed`；`test_ablation_backward_compat.py` `5 passed`；validator `PASS`；0 skipped（本機具上游 CSV，provenance 01–04 實跑通過）。
