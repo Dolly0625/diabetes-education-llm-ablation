@@ -41,3 +41,10 @@ def canonical_tool_schema_sha256() -> str:
     from .config import compute_tool_snapshot_sha
 
     return compute_tool_snapshot_sha()
+
+
+def formal_runtime_config_canonical_sha256() -> str:
+    from .config import formal_runtime_spec
+
+    canonical = json.dumps(formal_runtime_spec(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return _sha256_text(canonical)

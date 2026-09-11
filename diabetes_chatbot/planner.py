@@ -217,7 +217,8 @@ def evaluate_clinical_planner_llm(
     patient_record: Optional[dict] = None,
     client: Optional[OpenAI] = None,
     model: str = "mimo-v2.5",
-    timeout: float = 2.0
+    timeout: float = 2.0,
+    temperature: float = 0.1
 ) -> PlannerAssessment:
     if client is None:
         return evaluate_clinical_planner(messages, patient_record=patient_record)
@@ -247,7 +248,7 @@ def evaluate_clinical_planner_llm(
             ],
             extra_body=extra_body,
             max_tokens=700,
-            temperature=0.1,
+            temperature=temperature,
             timeout=timeout,
         )
         raw_text = resp.choices[0].message.content.strip()

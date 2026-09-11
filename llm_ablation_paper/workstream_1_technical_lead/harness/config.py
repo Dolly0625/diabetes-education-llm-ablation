@@ -32,6 +32,17 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, asdict
+from typing import Any
+
+FORMAL_TALKER_MODEL = "gemini-3.5-flash-lite"
+FORMAL_TALKER_TEMPERATURE = 0.3
+FORMAL_PLANNER_TEMPERATURE = 0.1
+FORMAL_PLANNER_REQUEST_TIMEOUT_SECONDS = 30.0
+FORMAL_PATIENT_AGENT_MODEL = "gemini-2.5-flash-lite"
+FORMAL_PATIENT_AGENT_TEMPERATURE = 0.3
+FORMAL_MAX_TURNS = 6
+FORMAL_SEED = 42
+FORMAL_SUBPROCESS_TIMEOUT_SECONDS = 120.0
 
 
 def _canonical_tool_schemas() -> list[dict]:
@@ -87,6 +98,11 @@ class AblationConfig:
     seed: int | None = None
     run_id: str = "RUN-0000"
     max_turns: int = 6
+    planner_model: str = ""
+    planner_temperature: float = 0.1
+    planner_request_timeout_seconds: float = 3.0
+    patient_agent_model: str = "fake-model"
+    patient_agent_temperature: float = 0.0
 
     def __post_init__(self) -> None:
         # Validate condition label is a non-empty string
@@ -209,6 +225,71 @@ def config_diff(a: AblationConfig, b: AblationConfig) -> dict:
         if da[k] != db[k]:
             diff[k] = {"from": da[k], "to": db[k]}
     return diff
+
+
+def formal_ablation_config(cond: str) -> AblationConfig:
+    base = AblationConfig.for_condition(cond)
+    return AblationConfig(
+        **{
+            **base.to_dict(),
+            "model": FORMAL_TALKER_MODEL,
+            "temperature": FORMAL_TALKER_TEMPERATURE,
+            "planner_model": FORMAL_TALKER_MODEL,
+            "planner_temperature": FORMAL_PLANNER_TEMPERATURE,
+            "planner_request_timeout_seconds": FORMAL_PLANNER_REQUEST_TIMEOUT_SECONDS,
+            "patient_agent_model": FORMAL_PATIENT_AGENT_MODEL,
+            "patient_agent_temperature": FORMAL_PATIENT_AGENT_TEMPERATURE,
+            "max_turns": FORMAL_MAX_TURNS,
+            "seed": FORMAL_SEED,
+        }
+    )
+
+
+def formal_runtime_spec() -> dict:
+    conditions = {}
+    for cond in ("A", "B", "C", "D"):
+        cfg = formal_ablation_config(cond)
+        conditions[cond] = {
+            "enable_planner": cfg.enable_planner,
+            "enable_dynamic_tool_gate": cfg.enable_dynamic_tool_gate,
+            "enable_output_guard": cfg.enable_output_guard,
+        }
+    return {
+        "talker_model": FORMAL_TALKER_MODEL,
+        "talker_temperature": FORMAL_TALKER_TEMPERATURE,
+        "planner_model": FORMAL_TALKER_MODEL,
+        "planner_temperature": FORMAL_PLANNER_TEMPERATURE,
+        "planner_request_timeout_seconds": FORMAL_PLANNER_REQUEST_TIMEOUT_SECONDS,
+        "patient_agent_model": FORMAL_PATIENT_AGENT_MODEL,
+        "patient_agent_temperature": FORMAL_PATIENT_AGENT_TEMPERATURE,
+        "max_turns": FORMAL_MAX_TURNS,
+        "seed": FORMAL_SEED,
+        "subprocess_timeout_seconds": FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
+        "input_guard": "ON",
+        "enable_forced_retrieval": False,
+        "enable_fixed_warning_append": False,
+        "enable_question_budget_postprocessing": False,
+        "conditions": conditions,
+    }
+
+
+def is_frozen_formal_config(config: Any) -> bool:
+    model = str(getattr(config, "model", "") or "")
+    if not model or model == "fake-model":
+        return False
+    try:
+        if float(getattr(config, "planner_request_timeout_seconds", 0)) <= 0:
+            return False
+    except Exception:
+        return False
+    return True
+
+
+def require_frozen_formal_config(config: Any) -> None:
+    if not is_frozen_formal_config(config):
+        raise ValueError(
+            "Formal execution requires a frozen formal config; fake-model or missing frozen fields are rejected (fail-closed)."
+        )
 
 
 def _coerce_config(d: dict) -> AblationConfig:

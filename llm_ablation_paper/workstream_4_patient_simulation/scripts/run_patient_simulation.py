@@ -29,6 +29,7 @@ PAPER_ROOT = PROJECT_ROOT / "llm_ablation_paper"
 WS4_ROOT = PAPER_ROOT / "workstream_4_patient_simulation"
 PROFILES_PATH = WS4_ROOT / "patient_profiles.jsonl"
 PATIENT_PROMPT_PATH = WS4_ROOT / "patient_agent_prompt.md"
+FORMAL_PILOT_OUTPUT_ROOT = WS4_ROOT / "artifacts" / "formal_pilot"
 
 # Direct ``python scripts/run_patient_simulation.py`` execution places the
 # scripts directory—not the repository root—on sys.path.  Add only this
@@ -786,15 +787,84 @@ def run_fake_dry_run(output_root: Path, patient_id: str = "SP-001") -> dict[str,
     return summary
 
 
+def run_formal_pilot(patient_id: str, output_root: Optional[Path] = None) -> dict[str, Any]:
+    """Single-patient formal pilot: one patient x A/B/C/D with the frozen formal config.
+
+    Requires GEMINI_API_KEY in the environment; fails closed before any subprocess
+    is spawned. Never starts a 12x4 batch and never accepts a fake client factory.
+    """
+    from llm_ablation_paper.workstream_1_technical_lead.harness import ensure_provider_ready
+    from llm_ablation_paper.workstream_1_technical_lead.harness.config import (
+        FORMAL_PATIENT_AGENT_MODEL,
+        FORMAL_PATIENT_AGENT_TEMPERATURE,
+        FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
+        formal_ablation_config,
+    )
+
+    profiles = load_profiles()
+    if patient_id not in profiles:
+        raise KeyError(f"unknown frozen profile: {patient_id}")
+    provider_config = {"provider": "gemini"}
+    ensure_provider_ready(provider_config)
+    pilot_root = Path(output_root) if output_root is not None else FORMAL_PILOT_OUTPUT_ROOT
+    patient_agent = GeminiPatientAgent.from_environment(
+        model=FORMAL_PATIENT_AGENT_MODEL,
+        temperature=FORMAL_PATIENT_AGENT_TEMPERATURE,
+    )
+    runner = RoleplayRunner(
+        patient_agent=patient_agent,
+        output_root=pilot_root,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config=provider_config,
+        subprocess_timeout_seconds=FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    results = [runner.run_condition(
+        profile=profiles[patient_id],
+        condition=condition,
+        run_suffix="PILOT",
+    ) for condition in ("A", "B", "C", "D")]
+    summary = {
+        "execution_mode": "formal_pilot",
+        "formal_experiment_started": False,
+        "twelve_by_four_started": False,
+        "pilot_patient_id": patient_id,
+        "run_suffix": "PILOT",
+        "output_root": str(pilot_root),
+        "runtime_configuration_source": "WS1 frozen formal config",
+        "patient_agent": {
+            "implementation": type(patient_agent).__name__,
+            "model": FORMAL_PATIENT_AGENT_MODEL,
+            "temperature": FORMAL_PATIENT_AGENT_TEMPERATURE,
+        },
+        "subprocess_timeout_seconds": FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
+        "runs": [{
+            "run_id": item["run_id"],
+            "condition": item["condition"],
+            "user_id": item["user_id"],
+            "turn_count": len(item["records"]),
+            "termination_reason": item["termination_reason"],
+        } for item in results],
+    }
+    _write_json_atomic(pilot_root / "formal_pilot_summary.json", summary)
+    return summary
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="WS4-B Patient Agent roleplay runner")
     parser.add_argument("--fake-dry-run", action="store_true", help="run the required one-profile x four-condition fake dry run")
-    parser.add_argument("--patient-id", default="SP-001")
-    parser.add_argument("--output-root", type=Path, default=WS4_ROOT / "artifacts" / "fake_dry_run_batch")
+    parser.add_argument("--formal-pilot", action="store_true", help="run one patient x four conditions with the frozen formal config (no batch)")
+    parser.add_argument("--patient-id", default=None, help="required with --formal-pilot; optional for --fake-dry-run (default SP-001)")
+    parser.add_argument("--output-root", type=Path, default=None)
     args = parser.parse_args()
-    if not args.fake_dry_run:
-        parser.error("only --fake-dry-run is enabled until WS1 freezes the formal experiment fingerprint")
-    summary = run_fake_dry_run(args.output_root, args.patient_id)
+    if args.fake_dry_run:
+        fake_root = args.output_root or (WS4_ROOT / "artifacts" / "fake_dry_run_batch")
+        summary = run_fake_dry_run(fake_root, args.patient_id or "SP-001")
+    elif args.formal_pilot:
+        if not args.patient_id:
+            parser.error("--formal-pilot requires exactly one --patient-id; batch 12x4 is disabled")
+        summary = run_formal_pilot(args.patient_id, output_root=args.output_root)
+    else:
+        parser.error("only --fake-dry-run or --formal-pilot --patient-id is enabled; batch 12x4 is disabled")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 

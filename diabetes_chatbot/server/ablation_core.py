@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 import re
 import time
-import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -152,6 +151,14 @@ def _abl_flag(ablation_config: Any, name: str, default: bool) -> bool:
         elif hasattr(ablation_config, k):
             return bool(getattr(ablation_config, k))
     return default
+
+
+def _abl_value(ablation_config: Any, name: str, default: Any) -> Any:
+    if ablation_config is None:
+        return default
+    if isinstance(ablation_config, dict):
+        return ablation_config.get(name, default)
+    return getattr(ablation_config, name, default)
 
 
 def is_retryable_error(e: Exception) -> bool:
@@ -390,11 +397,21 @@ def execute_ablation_turn(
         planner = neutral_planner_state()
     else:
         # LLM-first with retry + fallback
+        planner_model = _abl_value(ablation_config, "planner_model", "") or model
+        planner_temperature = _abl_value(ablation_config, "planner_temperature", 0.1)
+        planner_timeout = _abl_value(ablation_config, "planner_request_timeout_seconds", 3.0)
         try:
             patient_record = load_patient_record(patient_file)
 
             def _planner_call():
-                return evaluate_clinical_planner_llm(messages, patient_record, planner_client, model, timeout=3.0)
+                return evaluate_clinical_planner_llm(
+                    messages,
+                    patient_record,
+                    planner_client,
+                    planner_model,
+                    timeout=planner_timeout,
+                    temperature=planner_temperature,
+                )
 
             try:
                 planner = _call_with_retry(_planner_call, max_tries=4, backoffs=[1, 2, 4, 8])
@@ -410,6 +427,20 @@ def execute_ablation_turn(
                 planner.engine = f"python_fallback({str(e)[:30]})"
             except Exception:
                 planner.engine = "python_fallback"
+
+    planner_events: list = []
+
+    def _persist_planner_state() -> None:
+        if not enable_planner:
+            return
+        try:
+            current_planner = planner
+        except NameError:
+            return
+        try:
+            update_from_planner_assessment(current_planner, file_path=patient_file)
+        except Exception as e:
+            planner_events.append(f"PLANNER_PERSIST_ERROR: {str(e)[:120]}")
 
     # Agenda tightening (same as handlers.py)
     try:
@@ -681,6 +712,7 @@ def execute_ablation_turn(
                     called_tools = []
                     output_guard_obj = type("G", (), {"is_blocked": False, "risk_category": "NONE", "blocked_message": ""})()
                     messages.append({"role": "assistant", "content": final_output})
+                    _persist_planner_state()
                     latency_ms = int((time.time() - start) * 1000)
                     return {
                         "planner": planner,
@@ -698,7 +730,7 @@ def execute_ablation_turn(
                         "qr_payload": None,
                         "text_summary": None,
                         "termination_reason": termination,
-                        "events": [],
+                        "events": list(planner_events),
                         "token_usage": token_usage,
                         "retry_metadata": retry_meta,
                         "error": None,
@@ -759,7 +791,7 @@ def execute_ablation_turn(
                 try:
                     def _second_call():
                         return talker_client.chat.completions.create(
-                            model=model, messages=second_ctx, extra_body=extra_body, max_tokens=max_tokens_use, temperature=0.7
+                            model=model, messages=second_ctx, extra_body=extra_body, max_tokens=max_tokens_use, temperature=temperature
                         )
 
                     sec_meta = {}
@@ -1074,6 +1106,7 @@ def execute_ablation_turn(
                 final_output = raw_content
                 messages.append({"role": "assistant", "content": final_output})
 
+            _persist_planner_state()
             latency_ms = int((time.time() - start) * 1000)
             return {
                 "planner": planner,
@@ -1091,7 +1124,7 @@ def execute_ablation_turn(
                 "qr_payload": qr_payload,
                 "text_summary": text_summary,
                 "termination_reason": termination,
-                "events": [],
+                "events": list(planner_events),
                 "token_usage": token_usage,
                 "retry_metadata": retry_meta,
                 "error": error,
@@ -1125,26 +1158,7 @@ def execute_ablation_turn(
         final_output = final_reply
         messages.append({"role": "assistant", "content": final_output})
 
-        # Background persist (daemon)
-        def _bg_persist_hot():
-            try:
-                if not enable_planner:
-                    return
-                if getattr(planner, "engine", "") == "llm":
-                    update_from_planner_assessment(planner, file_path=patient_file)
-                else:
-                    cur_rec = load_patient_record(patient_file)
-                    llm_eval = evaluate_clinical_planner_llm(list(messages), cur_rec, planner_client, model, timeout=3.0)
-                    if getattr(llm_eval, "engine", "") == "llm":
-                        update_from_planner_assessment(llm_eval, file_path=patient_file)
-            except Exception:
-                pass
-
-        try:
-            bg = threading.Thread(target=_bg_persist_hot, daemon=True)
-            bg.start()
-        except Exception:
-            pass
+        _persist_planner_state()
 
         latency_ms = int((time.time() - start) * 1000)
         return {
@@ -1163,7 +1177,7 @@ def execute_ablation_turn(
             "qr_payload": qr_payload,
             "text_summary": text_summary,
             "termination_reason": termination,
-            "events": [],
+            "events": list(planner_events),
             "token_usage": token_usage,
             "retry_metadata": retry_meta,
             "error": error,
@@ -1191,6 +1205,11 @@ def execute_ablation_turn(
             elif getattr(planner, "talker_guidance", None) and not any(k in getattr(planner, "talker_guidance", "") for k in ["【臨床", "請先", "嚴格遵守"]):
                 fallback_reply = planner.talker_guidance
 
+        try:
+            _persist_planner_state()
+        except NameError:
+            pass
+
         return {
             "planner": planner if 'planner' in locals() else neutral_planner_state(),
             "exposed_tools": active_tools if 'active_tools' in locals() else get_canonical_tool_snapshot(),
@@ -1207,7 +1226,7 @@ def execute_ablation_turn(
             "qr_payload": None,
             "text_summary": None,
             "termination_reason": termination,
-            "events": ["ERROR"],
+            "events": (["ERROR"] + list(planner_events)) if 'planner_events' in locals() else ["ERROR"],
             "token_usage": None,
             "retry_metadata": retry_meta if 'retry_meta' in locals() else None,
             "error": error,
