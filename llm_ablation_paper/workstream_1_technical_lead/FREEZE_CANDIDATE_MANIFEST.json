@@ -17,8 +17,8 @@
     "canonical_tool_schema_sha256": "e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e"
   },
   "talker_prompt_fingerprint_note": "Talker prompt is dynamic: talker_base_prompt_sha256 covers NURSE_SYSTEM_PROMPT only; talker_prompt_template_bundle_sha256 covers the base plus build_nurse_system_prompt builder source (the context-injection template), so the base SHA is not the full template SHA. patient_context is input data and is not included in any fingerprint.",
-  "timeout_suggestion_seconds": 120,
-  "timeout_frozen": false,
+  "subprocess_timeout_seconds": 120.0,
+  "timeout_status": "FROZEN_CANDIDATE_PENDING_FINAL_TAG",
   "opaque_condition_mapping": "NOT_GENERATED",
   "blinded_export_fail_closed_without_mapping": true,
   "excluded_from_experiment_path": [
