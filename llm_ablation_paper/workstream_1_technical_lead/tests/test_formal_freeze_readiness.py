@@ -373,3 +373,198 @@ def test_manifest_formal_config_and_fingerprints_exact_match():
     assert manifest["final_frozen"] is False
     assert manifest["experiment_ready"] is False
     assert manifest["formal_experiment_state"] == "BLOCKED"
+
+
+def test_all_formal_conditions_pass_exact_gate():
+    for cond in ("A", "B", "C", "D"):
+        cfg = formal_ablation_config(cond)
+        assert is_frozen_formal_config(cfg) is True
+        require_frozen_formal_config(cfg)
+
+
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("model", "some-real-model"),
+        ("temperature", 0.7),
+        ("planner_model", "some-real-model"),
+        ("planner_temperature", 0.2),
+        ("planner_temperature", 0.7),
+        ("planner_request_timeout_seconds", 3.0),
+        ("patient_agent_model", "some-real-model"),
+        ("patient_agent_temperature", 0.7),
+        ("max_turns", 5),
+        ("seed", 7),
+        ("enable_forced_retrieval", True),
+        ("enable_fixed_warning_append", True),
+        ("enable_question_budget_postprocessing", True),
+        ("enable_planner", False),
+        ("enable_dynamic_tool_gate", True),
+        ("enable_output_guard", True),
+    ],
+)
+def test_exact_gate_rejects_single_field_mutation(field, tampered_value):
+    cfg = formal_ablation_config("B")
+    object.__setattr__(cfg, field, tampered_value)
+    assert is_frozen_formal_config(cfg) is False
+    with pytest.raises(ValueError, match=field):
+        require_frozen_formal_config(cfg)
+
+
+def test_exact_gate_rejects_bad_condition_and_cross_condition_flags():
+    cfg = formal_ablation_config("B")
+    object.__setattr__(cfg, "condition", "X")
+    assert is_frozen_formal_config(cfg) is False
+    with pytest.raises(ValueError, match="condition"):
+        require_frozen_formal_config(cfg)
+    cfg_c = formal_ablation_config("C")
+    object.__setattr__(cfg_c, "enable_dynamic_tool_gate", False)
+    assert is_frozen_formal_config(cfg_c) is False
+    with pytest.raises(ValueError, match="enable_dynamic_tool_gate"):
+        require_frozen_formal_config(cfg_c)
+
+
+def test_gate_error_message_does_not_leak_env_key(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "CANARY-SECRET-123")
+    cfg = formal_ablation_config("B")
+    object.__setattr__(cfg, "seed", 7)
+    with pytest.raises(ValueError) as excinfo:
+        require_frozen_formal_config(cfg)
+    message = str(excinfo.value)
+    assert "CANARY-SECRET-123" not in message
+    assert "api_key" not in message.lower()
+    assert "seed" in message
+
+
+def test_run_condition_gate_fails_before_provider_and_subprocess(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        load_profiles,
+    )
+
+    def tampered_factory(condition):
+        cfg = formal_ablation_config(condition)
+        object.__setattr__(cfg, "planner_temperature", 0.9)
+        return cfg
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+    patient_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    agent = DeterministicPatientAgent()
+    original_next_turn = agent.next_turn
+
+    def counting_next_turn(**kwargs):
+        patient_calls["count"] += 1
+        return original_next_turn(**kwargs)
+
+    monkeypatch.setattr(agent, "next_turn", counting_next_turn)
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=agent,
+        output_root=tmp_path,
+        config_factory=tampered_factory,
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=120.0,
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("harness must not run when the gate rejects")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError):
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+    assert provider_calls["count"] == 0
+    assert harness_calls["count"] == 0
+    assert patient_calls["count"] == 0
+
+
+def test_run_condition_gate_passes_with_valid_formal_config(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        load_profiles,
+    )
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+    patient_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    class ImmediateEndPatientAgent(DeterministicPatientAgent):
+        # Minimal stub: end on the first turn so run_condition exits
+        # without touching the harness subprocess.
+
+        def next_turn(self, *, profile, assistant_output, turn_number, prior_turns):
+            patient_calls["count"] += 1
+            return {
+                "patient_utterance": "謝謝，我沒有其他問題了。",
+                "should_end": True,
+                "termination_reason": "PATIENT_GOAL_MET",
+                "disclosed_facts": [],
+                "evidence": "Positive control: end immediately after the gate passes.",
+            }
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=ImmediateEndPatientAgent(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=120.0,
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("positive control ends before any harness turn")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    result = runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+    assert result["termination_reason"] == "PATIENT_GOAL_MET"
+    assert provider_calls["count"] == 1
+    assert patient_calls["count"] >= 1
+    assert harness_calls["count"] == 0
+
+
+def test_fake_dry_run_path_skips_gate(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        FAKE_TALKER_RESPONSES,
+        load_profiles,
+    )
+
+    def forbidden_gate(config):
+        raise AssertionError("FAKE path must not consult the formal gate")
+
+    monkeypatch.setattr(run_simulation, "require_frozen_formal_config", forbidden_gate)
+
+    runner = run_simulation.RoleplayRunner(patient_agent=DeterministicPatientAgent(), output_root=tmp_path)
+
+    def fake_harness(**kwargs):
+        return [{"assistant_response": "ok", "termination_reason": None, "turn_index": 0, "user_message": kwargs["messages"][-1]}]
+
+    monkeypatch.setattr(runner, "_call_harness", fake_harness)
+    profile = load_profiles()["SP-001"]
+    result = runner.run_condition(profile=profile, condition="A", fake_talker_responses=list(FAKE_TALKER_RESPONSES))
+    assert result["termination_reason"] == "MAX_TURNS"
+    assert len(result["records"]) == 6

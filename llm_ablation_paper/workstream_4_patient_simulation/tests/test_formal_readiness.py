@@ -20,6 +20,7 @@ from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simu
 )
 from llm_ablation_paper.workstream_1_technical_lead.harness import AblationConfig
 from llm_ablation_paper.workstream_1_technical_lead.harness import resolve_provider_credentials
+from llm_ablation_paper.workstream_1_technical_lead.harness.config import formal_ablation_config
 from llm_ablation_paper.workstream_1_technical_lead.harness.runner import _build_client_from_provider_config
 
 
@@ -160,10 +161,9 @@ def test_timeout_failure_keeps_error_and_attempts(tmp_path, monkeypatch):
 
 
 def _formal_config_factory(condition):
-    base = AblationConfig.for_condition(condition)
-    return base.__class__(
-        **{**base.to_dict(), "model": "test-formal-model", "temperature": 0.3, "seed": 42}
-    )
+    # Exact frozen formal config: the run_condition formal gate now rejects
+    # anything else before the client_factory / env-key / secret checks below.
+    return formal_ablation_config(condition)
 
 
 def test_formal_run_with_client_factory_rejected(tmp_path):

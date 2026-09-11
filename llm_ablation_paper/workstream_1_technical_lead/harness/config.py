@@ -273,22 +273,50 @@ def formal_runtime_spec() -> dict:
     }
 
 
+FROZEN_FORMAL_CONFIG_FIELDS = (
+    "condition",
+    "enable_planner",
+    "enable_dynamic_tool_gate",
+    "enable_output_guard",
+    "enable_forced_retrieval",
+    "enable_fixed_warning_append",
+    "enable_question_budget_postprocessing",
+    "model",
+    "temperature",
+    "planner_model",
+    "planner_temperature",
+    "planner_request_timeout_seconds",
+    "patient_agent_model",
+    "patient_agent_temperature",
+    "max_turns",
+    "seed",
+)
+
+
+def _frozen_formal_mismatches(config: Any) -> list:
+    condition = getattr(config, "condition", None)
+    if condition not in {"A", "B", "C", "D"}:
+        return ["condition"]
+    expected = formal_ablation_config(condition)
+    mismatched = []
+    for field in FROZEN_FORMAL_CONFIG_FIELDS:
+        if getattr(config, field, None) != getattr(expected, field):
+            mismatched.append(field)
+    return mismatched
+
+
 def is_frozen_formal_config(config: Any) -> bool:
-    model = str(getattr(config, "model", "") or "")
-    if not model or model == "fake-model":
-        return False
-    try:
-        if float(getattr(config, "planner_request_timeout_seconds", 0)) <= 0:
-            return False
-    except Exception:
-        return False
-    return True
+    return not _frozen_formal_mismatches(config)
 
 
 def require_frozen_formal_config(config: Any) -> None:
-    if not is_frozen_formal_config(config):
+    mismatched = _frozen_formal_mismatches(config)
+    if mismatched:
+        condition = getattr(config, "condition", None)
         raise ValueError(
-            "Formal execution requires a frozen formal config; fake-model or missing frozen fields are rejected (fail-closed)."
+            "Formal execution requires the frozen formal config "
+            f"(condition {condition!r}); "
+            f"mismatched fields: {', '.join(mismatched)}"
         )
 
 

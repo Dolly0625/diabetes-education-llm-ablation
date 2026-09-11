@@ -37,6 +37,8 @@ FORMAL_PILOT_OUTPUT_ROOT = WS4_ROOT / "artifacts" / "formal_pilot"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from llm_ablation_paper.workstream_1_technical_lead.harness.config import require_frozen_formal_config
+
 MAX_RETRY_DELAYS_SECONDS = (1, 2, 4, 8)
 TERMINATION_REASONS = {
     "PATIENT_GOAL_MET",
@@ -516,6 +518,7 @@ class RoleplayRunner:
         if is_formal and getattr(config, "model", "fake-model") == "fake-model":
             raise ValueError("formal execution requires a frozen WS1 config_factory; fake-model is dry-run only")
         if is_formal:
+            require_frozen_formal_config(config)
             if self.client_factory is not None:
                 raise ValueError("formal execution rejects client_factory mock injection (fail-closed)")
             if fake_talker_responses is not None:
