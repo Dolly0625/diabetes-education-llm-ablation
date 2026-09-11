@@ -46,12 +46,29 @@ def parse_medication_bag(image_path: str | Path) -> dict[str, Any]:
         result = service.extract(image_bytes)
         
         meds = result.get("meds") or []
-        # 過濾掉錯誤提示字串（例如非藥袋時產生的長文字說明）
-        valid_meds = [m for m in meds if len(m) < 80 and not m.startswith("此圖片並非") and not m.startswith("這張圖片中並未")]
+        valid_meds = []
+        for m in meds:
+            m_clean = m.strip()
+            if not m_clean or len(m_clean) < 2 or len(m_clean) > 150:
+                continue
+            if any(m_clean.startswith(prefix) for prefix in ("此圖片", "這張圖片", "[非藥袋", "非藥袋", "這並非", "這不是")):
+                continue
+            valid_meds.append(m_clean)
         
         qr_used = result.get("qr_used", False)
+        vision_used = result.get("vision_used", False)
         confidence = result.get("confidence", 0.0)
-        method = "QR Code 辨識" if qr_used else "文字光學辨識 (OCR)"
+        
+        if qr_used:
+            method = "QR Code 辨識"
+        elif vision_used:
+            method = "多模態視覺辨識 (Vision LLM)"
+        else:
+            method = "文字光學辨識 (OCR)"
+            
+        import logging
+        logger = logging.getLogger("uvicorn.error")
+        logger.info(f"[藥袋感知] 圖片分析完成 | 方法: {method} | 信心度: {confidence:.2f} | 原始解析: {meds} | 有效藥品: {valid_meds}")
         
         if valid_meds:
             return {

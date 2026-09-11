@@ -16,20 +16,27 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from diabetes_chatbot.server.handlers import process_patient_message
+from diabetes_chatbot.server.share_service import (
+    redeem_share_token,
+    get_summary_by_session,
+    list_access_logs,
+)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(ROOT_DIR / ".env")
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 
 app = FastAPI(
-    title="TFDA AI 糖尿病專科衛教助理 - LINE Webhook 服務",
+    title="TFDA AI 糖尿病專科衛教助理 - LINE Webhook 與醫護端服務",
     version="2.0.0",
-    description="結合 臨床衛教大腦、聯發科 Breeze-ASR-26 台語語音與 LINE Flex 就醫備忘錄之官方 Webhook 伺服器"
+    description="結合 臨床衛教大腦、聯發科 Breeze-ASR-26 台語語音、LINE Flex 就醫備忘錄與診間調閱入口之官方伺服器"
 )
 
 # 訊息去重集合 (避免網路抖動或客戶端重試造成重複處理)
@@ -82,9 +89,65 @@ def health_check():
             "MediaTek Breeze-ASR-26 在地台語語音辨識",
             "健保藥袋 QR/OCR 多模態解析",
             "LINE Flex Message 大字體就醫備忘錄",
-            "診間快速掃描 QR Code"
+            "診間快速掃描 QR Code",
+            "醫師診間 6 位調閱碼入口 (/clinician)"
         ]
     }
+
+
+@app.get("/clinician", response_class=FileResponse)
+def clinician_portal():
+    """醫護端唯讀入口網頁"""
+    html_path = STATIC_DIR / "clinician.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Clinician portal template not found")
+    return FileResponse(html_path, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/static/{file_name}", response_class=FileResponse)
+def get_static_asset(file_name: str):
+    """提供醫護端靜態資產 (jsqr.min.js 等)"""
+    safe_name = Path(file_name).name
+    p = STATIC_DIR / safe_name
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="Static asset not found")
+    return FileResponse(p, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/line/client-config")
+def line_client_config():
+    """醫護端狀態初始化設定：通知前端進入已啟用狀態"""
+    return JSONResponse(
+        content={
+            "liff_id": os.getenv("LINE_LIFF_ID", ""),
+            "demo_identity_headers": True,
+            "demo_clinician_enabled": True,
+        }
+    )
+
+
+@app.post("/api/clinician/share/redeem")
+async def redeem_clinician_share(req: Request):
+    """醫護端透過 6 位診間調閱短碼兌換門診預問診備忘錄"""
+    body = await req.json()
+    token = body.get("token", "")
+    clinician_id = req.headers.get("X-Demo-Clinician-Id", "doctor-demo")
+    data = redeem_share_token(token, clinician_id=clinician_id)
+    return JSONResponse(content=data)
+
+
+@app.get("/api/clinician/summary")
+def clinician_summary(session_id: str, req: Request):
+    """依 session_id 或 user_id 讀取唯讀摘要"""
+    clinician_id = req.headers.get("X-Demo-Clinician-Id", "doctor-demo")
+    data = get_summary_by_session(session_id, clinician_id=clinician_id)
+    return JSONResponse(content=data)
+
+
+@app.get("/api/clinician/audit")
+def clinician_audit():
+    """查詢醫護端調閱紀錄"""
+    return JSONResponse(content={"events": list_access_logs()})
 
 
 @app.post("/mock/chat")
@@ -172,7 +235,10 @@ if HAS_LINE_CREDENTIALS:
                     if res.get("audit_log"):
                         messages_to_send.append(TextMessage(text=res["audit_log"]))
                 else:
-                    messages_to_send = [TextMessage(text=res.get("reply_text", "收到您的訊息"))]
+                    reply_content = (res.get("reply_text") or "").strip()
+                    if not reply_content:
+                        reply_content = "您好呀！我是您的糖尿病衛教小幫手，可以幫您記血糖、聊飲食、整理看診前的就醫備忘錄喔！今天想聊聊什麼呢？"
+                    messages_to_send = [TextMessage(text=reply_content)]
 
                 # 優先使用 reply_message，若逾期則自動無縫降級為 push_message
                 try:
@@ -229,7 +295,10 @@ if HAS_LINE_CREDENTIALS:
                     if res.get("audit_log"):
                         messages_to_send.append(TextMessage(text=res["audit_log"]))
                 else:
-                    messages_to_send = [TextMessage(text=res.get("reply_text", "語音已接收完成"))]
+                    reply_content = (res.get("reply_text") or "").strip()
+                    if not reply_content:
+                        reply_content = "語音已接收完成，若有任何不舒服或血糖問題都可以隨時告訴我喔！"
+                    messages_to_send = [TextMessage(text=reply_content)]
 
                 try:
                     line_bot_api.reply_message(
@@ -271,6 +340,10 @@ if HAS_LINE_CREDENTIALS:
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                     tmp.write(content_bytes)
                     tmp_path = Path(tmp.name)
+                try:
+                    Path("/tmp/last_line_image.jpg").write_bytes(content_bytes)
+                except Exception:
+                    pass
 
                 try:
                     res = process_patient_message(user_id=user_id, image_path=tmp_path)
@@ -285,7 +358,10 @@ if HAS_LINE_CREDENTIALS:
                     if res.get("audit_log"):
                         messages_to_send.append(TextMessage(text=res["audit_log"]))
                 else:
-                    messages_to_send = [TextMessage(text=res.get("reply_text", "圖片已接收完成"))]
+                    reply_content = (res.get("reply_text") or "").strip()
+                    if not reply_content:
+                        reply_content = "圖片已接收完成，若有藥袋或數值想詢問歡迎隨時提出喔！"
+                    messages_to_send = [TextMessage(text=reply_content)]
 
                 try:
                     line_bot_api.reply_message(
@@ -307,3 +383,34 @@ if HAS_LINE_CREDENTIALS:
         except Exception as e:
             print(f"[LINE Webhook 錯誤] 處理圖片訊息失敗: {e}")
             traceback.print_exc()
+
+
+@app.post("/api/admin/reset")
+async def admin_reset(req: Request):
+    """
+    【受控管理端點】：清除指定或所有使用者的短期進程記憶 (_SESSION_CACHE) 與對話日誌
+    供展示前或測試時 0 秒徹底歸零記憶，避免跨輪次記憶體污染。
+    """
+    from diabetes_chatbot.server.handlers import _SESSION_CACHE
+    body = {}
+    try:
+        body = await req.json()
+    except Exception:
+        pass
+    target_user = body.get("user_id")
+    if target_user:
+        _SESSION_CACHE.pop(target_user, None)
+        target_file = Path(f"diabetes_chatbot/data/line_{target_user}.json")
+        if target_file.exists():
+            target_file.unlink()
+        return JSONResponse(content={"status": "ok", "cleared_user": target_user})
+    else:
+        _SESSION_CACHE.clear()
+        demo_file = Path("diabetes_chatbot/data/line_Ubb89014162a253c0544d7b4415cc086e.json")
+        if demo_file.exists():
+            demo_file.unlink()
+        chat_logs = Path("diabetes_chatbot/chat_logs.jsonl")
+        if chat_logs.exists():
+            chat_logs.write_text("")
+        return JSONResponse(content={"status": "ok", "cleared": "all_sessions_and_logs"})
+

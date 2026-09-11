@@ -75,7 +75,7 @@ def get_openai_client() -> OpenAI:
     return _client
 
 def _strip_evidence_links_leak(text: str) -> str:
-    """物理過濾聊天正文中意外洩漏的 evidence_links 或官方出處標籤，嚴格落實出處只印不念"""
+    """清理聊天正文中意外夾帶的 raw HTML 標籤或 raw markdown 網址"""
     import re
     if not text:
         return ""
@@ -108,6 +108,18 @@ def _format_slot_display(content: str, status: Any) -> str:
         return "尚缺（尚未提及）"
 
 
+def _format_slot_status_simple(status: Any) -> str:
+    """格式化臨床槽位狀態文字（精簡版，僅含狀態名稱不附詳述）"""
+    from diabetes_chatbot.planner import SlotStatus
+    status_str = status.value if hasattr(status, "value") else str(status)
+    if status_str in (SlotStatus.KNOWN.value, "KNOWN"):
+        return "已掌握"
+    elif status_str in (SlotStatus.PARTIAL.value, "PARTIAL"):
+        return "部分掌握"
+    else:
+        return "尚缺"
+
+
 def build_audit_log(
     latency: float,
     modality: str,
@@ -117,16 +129,44 @@ def build_audit_log(
     slots: Any,
     talker_guidance: str,
     can_unlock: bool,
-    model_display_name: Optional[str] = None
+    model_display_name: Optional[str] = None,
+    compact: bool = False
 ) -> str:
     """
     建構展示專用之 專科臨床大腦技術審計日誌 (Audit Log)
+    支援完整版（維運/測試全量）與 compact 模式（Demo 五支針精簡版）
     嚴格遵循繁體中文與零 Emoji 規範，並將內部指引命名為「指揮訊息」
     """
     disp_model = model_display_name or model_display
     guard_text = "PASS (未觸發紅旗/急症急診邊界)" if guard_passed else "FAIL (觸發急症紅旗阻斷 Fail-Closed)"
     rag_text = "命中 (TFDA 糖尿病臨床指引衛教手冊)" if rag_hit else "未觸發 (常規對話無須檢索)"
     gate_text = "已解鎖 (臨床充分度達標)" if can_unlock else "鎖定中 (臨床資訊尚未齊全，避免濫發空卡)"
+
+    if compact:
+        # 五支針精簡版（Demo 友善不嚇人）：
+        # 針 1：第一級安全守護結果一行
+        # 針 2：工具調用與 RAG 命中一行
+        # 針 3：槽位狀態精簡一行（6 槽名稱加狀態不附詳述）
+        # 針 4：耗時與模型一行
+        # 針 5：就醫備忘錄閥門一行（末行）
+        s_reason = _format_slot_status_simple(slots.visit_reason_status)
+        s_meds = _format_slot_status_simple(slots.medications_status)
+        s_glucose = _format_slot_status_simple(slots.glucose_metrics_status)
+        s_hypo = _format_slot_status_simple(slots.hypo_history_status)
+        s_concerns = _format_slot_status_simple(slots.concerns_status)
+        s_diet = _format_slot_status_simple(getattr(slots, "diet_lifestyle_status", None))
+
+        lines = [
+            "----------------------------------",
+            "【專科臨床大腦審計 (Demo 精簡版)】",
+            f"• 第一級安全守護：{guard_text}",
+            f"• 工具調用與檢索：{tool_used} | RAG {rag_text}",
+            f"• TADE 6 槽位狀態：回診訴求:{s_reason} | 目前用藥:{s_meds} | 血糖數據:{s_glucose} | 低血糖:{s_hypo} | 副作用:{s_concerns} | 生活飲食:{s_diet}",
+            f"• 系統耗時與底層推論：{latency:.2f} 秒 | {disp_model}",
+            f"• 就醫備忘錄解鎖閥門：{gate_text}",
+            "----------------------------------"
+        ]
+        return "\n".join(lines)
 
     guidance_clean = (talker_guidance or "").strip()
     if not guidance_clean:
@@ -144,12 +184,13 @@ def build_audit_log(
         f"• 第一級安全守護：{guard_text}",
         f"• 工具調用 (Tool Call)：{tool_used}",
         f"• 實證檢索 (RAG)：{rag_text}",
-        "• TADE 5 大臨床槽位狀態：",
+        "• TADE 6 大臨床槽位狀態：",
         f"  - 本次回診訴求：{_format_slot_display(slots.visit_reason, slots.visit_reason_status)}",
         f"  - 目前用藥狀況：{_format_slot_display(slots.medications, slots.medications_status)}",
         f"  - 血糖數據監測：{_format_slot_display(slots.glucose_metrics, slots.glucose_metrics_status)}",
         f"  - 低血糖病史：{_format_slot_display(slots.hypo_history, slots.hypo_history_status)}",
         f"  - 副作用與疑慮：{_format_slot_display(slots.concerns_or_side_effects, slots.concerns_status)}",
+        f"  - 飲食生活習慣：{_format_slot_display(getattr(slots, 'diet_lifestyle', ''), getattr(slots, 'diet_lifestyle_status', None))}",
         "• Planner → Talker 指揮訊息：",
         f"  {guidance_display}",
         f"• 就醫備忘錄解鎖閥門：{gate_text}",
@@ -268,10 +309,10 @@ def process_patient_message(
 
     # Determine tool display and rag_hit
     called = core_res.get("called_tools", [])
-    tool_display = ", ".join(called) if called else "無 (常規對話)"
+    forced_disp = core_res.get("forced_tool_display")
+    tool_display = forced_disp or (", ".join(called) if called else "無 (常規對話)")
     # If forced retrieval or search handbook second path, mark rag_hit
-    # Core tracks via planner domain but we approximate: if called contains search_handbook or forced evidence existed
-    rag_hit = "search_handbook" in called or core_res.get("tool_results") and any(r.get("tool")=="search_handbook" for r in core_res.get("tool_results",[]))
+    rag_hit = "search_handbook" in called or bool(forced_disp) or (core_res.get("tool_results") and any(r.get("tool")=="search_handbook" for r in core_res.get("tool_results",[])))
     # For card generation, tool_display update
     if core_res.get("flex_bubble") is not None or core_res.get("text_summary"):
         tool_display = "generate_visit_summary(產出門診預問診就醫備忘錄)"
@@ -290,15 +331,6 @@ def process_patient_message(
 
     # Log and audit
     tool_used_log = tool_display
-    log_turn(actual_text, final_reply, latency=latency, tool_used=tool_used_log)
-    is_card = flex_bubble is not None
-    if is_card:
-        print(f"[LINE Webhook] 使用者 {user_id} 門診卡生成完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
-    elif rag_hit:
-        print(f"[LINE Webhook] 使用者 {user_id} 手冊衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
-    else:
-        print(f"[LINE Webhook] 使用者 {user_id} 常規衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
-
     guard_passed = not core_res["output_guard_result"].is_blocked if not core_res["termination_reason"]=="COMMON_INPUT_BLOCK" else True
     audit_log = build_audit_log(
         latency=latency,
@@ -308,8 +340,17 @@ def process_patient_message(
         rag_hit=bool(rag_hit),
         slots=planner.slots,
         talker_guidance=planner.talker_guidance,
-        can_unlock=planner.can_unlock_summary_tool
+        can_unlock=planner.can_unlock_summary_tool,
+        compact=False,
     )
+    log_turn(actual_text, final_reply, latency=latency, tool_used=tool_used_log, audit_log=audit_log)
+    is_card = flex_bubble is not None
+    if is_card:
+        print(f"[LINE Webhook] 使用者 {user_id} 門診卡生成完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
+    elif rag_hit:
+        print(f"[LINE Webhook] 使用者 {user_id} 手冊衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
+    else:
+        print(f"[LINE Webhook] 使用者 {user_id} 常規衛教回覆完成，總耗時: {latency:.2f} 秒 (模型: {model_display})")
 
     if reply_type == "flex":
         return {
@@ -317,14 +358,32 @@ def process_patient_message(
             "reply_text": final_reply,
             "flex_bubble": flex_bubble,
             "qr_payload": qr_payload,
-            "audit_log": audit_log
+            "audit_log": audit_log,
+            "text_summary": core_res.get("text_summary"),
         }
     else:
-        full_reply_text = f"{prefix_note}{final_reply}\n\n{audit_log}"
+        audit_in_chat = os.getenv("AUDIT_IN_CHAT", "false").strip().lower() in ("true", "1", "yes", "on")
+        if audit_in_chat:
+            compact_audit = build_audit_log(
+                latency=latency,
+                modality=input_modality,
+                guard_passed=guard_passed,
+                tool_used=tool_used_log,
+                rag_hit=bool(rag_hit),
+                slots=planner.slots,
+                talker_guidance=planner.talker_guidance,
+                can_unlock=planner.can_unlock_summary_tool,
+                compact=True,
+            )
+            full_reply_text = f"{prefix_note}{final_reply}\n\n{compact_audit}"
+        else:
+            full_reply_text = f"{prefix_note}{final_reply}"
+
         return {
             "reply_type": "text",
             "reply_text": full_reply_text,
             "flex_bubble": None,
             "qr_payload": None,
-            "audit_log": audit_log
+            "audit_log": audit_log,
+            "text_summary": core_res.get("text_summary"),
         }

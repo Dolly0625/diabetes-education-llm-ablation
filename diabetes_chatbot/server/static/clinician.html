@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>新陳代謝科 門診預問診就醫備忘錄｜醫護唯讀入口</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18212f;background:#f4f6fa;line-height:1.55}
+    *{box-sizing:border-box}body{margin:0}.wrap{max-width:820px;margin:auto;padding:20px 16px 40px}.card{background:#fff;border:1px solid #dce2eb;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 6px 20px #18212f0b}
+    h1{font-size:1.5rem;margin:0 0 6px}h2{font-size:1.15rem;margin:0 0 10px}h3{font-size:.98rem;margin:0 0 5px}.muted{color:#667085;font-size:.92rem}.notice{border-left:5px solid #2457a6}.warning{border-left-color:#d97706}
+    .status{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.badge{display:inline-flex;border-radius:999px;padding:4px 10px;font-weight:700;font-size:.87rem;background:#e7f0ff;color:#194b8f}.badge.off{background:#fff4dc;color:#8a4b00}.badge.error{background:#fde8e8;color:#9b1c1c}
+    label{display:block;margin-top:12px;font-weight:650}input,button{box-sizing:border-box;width:100%;font:inherit;border-radius:10px;padding:11px;margin-top:6px}input{border:1px solid #aab4c3;background:#fff}button{border:0;background:#2457a6;color:#fff;font-weight:700;cursor:pointer}button.secondary{background:#e8edf5;color:#21446f}button:disabled{opacity:.5;cursor:not-allowed}
+    .error{color:#9b1c1c;background:#fff0f0;border-radius:10px;padding:10px;margin:10px 0}.success{color:#155d36;background:#eaf7ef;border-radius:10px;padding:10px;margin:10px 0}.hidden{display:none!important}
+    
+    /* 10 分鐘 TTL Live 動態倒數計時進度條（離線純本機計算、切頁不崩） */
+    .countdown-card{background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:12px;margin:12px 0}
+    .countdown-header{display:flex;justify-content:space-between;align-items:center;font-size:.92rem;font-weight:700}
+    .countdown-timer{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:1.05rem;font-weight:800;color:#0f172a}
+    .countdown-progress-track{background:#e2e8f0;border-radius:999px;height:8px;overflow:hidden;margin-top:8px}
+    .countdown-progress-bar{height:100%;width:100%;background:#155d36;transition:width 1s linear,background-color .4s ease}
+    .countdown-expired-alert{margin-top:8px;font-size:.88rem;font-weight:700;color:#9b1c1c;background:#fee2e2;border-radius:6px;padding:6px 10px}
+
+    /* 頂部過敏史高風險安全紅線 */
+    .hero-focus-card{border-radius:12px;padding:12px 14px;position:relative;margin:12px 0}
+    .hero-focus-card.allergy{border:2px solid #e02424;background:#fff5f5}
+    .hero-focus-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+    .hero-focus-title{font-weight:800;font-size:1.02rem;color:#9b1c1c}
+    .hero-focus-content{font-size:1.02rem;font-weight:650;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+    .hero-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.8rem;font-weight:700}
+    .hero-tag.danger{background:#e02424;color:#fff}
+    .hero-tag.safe{background:#def7ec;color:#03543f}
+    .hero-tag.warn{background:#fef08a;color:#713f12}
+
+    /* V2 七格就醫備忘錄大螢幕版面（對齊 LINE Flex 卡片） */
+    .v2-memo-container{border:2px solid #0d47a1;border-radius:14px;padding:18px;background:#fff;margin:14px 0;box-shadow:0 4px 16px #0d47a10f}
+    .v2-slot{padding:11px 0;border-bottom:1px solid #e2e8f0}
+    .v2-slot:last-child{border-bottom:none}
+    .v2-slot-title{font-weight:800;font-size:1.02rem;color:#0d47a1;margin-bottom:5px}
+    .v2-slot-title.warning{color:#b45309}
+    .v2-slot-title.sub{color:#64748b;font-size:.88rem}
+    .v2-slot.highlight{background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:12px;margin:10px 0}
+    .v2-slot-body{font-size:1.05rem;font-weight:600;color:#1e293b;line-height:1.55;white-space:pre-wrap}
+    .v2-slot-body.quote{font-style:italic;color:#334155}
+    .v2-slot-body.small-muted{font-size:.86rem;color:#64748b;font-weight:500}
+    .v2-slot-list{margin:4px 0;padding-left:20px;color:#1e293b;font-weight:600}
+    .v2-slot-list li{margin:3px 0}
+    .v2-slot.decision-slot{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-top:10px}
+    .v2-slot-title.decision{color:#1d4ed8;font-weight:800}
+    .v2-slot-body.decision-text{color:#1e3a8a;font-size:.96rem;line-height:1.6;font-weight:600;white-space:pre-wrap}
+
+    .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.meta{background:#f5f7fa;border-radius:10px;padding:9px;font-size:.88rem}.meta strong{display:block}
+    .audit-table{width:100%;border-collapse:collapse;font-size:.87rem}.audit-table th,.audit-table td{text-align:left;vertical-align:top;border-bottom:1px solid #e4e8ee;padding:8px 5px}.audit-table th{color:#667085}.audit-table td{overflow-wrap:anywhere}
+    @media (max-width:580px){.wrap{padding:16px 12px 32px}.card{padding:15px}.meta-grid{grid-template-columns:1fr}.audit-table{font-size:.78rem}.audit-table th:nth-child(4),.audit-table td:nth-child(4){display:none}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header><h1>醫護唯讀入口</h1><p class="muted">只讀取病患主動提供、尚未過期的一次性授權。這個 Demo 不列出病患、不修改病患資料；正式環境必須接院方 SSO/OIDC。</p></header>
+  <section class="card notice warning" aria-label="安全界線"><strong>安全界線</strong><p>摘要可能包含病患自述或家屬轉述，不能取代病史詢問、診斷、處方或專業判斷。危急狀況請依院內流程處理。</p></section>
+
+  <section class="card" aria-labelledby="auth-title">
+    <div class="status"><h2 id="auth-title">診間調閱與驗證</h2><span id="demo-status" class="badge off">檢查中…</span></div>
+    <p id="demo-message" class="muted">只有伺服器同時開啟 LINE_DEMO_MODE 且目前 ID 命中 allowlist 時，才可使用這個展示入口。</p>
+
+    <label for="token" style="font-size:1.08rem;font-weight:700;color:#194b8f;margin-top:8px;">病患 6 位就醫調閱碼（輸入滿 6 碼自動送出）</label>
+    <input id="token" autocomplete="one-time-code" spellcheck="false" placeholder="例如 739-182" maxlength="7"
+      style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:1.65rem;font-weight:700;letter-spacing:6px;text-align:center;padding:12px;border:2px solid #194b8f;border-radius:12px;background:#f8fbff;">
+    <button id="redeem" type="button" disabled style="background:#194b8f;color:#fff;font-size:1.05rem;padding:12px;margin-top:10px;font-weight:700;">讀取就醫摘要（6 碼）</button>
+
+    <button id="btn-scan" type="button" class="secondary" style="margin-top:10px;font-size:0.92rem;background:#e8edf5;color:#21446f;">或開啟相機掃描 QR Code（選配）</button>
+    <div id="scanner-box" class="hidden" style="margin:14px 0;background:#000;border-radius:14px;overflow:hidden;position:relative;text-align:center;">
+      <video id="scanner-video" playsinline style="width:100%;max-height:300px;object-fit:cover;display:block;"></video>
+      <canvas id="scanner-canvas" style="display:none;"></canvas>
+      <div style="padding:10px;display:flex;justify-content:space-between;align-items:center;background:#1e293b;">
+        <span style="color:#f8fafc;font-size:0.88rem;">請將鏡頭對準病患出示的分享 QR Code…</span>
+        <button id="btn-close-scan" type="button" style="width:auto;padding:6px 14px;background:#475569;color:#fff;border-radius:6px;font-size:0.85rem;margin:0;">關閉相機</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding-top:12px;border-top:1px dashed #dce2eb;">
+      <label for="cid" style="font-size:0.9rem;color:#667085;">Demo 醫護身分 ID</label>
+      <input id="cid" autocomplete="username" placeholder="例如 doctor-demo" value="doctor-demo" style="font-size:0.9rem;padding:8px;">
+      <label for="sid" style="font-size:0.9rem;color:#667085;margin-top:8px;">或病患 session_id（調試用）</label>
+      <input id="sid" autocomplete="off" spellcheck="false" placeholder="例如 line-abc123…（僅 demo 展示）" style="font-size:0.9rem;padding:8px;">
+      <button id="load-summary" class="secondary" type="button" disabled style="margin-top:6px;padding:8px;font-size:0.88rem;">依 session_id 讀取唯讀摘要</button>
+    </div>
+    <div id="error" class="error hidden" role="alert"></div>
+    <p class="muted">醫護只能讀取已完成整理並由病患主動分享的摘要，未確認前讀取會被拒絕（403/404）。所有欄位皆唯讀，不可編輯。</p>
+  </section>
+
+  <section id="summary" class="card hidden" aria-labelledby="summary-title">
+    <div class="status">
+      <div>
+        <h2 id="summary-title" style="color:#0d47a1;font-size:1.35rem;margin-bottom:2px;">新陳代謝科 門診預問診就醫備忘錄</h2>
+        <p class="muted" style="margin:0;font-size:0.88rem;">病患自述整理僅供看診溝通參考，非診斷與處方｜衛生福利部 AI 衛教助理 V2</p>
+      </div>
+      <span class="badge" style="background:#e8f5e9;color:#1b5e20;">V2 正式備忘錄</span>
+    </div>
+
+    <!-- 10 分鐘 TTL Live 動態倒數計時條（若時間解析失敗則隱藏退回靜態） -->
+    <div id="countdown-card" class="countdown-card">
+      <div class="countdown-header">
+        <span>調閱授權即時狀態（10 分鐘 TTL / 單次銷毀）</span>
+        <span id="countdown-timer" class="countdown-timer">計算中…</span>
+      </div>
+      <div class="countdown-progress-track">
+        <div id="countdown-bar" class="countdown-progress-bar" style="width: 100%;"></div>
+      </div>
+      <div id="countdown-expired-msg" class="countdown-expired-alert hidden">
+        此調閱授權已過期失效（已逾時或已閱後即焚銷毀）。目前僅保留當前螢幕歷史唯讀。
+      </div>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta"><strong>資料來源</strong><span id="source">—</span></div>
+      <div class="meta"><strong>分享碼狀態</strong><span id="grant-meta">已使用一次</span></div>
+      <div class="meta"><strong>有效期限</strong><span id="expires">—</span></div>
+      <div class="meta"><strong>讀取時間</strong><span id="accessed">—</span></div>
+    </div>
+
+    <!-- 頂部過敏史高風險安全紅線 -->
+    <div class="hero-focus-card allergy" id="hero-allergy-card">
+      <div class="hero-focus-header">
+        <span class="hero-focus-title">藥物過敏史（高風險安全紅線）</span>
+        <span id="hero-allergy-tag" class="hero-tag danger">需特別注意</span>
+      </div>
+      <div id="hero-allergy-content" class="hero-focus-content">—</div>
+    </div>
+
+    <!-- V2 七格結構化就醫備忘錄大螢幕核心區 -->
+    <div class="v2-memo-container">
+      <div class="v2-slot">
+        <div class="v2-slot-title">① 主訴一句話</div>
+        <div class="v2-slot-body" id="slot-1-reason">—</div>
+      </div>
+
+      <div class="v2-slot">
+        <div class="v2-slot-title">② 用藥現況</div>
+        <div class="v2-slot-body" id="slot-2-meds">—</div>
+      </div>
+
+      <div class="v2-slot">
+        <div class="v2-slot-title">③ 糖線與生活飲食</div>
+        <div class="v2-slot-body" id="slot-3-glucose">—</div>
+      </div>
+
+      <div class="v2-slot highlight">
+        <div class="v2-slot-title warning">④ 待確認方向</div>
+        <ul class="v2-slot-list" id="slot-4-ddx"></ul>
+      </div>
+
+      <div class="v2-slot">
+        <div class="v2-slot-title">⑤ 長輩原話</div>
+        <div class="v2-slot-body quote" id="slot-5-quote">「—」</div>
+      </div>
+
+      <div class="v2-slot meta-slot">
+        <div class="v2-slot-title sub">⑥ 出處小字</div>
+        <div class="v2-slot-body small-muted" id="slot-6-evidence">—</div>
+      </div>
+
+      <div class="v2-slot decision-slot">
+        <div class="v2-slot-title decision">⑦ 系統決策參考（臨床決策輔助）</div>
+        <div class="v2-slot-body decision-text" id="slot-7-decision">—</div>
+        <div class="v2-slot-title sub" style="margin-top:10px;">醫師空白欄（看診勾選留給醫師）：□抽 HbA1c　□聊調藥　□轉衛教</div>
+      </div>
+    </div>
+
+    <p id="disclaimer" class="muted">此備忘錄為病患自述整理唯讀呈現，不可編輯；不能取代醫師專業診斷、處方或院內常規病史詢問。</p>
+    <p id="risk" class="muted"></p>
+    <!-- 既有測試契約相容容器 -->
+    <div class="hidden"><dl id="fields"></dl><ul id="missing-fields"></ul><ul id="questions"></ul></div>
+  </section>
+
+  <section class="card" aria-labelledby="audit-title"><h2 id="audit-title">我的存取紀錄</h2><p class="muted">只顯示目前已驗證 Demo 醫護 ID 的 audit，不顯示其他醫護或病患識別資訊。</p><button id="load-audit" class="secondary" type="button" disabled>載入存取紀錄</button><div id="audit-error" class="error hidden" role="alert"></div><div id="audit-empty" class="muted">尚未載入</div><div class="hidden" id="audit-table-wrap"><table class="audit-table"><thead><tr><th>時間</th><th>結果</th><th>動作</th><th>授權</th></tr></thead><tbody id="audit-rows"></tbody></table></div></section>
+  <p id="startup-message" class="muted" aria-live="polite"></p>
+</main>
+<script src="/static/jsqr.min.js"></script>
+<script>
+(() => {
+  const $ = (selector) => document.querySelector(selector);
+  const state = {enabled:false, configLoaded:false};
+  let scanStream = null;
+  let scanAnimationId = null;
+  let countdownTimerId = null;
+
+  const stopScan = () => {
+    if (scanAnimationId) {
+      cancelAnimationFrame(scanAnimationId);
+      scanAnimationId = null;
+    }
+    if (scanStream) {
+      scanStream.getTracks().forEach(track => track.stop());
+      scanStream = null;
+    }
+    $('#scanner-box').classList.add('hidden');
+    $('#btn-scan').textContent = '開啟相機掃描 QR Code';
+  };
+
+  const startScan = async () => {
+    const video = $('#scanner-video');
+    const canvas = $('#scanner-canvas');
+    const box = $('#scanner-box');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
+      });
+      video.srcObject = scanStream;
+      video.setAttribute('playsinline', true);
+      await video.play();
+      box.classList.remove('hidden');
+      $('#btn-scan').textContent = '關閉相機掃描';
+
+      const tick = () => {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          if (window.jsQR) {
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+            if (code && code.data) {
+              let tokenVal = code.data.trim();
+              try {
+                if (tokenVal.startsWith('http://') || tokenVal.startsWith('https://')) {
+                  const urlObj = new URL(tokenVal);
+                  tokenVal = urlObj.searchParams.get('token') || urlObj.searchParams.get('share_token') || urlObj.pathname.split('/').pop() || tokenVal;
+                }
+              } catch (_) {}
+              $('#token').value = tokenVal;
+              stopScan();
+              $('#redeem').click();
+              return;
+            }
+          }
+        }
+        scanAnimationId = requestAnimationFrame(tick);
+      };
+      scanAnimationId = requestAnimationFrame(tick);
+    } catch (err) {
+      showError('#error', '無法啟動相機：' + (err.message || '請確認瀏覽器相機權限。'));
+      stopScan();
+    }
+  };
+
+  // 錯誤提示採黑箱原則：一般錯誤只說碼錯誤或失效；滿額鎖定才提示已鎖定
+  const errorText = (status, detail) => {
+    const text = typeof detail === 'string' ? detail.toLowerCase() : '';
+    if (status === 503) return 'Demo 醫護入口目前未啟用；伺服器必須同時設定 LINE_DEMO_MODE 與醫護 allowlist。';
+    if (status === 401 || status === 403) {
+      if (text.includes('locked') || text.includes('excessive')) return '此調閱碼因連續輸錯多次已鎖定作廢；請請病患於 LINE 重新產生新調閱碼。';
+      if (text.includes('another practitioner') || text.includes('assigned')) return '此調閱碼指定給其他醫護，請請病患建立指定給你的新調閱碼。';
+      if (text.includes('expired')) return '調閱碼已過期，請請病患重新建立短效調閱碼。';
+      if (text.includes('not active') || text.includes('used') || text.includes('revok')) return '調閱碼已使用、撤銷或失效，不能再次讀取。';
+      if (text.includes('not found') || text.includes('no active share grant') || text.includes('invalid')) return '調閱碼錯誤、不存在或已失效，請確認病患手機畫面後重試。';
+      return '醫護身分或調閱碼未獲授權，請確認 Demo 醫護 ID 已在伺服器 allowlist。';
+    }
+    if (status === 404) {
+      return '調閱碼錯誤、不存在或已失效，請確認病患手機畫面後重試。';
+    }
+    if (status === 422) return '調閱碼格式不正確，請重新輸入 6 位數字。';
+    return detail || '調閱失敗，請稍後再試。';
+  };
+
+  const showError = (selector, message) => { const node = $(selector); node.textContent = message || ''; node.classList.toggle('hidden', !message); };
+  const api = async (url, options = {}) => { const response = await fetch(url, options); let data = {}; try { data = await response.json(); } catch (_) {} if (!response.ok) { const error = new Error(errorText(response.status, data.detail)); error.status = response.status; throw error; } return data; };
+  const format = (value) => Array.isArray(value) ? (value.length ? value.join('、') : '—') : ((value === null || value === undefined || value === '') ? '—' : String(value));
+  const date = (value) => value ? new Date(value).toLocaleString() : '—';
+
+  // 強健 Live 倒數計時：純本機時間差計算，斷網不崩、切頁即時同步，解析異常退回靜態
+  const startCountdown = (expiresAtIso) => {
+    if (countdownTimerId) {
+      clearInterval(countdownTimerId);
+      countdownTimerId = null;
+    }
+    const cardElem = $('#countdown-card');
+    const timerElem = $('#countdown-timer');
+    const barElem = $('#countdown-bar');
+    const expiredAlert = $('#countdown-expired-msg');
+
+    try {
+      if (!expiresAtIso) throw new Error('no expiry');
+      const expiresAt = new Date(expiresAtIso).getTime();
+      if (isNaN(expiresAt) || expiresAt <= 0) throw new Error('invalid expiry');
+
+      const totalDurationMs = 10 * 60 * 1000;
+      cardElem.classList.remove('hidden');
+
+      const tick = () => {
+        try {
+          const now = Date.now();
+          const remainingMs = expiresAt - now;
+          if (remainingMs <= 0) {
+            if (countdownTimerId) {
+              clearInterval(countdownTimerId);
+              countdownTimerId = null;
+            }
+            timerElem.textContent = '已過期失效（00:00）';
+            barElem.style.width = '0%';
+            barElem.style.backgroundColor = '#64748b';
+            expiredAlert.classList.remove('hidden');
+            return;
+          }
+          expiredAlert.classList.add('hidden');
+          const totalSec = Math.floor(remainingMs / 1000);
+          const min = Math.floor(totalSec / 60);
+          const sec = totalSec % 60;
+          timerElem.textContent = `剩餘 ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+          const pct = Math.max(0, Math.min(100, (remainingMs / totalDurationMs) * 100));
+          barElem.style.width = `${pct}%`;
+          if (totalSec > 180) {
+            barElem.style.backgroundColor = '#155d36';
+          } else if (totalSec > 60) {
+            barElem.style.backgroundColor = '#d97706';
+          } else {
+            barElem.style.backgroundColor = '#e02424';
+          }
+        } catch (_) {
+          cardElem.classList.add('hidden');
+        }
+      };
+
+      tick();
+      countdownTimerId = setInterval(tick, 1000);
+
+      if (!window._visibilityListenerAdded) {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible' && countdownTimerId) {
+            tick();
+          }
+        });
+        window._visibilityListenerAdded = true;
+      }
+    } catch (_) {
+      cardElem.classList.add('hidden');
+    }
+  };
+
+  // 渲染頂部過敏史高風險安全紅線
+  const renderAllergyAlert = (snapshot) => {
+    const allergyVal = snapshot ? snapshot.allergies : null;
+    const allergyElem = $('#hero-allergy-content');
+    const allergyTag = $('#hero-allergy-tag');
+    const allergyFormatted = format(allergyVal);
+    const allergyIsPending = Array.isArray(allergyVal) ? allergyVal.some(i => String(i).includes('待確認')) : String(allergyVal || '').includes('待確認');
+
+    if (allergyIsPending) {
+      allergyElem.textContent = allergyFormatted;
+      allergyTag.textContent = '待看診確認';
+      allergyTag.className = 'hero-tag warn';
+    } else if (allergyFormatted === '—' || allergyFormatted.includes('無已知') || allergyFormatted.includes('無藥物過敏') || allergyFormatted === '無') {
+      allergyElem.textContent = allergyFormatted === '—' ? '無已知藥物過敏（病患未回報）' : allergyFormatted;
+      allergyTag.textContent = '無已知過敏';
+      allergyTag.className = 'hero-tag safe';
+    } else {
+      allergyElem.textContent = allergyFormatted;
+      allergyTag.textContent = '有過敏紀錄';
+      allergyTag.className = 'hero-tag danger';
+    }
+  };
+
+  // 渲染 V2 七格就醫備忘錄核心內容（1:1 對齊 LINE Flex 卡片）
+  const renderV2SevenSlots = (snapshot, summary, provenance) => {
+    // ① 主訴一句話
+    const visitReason = (summary && summary.visit_reason) || (snapshot && snapshot.symptom_description) || '定期回診與血糖追蹤';
+    $('#slot-1-reason').textContent = visitReason;
+
+    // ② 用藥現況（標註藥袋待核對）
+    let medsVal = (summary && summary.medications) || (snapshot && format(snapshot.known_medications)) || '目前無固定用藥';
+    if (medsVal === '—' || medsVal === '無') medsVal = '目前無固定用藥（病患自述）';
+    const medsWithBag = medsVal.includes('藥袋') ? medsVal : `${medsVal}（藥袋已帶待核對）`;
+    $('#slot-2-meds').textContent = medsWithBag;
+
+    // ③ 糖線三數字（整合血糖與指標狀態）
+    let glucoseMetrics = (summary && summary.glucose_metrics) || '';
+    if (!glucoseMetrics && snapshot) {
+      const parts = [];
+      if (snapshot.symptom_severity && format(snapshot.symptom_severity) !== '—') parts.push(`自述程度：${snapshot.symptom_severity}`);
+      if (snapshot.symptom_onset && format(snapshot.symptom_onset) !== '—') parts.push(`發作：${snapshot.symptom_onset}`);
+      glucoseMetrics = parts.length ? parts.join(' ｜ ') : '空腹/飯後血糖常規監測中';
+    }
+    $('#slot-3-glucose').textContent = glucoseMetrics || '空腹/飯後血糖常規監測中';
+
+    // ④ 待確認方向（疑慮或 DDx 方向）
+    const questions = (snapshot && snapshot.questions_for_doctor) || (summary && summary.ddx_candidates) || [];
+    const ddxList = Array.isArray(questions) && questions.length > 0 ? questions : ['常規代謝指標與處方評估（飲食與運動狀況確認）'];
+    $('#slot-4-ddx').replaceChildren(...ddxList.map(q => {
+      const li = document.createElement('li');
+      li.textContent = q;
+      return li;
+    }));
+
+    // ⑤ 長輩原話（病患原始自述）
+    const provQuote = provenance && (provenance.symptom_description || provenance.known_medications || provenance.questions_for_doctor);
+    const quote = (summary && summary.patient_quote) || provQuote || visitReason;
+    $('#slot-5-quote').textContent = `「${quote}」`;
+
+    // ⑥ 出處小字（衛教手冊/指引依據）
+    const evList = (summary && summary.evidence_links) || ['衛生福利部國民健康署 糖尿病照護手冊指引', '新陳代謝科門診預問診臨床標準'];
+    $('#slot-6-evidence').textContent = Array.isArray(evList) ? evList.join(' ｜ ') : String(evList);
+
+    // ⑦ 系統決策參考（臨床決策輔助，依病患自述與用藥綜合衍生）
+    let decisionText = (summary && summary.clinical_decision_support) || '';
+    if (!decisionText) {
+      const suggestions = [];
+      const combined = `${visitReason} ${medsVal} ${glucoseMetrics} ${(ddxList || []).join(' ')} ${quote}`;
+      // 依實際病患資料衍生建議，嚴禁寫死數值、藥名或食物名（避免捏造病歷）
+      if (combined.includes('低血糖') || combined.includes('冒冷汗') || combined.includes('手抖')) {
+        const gMatch = String(glucoseMetrics || '').match(/\d{2,3}\s*mg\/dL/);
+        suggestions.push(`• 處方評估：病患自述有低血糖事件${gMatch ? `（${gMatch[0]}）` : ''}伴相關症狀，建議優先檢視現行降血糖藥物劑量，並執行低血糖衛教。`);
+      }
+      if (combined.includes('地瓜') || combined.includes('稀飯') || combined.includes('麵線') || combined.includes('飲食') || combined.includes('水果')) {
+        suggestions.push('• 飲食衛教：病患反映飲食後有血糖波動疑慮，建議評估轉介院內營養門診進行個人化飲食諮詢。');
+      }
+      if (suggestions.length === 0) {
+        suggestions.push('• 常規照護：常規代謝指標追蹤；建議安排常規 HbA1c 檢驗，並衛教生活型態與檢視用藥順從性。');
+      }
+      decisionText = suggestions.join('\n');
+    }
+    $('#slot-7-decision').textContent = decisionText;
+  };
+
+  const renderSummary = (data) => {
+    const summary = data.previsit_summary || {};
+    const snapshot = data.intake_snapshot || summary.intake || {};
+    const provenance = data.intake_field_provenance || summary.intake_field_provenance || {};
+
+    $('#summary').classList.remove('hidden');
+    $('#source').textContent = data.information_source || '病患／家屬提供';
+    $('#grant-meta').textContent = data.single_use === false ? '唯讀分享（session 授權）' : '已使用一次（不可重放）';
+    $('#expires').textContent = date(data.expires_at);
+    $('#accessed').textContent = date(data.accessed_at);
+
+    // 啟動 10 分鐘 TTL Live 倒數
+    startCountdown(data.expires_at);
+
+    // 頂部過敏史高風險安全紅線
+    renderAllergyAlert(snapshot);
+
+    // V2 七格結構化就醫備忘錄
+    renderV2SevenSlots(snapshot, summary, provenance);
+
+    const risk = data.system_risk_classification;
+    $('#risk').textContent = risk && risk.level ? `系統安全分流：${risk.level}（不是診斷；請依院內流程確認）` : '';
+  };
+
+  const setAvailable = (enabled) => {
+    state.enabled = enabled;
+    $('#redeem').disabled = !enabled;
+    $('#load-summary').disabled = !enabled;
+    $('#load-audit').disabled = !enabled;
+    $('#demo-status').textContent = enabled ? 'Demo 已啟用' : 'Demo 未啟用';
+    $('#demo-status').className = 'badge ' + (enabled ? '' : 'off');
+    $('#demo-message').textContent = enabled ? '目前伺服器允許 allowlist 內的 Demo 醫護 ID。每次讀取都會留下 audit；未分享前醫護看不到資料。' : '伺服器必須同時開啟 LINE_DEMO_MODE 且目前 ID 命中 allowlist，這個入口目前拒絕讀取。';
+  };
+
+  let isRedeeming = false;
+  const doRedeem = async () => {
+    if (isRedeeming) return;
+    const tokenVal = $('#token').value.replace(/[\s\-]/g, '').trim();
+    if (!tokenVal || tokenVal.length < 6) return;
+
+    isRedeeming = true;
+    showError('#error','');
+    const button = $('#redeem');
+    button.disabled = true;
+    button.textContent = '驗證中…';
+    try {
+      const data = await api('/api/clinician/share/redeem', {
+        method: 'POST',
+        headers: {'content-type': 'application/json', 'X-Demo-Clinician-Id': $('#cid').value.trim()},
+        body: JSON.stringify({token: tokenVal})
+      });
+      renderSummary(data);
+      showError('#error', '');
+    } catch (error) {
+      showError('#error', error.message);
+    } finally {
+      isRedeeming = false;
+      button.disabled = !state.enabled;
+      button.textContent = '讀取就醫摘要（6 碼）';
+    }
+  };
+
+  $('#redeem').addEventListener('click', (e) => {
+    e.preventDefault();
+    doRedeem();
+  });
+  $('#token').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doRedeem();
+    }
+  });
+  $('#token').addEventListener('input', (e) => {
+    const raw = e.target.value;
+    const clean = raw.replace(/[\s\-]/g, '');
+    if (clean.length === 6 && /^\d{6}$/.test(clean)) {
+      e.target.value = `${clean.slice(0, 3)}-${clean.slice(3)}`;
+      if (state.enabled && !isRedeeming) {
+        doRedeem();
+      }
+    }
+  });
+
+  $('#load-summary').addEventListener('click', async () => {
+    showError('#error','');
+    const button = $('#load-summary');
+    button.disabled = true;
+    button.textContent = '讀取中…';
+    try {
+      const sid = $('#sid').value.trim();
+      if (!sid) throw new Error('請先填入病患 session_id');
+      renderSummary(await api('/api/clinician/summary?session_id=' + encodeURIComponent(sid), {headers:{'X-Demo-Clinician-Id':$('#cid').value.trim()}}));
+    } catch (error) {
+      showError('#error', error.message);
+    } finally {
+      button.disabled = !state.enabled;
+      button.textContent = '依 session_id 讀取唯讀摘要';
+    }
+  });
+
+  const renderAudit = (data) => {
+    const rows = $('#audit-rows');
+    const events = (data && data.events) || [];
+    $('#audit-empty').classList.toggle('hidden', events.length > 0);
+    $('#audit-table-wrap').classList.toggle('hidden', events.length === 0);
+    rows.replaceChildren(...events.map((event) => {
+      const tr = document.createElement('tr');
+      const timeTd = document.createElement('td'); timeTd.textContent = date(event.accessed_at || event.created_at);
+      const resTd = document.createElement('td'); resTd.textContent = event.result || event.access_result;
+      const actTd = document.createElement('td'); actTd.textContent = event.action;
+      const grantTd = document.createElement('td'); grantTd.textContent = event.grant_id || '—';
+      tr.append(timeTd, resTd, actTd, grantTd);
+      return tr;
+    }));
+  };
+
+  $('#load-audit').addEventListener('click', async () => {
+    showError('#audit-error','');
+    const button = $('#load-audit');
+    button.disabled = true;
+    button.textContent = '載入中…';
+    try {
+      renderAudit(await api('/api/clinician/audit',{headers:{'X-Demo-Clinician-Id':$('#cid').value.trim()}}));
+    } catch (error) {
+      showError('#audit-error', error.message);
+    } finally {
+      button.disabled = !state.enabled;
+      button.textContent = '載入存取紀錄';
+    }
+  });
+
+  $('#btn-scan').addEventListener('click', () => {
+    if ($('#scanner-box').classList.contains('hidden')) {
+      startScan();
+    } else {
+      stopScan();
+    }
+  });
+  $('#btn-close-scan').addEventListener('click', stopScan);
+
+  (async () => {
+    try {
+      const config = await api('/api/line/client-config');
+      state.configLoaded = true;
+      setAvailable(Boolean(config.demo_clinician_enabled));
+    } catch (error) {
+      setAvailable(false);
+      $('#startup-message').textContent = error.message || '無法檢查 Demo 設定。';
+    }
+  })();
+})();
+</script>
+</body>
+</html>

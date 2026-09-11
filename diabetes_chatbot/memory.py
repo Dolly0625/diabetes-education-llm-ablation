@@ -115,6 +115,7 @@ def get_default_template(patient_id: str = "demo_patient") -> dict[str, Any]:
         },
         "reported_symptoms": [],     # 例如: ["常常肚子脹氣"]
         "hypo_history": "近期無低血糖事件",
+        "diet_lifestyle": "",
         "last_previsit_summary": "",
         "ddx_candidates": [],
         "evidence_links": []
@@ -136,6 +137,8 @@ def load_patient_record(file_path: Path | str = DEFAULT_RECORD_FILE) -> dict[str
                 data["ddx_candidates"] = []
             if "evidence_links" not in data:
                 data["evidence_links"] = []
+            if "diet_lifestyle" not in data:
+                data["diet_lifestyle"] = ""
             # 防禦性清洗歷史髒資料：血壓不可作為血糖指標
             latest_g = data.get("glucose_metrics", {}).get("latest", "")
             if any(k in latest_g for k in ["血壓", "收縮壓", "舒張壓", "收縮", "舒張"]):
@@ -161,29 +164,57 @@ def save_patient_record(record: dict[str, Any], file_path: Path | str = DEFAULT_
         json.dump(record, f, ensure_ascii=False, indent=2)
 
 
+def is_same_medication(name1: str, name2: str) -> bool:
+    """
+    雙向子字串包含判斷：兩字串任一為另一之子字串即視為同一藥（雙方長度需 >= 2 防誤傷）
+    例如：「癲通」與「癲通 長效膜衣錠 ２００毫克（卡巴氮平）」視為同一藥。
+    """
+    if not name1 or not name2:
+        return False
+    s1 = str(name1).strip().lower()
+    s2 = str(name2).strip().lower()
+    if len(s1) < 2 or len(s2) < 2:
+        return False
+    return s1 in s2 or s2 in s1
+
+
 def update_medications(new_meds: list[str], source: str = "藥袋照片辨識", file_path: Path | str = DEFAULT_RECORD_FILE, raw_text: str = "") -> None:
-    """更新或合併用藥紀錄 (去重增補)，支援換藥核對自動標註舊藥停用"""
+    """更新或合併用藥紀錄 (去重增補)，支援換藥核對自動標註舊藥停用，具備雙向子字串去重"""
     record = load_patient_record(file_path)
-    existing_med_names = {m["name"] for m in record.get("medications", [])}
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     is_switch = bool(raw_text) and is_medication_switch_text(raw_text)
     if is_switch:
         _apply_medication_switch(record, new_meds)
-        existing_med_names = {m["name"] for m in record.get("medications", [])}
     
     for med in new_meds:
         med_clean = med.strip()
         # 排除無用藥或否定語義字串
         if any(neg in med_clean for neg in ["無用藥", "沒吃藥", "未服用", "無記錄", "未用藥", "沒有用藥", "不清楚", "目前無"]):
             continue
-        if med_clean and med_clean not in existing_med_names:
+        if not med_clean:
+            continue
+
+        matched_idx = -1
+        for idx, m in enumerate(record.get("medications", [])):
+            if is_same_medication(med_clean, m.get("name", "")):
+                matched_idx = idx
+                break
+
+        if matched_idx == -1:
             record["medications"].append({
                 "name": med_clean,
                 "source": source,
                 "recorded_at": now_str
             })
-            existing_med_names.add(med_clean)
+        else:
+            # 重複時保留資訊量較高（較長）條目，短名被吸收不新增
+            existing_item = record["medications"][matched_idx]
+            existing_name = existing_item.get("name", "")
+            if len(med_clean) > len(existing_name):
+                existing_item["name"] = med_clean
+                existing_item["source"] = source
+                existing_item["recorded_at"] = now_str
             
     save_patient_record(record, file_path)
 
@@ -235,7 +266,8 @@ def format_patient_context(file_path: Path | str = DEFAULT_RECORD_FILE) -> str:
     
     ddx=_validate_ddx_candidates(record.get("ddx_candidates",[]))
     evids=_validate_evidence_links(record.get("evidence_links",[]))
-    if not meds and not glucose and not symptoms and not last_summary and not ddx and not evids and not discontinued:
+    diet = str(record.get("diet_lifestyle", "")).strip()
+    if not meds and not glucose and not symptoms and not last_summary and not ddx and not evids and not discontinued and not diet:
         return ""
         
     lines = ["【病患長期健康檔案 (Longitudinal Health Profile)】："]
@@ -251,6 +283,8 @@ def format_patient_context(file_path: Path | str = DEFAULT_RECORD_FILE) -> str:
         
     if symptoms:
         lines.append(f"- 過去回報之不適/副作用：{', '.join(symptoms)}")
+    if diet:
+        lines.append(f"- 近期飲食習慣與生活記錄：{diet}")
     if ddx:
         lines.append("- 門診交班待確認方向（人話、待確認）：")
         for idx,d in enumerate(ddx,1):
@@ -450,15 +484,31 @@ def update_from_planner_assessment(assessment, file_path: Path | str = DEFAULT_R
     if getattr(slots, "medications_status", None) and slots.medications:
         # 若口述具體藥物或用法
         med_str = slots.medications.strip()
-        existing_med_names = {m["name"] for m in record.get("medications", [])}
         is_bag_valid = any(k in med_str for k in ["藥袋", "待核對", "攜帶"])
-        if med_str and med_str not in existing_med_names and ("未" not in med_str or is_bag_valid):
-            record["medications"].append({
-                "name": med_str,
-                "source": "LLM Planner 深層語意解析",
-                "recorded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-            updated = True
+        if med_str and ("未" not in med_str or is_bag_valid):
+            if not any(neg in med_str for neg in ["無用藥", "沒吃藥", "未服用", "無記錄", "未用藥", "沒有用藥", "不清楚", "目前無"]):
+                matched_idx = -1
+                for idx, m in enumerate(record.get("medications", [])):
+                    if is_same_medication(med_str, m.get("name", "")):
+                        matched_idx = idx
+                        break
+
+                if matched_idx == -1:
+                    record["medications"].append({
+                        "name": med_str,
+                        "source": "LLM Planner 深層語意解析",
+                        "recorded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    updated = True
+                else:
+                    existing_item = record["medications"][matched_idx]
+                    existing_name = existing_item.get("name", "")
+                    # 重複時保留資訊量較高（較長）條目，短名被吸收不新增
+                    if len(med_str) > len(existing_name):
+                        existing_item["name"] = med_str
+                        existing_item["source"] = "LLM Planner 深層語意解析"
+                        existing_item["recorded_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        updated = True
             
     # 2. 更新血糖
     if getattr(slots, "glucose_metrics_status", None) and slots.glucose_metrics:
@@ -485,6 +535,13 @@ def update_from_planner_assessment(assessment, file_path: Path | str = DEFAULT_R
             record["reported_symptoms"].append(c_str)
             updated = True
             
+    # 5. 更新飲食習慣與生活記錄
+    if getattr(slots, "diet_lifestyle_status", None) and getattr(slots, "diet_lifestyle", None):
+        dl_str = str(slots.diet_lifestyle).strip()
+        if dl_str and "未" not in dl_str and record.get("diet_lifestyle") != dl_str:
+            record["diet_lifestyle"] = dl_str
+            updated = True
+
     if _accumulate_ddx_and_evidence(record, assessment):
         updated=True
     if updated:
