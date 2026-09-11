@@ -692,6 +692,7 @@ class RoleplayRunner:
         pending_patient_retry_metadata: list[dict[str, Any]] = []
         terminal_patient_turn: Optional[dict[str, Any]] = None
         termination_reason: Optional[str] = None
+        error_metadata: Optional[dict[str, Any]] = None
         if resume:
             if not checkpoint_path.exists():
                 raise FileNotFoundError(f"resume requested but checkpoint is missing: {checkpoint_path}")
@@ -706,9 +707,16 @@ class RoleplayRunner:
             if pending_patient_turn is not None:
                 patient_messages.append(pending_patient_turn["patient_utterance"])
             saved_reason = saved.get("termination_reason")
+            saved_error_metadata = saved.get("error_metadata")
             if saved_reason != "ERROR":
                 termination_reason = saved_reason
                 terminal_patient_turn = saved.get("terminal_patient_turn")
+                error_metadata = saved_error_metadata
+            else:
+                error_metadata = saved_error_metadata
+                if len(records) >= int(profile["max_turns"]):
+                    termination_reason = "ERROR"
+                    terminal_patient_turn = saved.get("terminal_patient_turn")
         elif run_dir.exists():
             raise FileExistsError(f"run directory already exists; use resume=True: {run_dir}")
 
@@ -790,6 +798,13 @@ class RoleplayRunner:
 
             if harness_turn.get("termination_reason") in {"COMMON_INPUT_BLOCK", "ERROR"}:
                 termination_reason = harness_turn["termination_reason"]
+                error_metadata = {
+                    "stage": "harness",
+                    "turn": turn_number,
+                    "termination_reason": termination_reason,
+                    "error": harness_turn.get("error"),
+                    "retry_metadata": harness_turn.get("retry_metadata") if harness_turn.get("retry_metadata") is not None else retry_metadata,
+                }
             elif turn_number == int(profile["max_turns"]):
                 termination_reason = "MAX_TURNS"
 
@@ -803,7 +818,7 @@ class RoleplayRunner:
                 "pending_patient_retry_metadata": [],
                 "terminal_patient_turn": None,
                 "termination_reason": termination_reason,
-                "error_metadata": None,
+                "error_metadata": error_metadata,
             })
             if termination_reason:
                 break
@@ -820,6 +835,7 @@ class RoleplayRunner:
             records=records,
             terminal_patient_turn=terminal_patient_turn,
             termination_reason=termination_reason,
+            error_metadata=error_metadata,
         )
         self._persist_terminal_state(run_dir=run_dir, checkpoint_path=checkpoint_path, result=result)
         return result
@@ -1007,6 +1023,153 @@ def run_formal_pilot(patient_id: str, output_root: Optional[Path] = None) -> dic
     }
     _write_json_atomic(pilot_root / "formal_pilot_summary.json", summary)
     return summary
+
+
+def _is_transient_retry_error(entry: Any) -> bool:
+    """Check if a retry attempt metadata entry represents a recognized transient failure."""
+    if not isinstance(entry, dict):
+        return True
+
+    outcome = entry.get("outcome")
+    if outcome == "success":
+        return True
+
+    err_type = str(entry.get("error_type") or entry.get("type") or "").strip()
+    err_msg = str(entry.get("error") or entry.get("message") or "").strip()
+
+    if not err_type and not err_msg and outcome is None:
+        return True
+
+    if err_type == "PatientAgentContractError":
+        return True
+
+    non_retryable_types = {
+        "ValueError", "TypeError", "KeyError", "AssertionError",
+        "FileNotFoundError", "PermissionError", "AttributeError", "JSONDecodeError",
+    }
+    if err_type in non_retryable_types:
+        return False
+
+    status_code = entry.get("status_code") or entry.get("status")
+    if status_code is not None:
+        try:
+            code_int = int(status_code)
+            if code_int in NON_RETRYABLE_STATUS_CODES:
+                return False
+            if code_int in RETRYABLE_STATUS_CODES:
+                return True
+        except Exception:
+            pass
+
+    transient_types = {
+        "APITimeoutError", "APIConnectionError", "RateLimitError", "InternalServerError",
+        "TimeoutError", "ConnectionError",
+    }
+    if err_type in transient_types:
+        return True
+
+    combined = f"{err_type} {err_msg}".lower()
+    if any(marker in combined for marker in _STRING_FALLBACK_MARKERS):
+        return True
+
+    if outcome in ("retry", "error") or entry.get("error") is not None:
+        return False
+
+    return True
+
+
+def _validate_record_clean(record: dict[str, Any], context: str = "") -> None:
+    turn_str = f"{context}turn {record.get('turn', '?')}"
+
+    # 1. 檢查 harness_turn
+    harness_turn = record.get("harness_turn")
+    if isinstance(harness_turn, dict):
+        h_term = harness_turn.get("termination_reason")
+        if h_term == "ERROR":
+            raise ValueError(f"Clean validation failed at {turn_str}: harness_turn termination_reason is ERROR")
+        h_err = harness_turn.get("error")
+        if h_err is not None:
+            raise ValueError(f"Clean validation failed at {turn_str}: harness_turn error is non-null ({h_err!r})")
+
+        h_retry = harness_turn.get("retry_metadata")
+        if isinstance(h_retry, list):
+            for entry in h_retry:
+                if not _is_transient_retry_error(entry):
+                    raise ValueError(
+                        f"Clean validation failed at {turn_str}: harness_turn retry_metadata contains non-transient error: {entry!r}"
+                    )
+
+    # 2. 檢查 patient_turn
+    patient_turn = record.get("patient_turn")
+    if isinstance(patient_turn, dict):
+        p_term = patient_turn.get("termination_reason")
+        if p_term == "ERROR":
+            raise ValueError(f"Clean validation failed at {turn_str}: patient_turn termination_reason is ERROR")
+
+    # 3. 檢查 retry_metadata 與 patient_retry_metadata
+    for meta_key in ("retry_metadata", "patient_retry_metadata"):
+        entries = record.get(meta_key)
+        if isinstance(entries, list):
+            for entry in entries:
+                if not _is_transient_retry_error(entry):
+                    raise ValueError(
+                        f"Clean validation failed at {turn_str}: {meta_key} contains non-transient error: {entry!r}"
+                    )
+
+
+def validate_clean_execution(data: Any, context: str = "") -> None:
+    """Recursively validate execution payload ensuring no ERROR termination, non-null errors, or non-transient retries.
+
+    Accepts:
+    - Path or str: reads JSON file from disk.
+    - Dict: pilot/batch summary, roleplay_result, checkpoint, or single record.
+    - List: list of runs or list of records.
+
+    Raises:
+    - ValueError: if any termination is ERROR, error is non-null, or retry contains non-transient failure.
+    """
+    if isinstance(data, (str, Path)):
+        p = Path(data)
+        if not p.exists():
+            raise FileNotFoundError(f"Clean validation target not found: {p}")
+        data = json.loads(p.read_text(encoding="utf-8"))
+
+    if isinstance(data, list):
+        for idx, item in enumerate(data):
+            validate_clean_execution(item, context=f"{context}[{idx}] ")
+        return
+
+    if not isinstance(data, dict):
+        return
+
+    run_id = data.get("run_id", context.strip() or "payload")
+    term = data.get("termination_reason")
+    if term == "ERROR":
+        raise ValueError(
+            f"Clean validation failed at {run_id}: termination_reason is ERROR (error_metadata={data.get('error_metadata')!r})"
+        )
+
+    err_meta = data.get("error_metadata")
+    if err_meta is not None:
+        raise ValueError(f"Clean validation failed at {run_id}: error_metadata is non-null ({err_meta!r})")
+
+    # Pilot / Batch summary 結構: data["runs"]
+    if "runs" in data and isinstance(data["runs"], list):
+        for run_idx, run_item in enumerate(data["runs"]):
+            validate_clean_execution(run_item, context=f"runs[{run_idx}] ")
+
+    # Run payload 結構: data["records"]
+    if "records" in data and isinstance(data["records"], list):
+        for rec in data["records"]:
+            if isinstance(rec, dict):
+                _validate_record_clean(rec, context=f"{run_id} ")
+    elif "harness_turn" in data:
+        # 單一 record 結構
+        _validate_record_clean(data, context=f"{run_id} ")
+
+
+validate_clean_run = validate_clean_execution
+validate_clean_trajectory = validate_clean_execution
 
 
 def main() -> None:
