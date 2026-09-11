@@ -6,7 +6,10 @@ Enforces:
   - Immutable model (gemini-3.7-flash) and temperature (0.0)
   - Formal 12x4 batch input validation (48 trajectories, 12 patients x 4 opaque conditions)
   - Rejection of pilot, canary, and raw A-D condition leaks
+  - Safe loading of canonical project .env without leaking secrets
+  - Pre-flight API key check fail-closed before any external calls
   - Atomic persistence of checkpoints and final judge_results.jsonl
+  - Artifact paths anchored to PROJECT_ROOT/llm_ablation_paper/artifacts
 """
 
 import argparse
@@ -16,6 +19,11 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+ARTIFACTS_ROOT = PROJECT_ROOT / "llm_ablation_paper" / "artifacts"
 
 from llm_ablation_paper.workstream_5_judge_analysis.judge_runner import (
     JudgeRunner,
@@ -32,9 +40,20 @@ from llm_ablation_paper.workstream_5_judge_analysis.sanitizer import (
 
 FORMAL_CONFIRM_TOKEN = "CONFIRM_FORMAL_WS5_JUDGE_RUN"
 DEFAULT_CANARY_PATH = Path(__file__).parent / "canary_trajectories.jsonl"
-DEFAULT_INPUT_DIR = Path("artifacts/blinded_transcripts")
-DEFAULT_CHECKPOINT_DIR = Path("artifacts/judge_raw/checkpoints")
-DEFAULT_OUTPUT_FILE = Path("artifacts/judge_raw/judge_results.jsonl")
+DEFAULT_INPUT_DIR = ARTIFACTS_ROOT / "blinded_transcripts"
+DEFAULT_CHECKPOINT_DIR = ARTIFACTS_ROOT / "judge_raw" / "checkpoints"
+DEFAULT_OUTPUT_FILE = ARTIFACTS_ROOT / "judge_raw" / "judge_results.jsonl"
+
+
+def ensure_canonical_env_loaded() -> None:
+    """Safely load canonical .env from project root with override=False without leaking secrets."""
+    env_file = PROJECT_ROOT / ".env"
+    if env_file.exists():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(dotenv_path=env_file, override=False)
+        except ImportError:
+            pass
 
 
 def load_blinded_trajectories(input_path: Path) -> List[Dict[str, Any]]:
@@ -154,19 +173,19 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "--input-path",
         type=Path,
         default=DEFAULT_INPUT_DIR,
-        help="Path to blinded trajectories directory or .jsonl file (default: artifacts/blinded_transcripts)",
+        help="Path to blinded trajectories directory or .jsonl file (default: PROJECT_ROOT/llm_ablation_paper/artifacts/blinded_transcripts)",
     )
     parser.add_argument(
         "--checkpoint-dir",
         type=Path,
         default=DEFAULT_CHECKPOINT_DIR,
-        help="Directory for atomic checkpoint storage and resume (default: artifacts/judge_raw/checkpoints)",
+        help="Directory for atomic checkpoint storage and resume (default: PROJECT_ROOT/llm_ablation_paper/artifacts/judge_raw/checkpoints)",
     )
     parser.add_argument(
         "--output-file",
         type=Path,
         default=DEFAULT_OUTPUT_FILE,
-        help="Path for aggregate JSONL results file (default: artifacts/judge_raw/judge_results.jsonl)",
+        help="Path for aggregate JSONL results file (default: PROJECT_ROOT/llm_ablation_paper/artifacts/judge_raw/judge_results.jsonl)",
     )
     parser.add_argument(
         "--canary-file",
@@ -195,6 +214,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def run_judge_cli(args: Optional[List[str]] = None) -> int:
+    ensure_canonical_env_loaded()
     opts = parse_args(args)
 
     print("================================================================")
@@ -202,13 +222,14 @@ def run_judge_cli(args: Optional[List[str]] = None) -> int:
     print("================================================================")
     print(f"Mode:              {opts.mode.upper()}")
     print(f"Model (Canonical): {CANONICAL_JUDGE_MODEL} (temp={CANONICAL_JUDGE_TEMPERATURE})")
+    print(f"Project Root:      {PROJECT_ROOT}")
     print(f"Input Path:        {opts.input_path}")
     print(f"Checkpoint Dir:    {opts.checkpoint_dir}")
     print(f"Output File:       {opts.output_file}")
     print(f"Canary Path:       {opts.canary_file}")
     print("================================================================")
 
-    # 1. Formal Confirmation Gate
+    # 1. Formal Confirmation Gate & Key Verification (Fail-closed before ANY network/canary calls)
     if opts.mode == "live":
         if opts.confirm_formal_judge != FORMAL_CONFIRM_TOKEN:
             print(
@@ -221,6 +242,16 @@ def run_judge_cli(args: Optional[List[str]] = None) -> int:
         if opts.allow_partial:
             print(
                 "\n[ERROR] --allow-partial is strictly forbidden in live formal evaluation.",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Check API key presence safely without printing value
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key or not str(api_key).strip():
+            print(
+                "\n[ERROR] GEMINI_API_KEY environment variable is not set. "
+                "Formal live evaluation requires a valid API key.",
                 file=sys.stderr,
             )
             return 1
