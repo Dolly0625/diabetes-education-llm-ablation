@@ -149,7 +149,7 @@ def test_fingerprints_match_manifest_exactly():
     assert fingerprints["planner_system_prompt_sha256"] == planner_system_prompt_sha256()
     assert fingerprints["canonical_tool_schema_sha256"] == canonical_tool_schema_sha256()
     assert talker_prompt_template_bundle_sha256() != talker_base_prompt_sha256()
-    assert manifest["status"] == "REVIEW"
+    assert manifest["status"] == "READY_FOR_FINAL_REVIEW"
     assert manifest["final_frozen"] is False
     assert manifest["experiment_ready"] is False
     assert manifest["formal_experiment_state"] == "BLOCKED"
