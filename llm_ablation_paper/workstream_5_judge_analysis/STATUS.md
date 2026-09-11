@@ -1,9 +1,9 @@
 # Workstream 5（盲測 LLM Judge 與統計）狀態與進度報告
 
 - **負責工作流**：Workstream 5（盲測 LLM Judge、統計、報表與結果章素材）
-- **當前分支**：`ws5-judge-analysis`
-- **基準 Tag**：`llm-ablation-ws1-freeze-v1.1`（Commit: `2967d56`）
-- **當前狀態**：`READY_FOR_REVIEW`（P0/P1 全部修正項已就緒，Schema/Invariants、暫態重試、Canary、原子 Checkpoint/Resume 與統計管線離線測試全數通過）
+- **當前分支**：`m21-ws5-judge-cli`
+- **基準 Commit**：`e56983a8fcf56b0e0ae999f45579498a70bfcb52`（main）
+- **當前狀態**：`READY_FOR_REVIEW`（M2.1 兩支 CLI 與 34 項離線測試全數通過）
 - **正式評估阻塞判定**：`BLOCKED`（等待 WS1 執行並交付 48 條正式 blinded transcripts，以及外部 opaque condition mapping）
 
 ---
@@ -12,18 +12,20 @@
 
 | 檔案名稱 | 類型 | 實作與研究誠信細節 |
 |---|---|---|
+| `run_judge.py` | CLI 執行器 | 提供評估 CLI 入口，實作 `--confirm-formal-judge` 守門閘門、48 條（12×4）完整性檢驗、拒絕 pilot/canary/raw 洩漏、支援 resume 與原子寫入 `judge_results.jsonl`，固定模型與溫度不允許覆寫。 |
+| `run_analysis.py` | CLI 分析器 | 提供統計產表 CLI 入口，驗證評估完整性，支援可選 `--mapping-file` 進行解盲匯總（mapping 絕不進 prompt/adapter），原子產出 `summary.json`、`main_table.md`、`main_table.tex`、`results.csv` 與圖形。 |
 | `judge_prompt.md` | 評審指引 | LLM Judge 系統提示詞、五大維度（0/1/2 分）錨點與防條件洩漏約束。 |
 | `judge_schema.json` | 契約約束 | 符合 Draft-7 規範之嚴格 JSON Schema，限制分數值域、枚舉分類與引證格式。 |
 | `critical_failure_taxonomy.md` | 分類標準 | 定義六大嚴重失敗（處方越權、確診、神效、急症 canary、認可危險、證據錨定矛盾）。主資料集對齊亞急性低血糖情境。 |
 | `canary_trajectories.jsonl` | 檢驗資料集 | 包含 PASS 與各大類別 FAIL 的基準對話軌跡，附帶預期 critical flag 與 expected_failure_types。 |
 | `sanitizer.py` | 脫敏與防洩漏 | 物理剝除敏感欄位；新增 `validate_blinded_input_trajectory` 嚴格拒絕未盲化輸入；智慧放行正常臨床英文字母（如維他命 C）。 |
-| `judge_runner.py` | 執行器 | Draft 7 嚴格驗證、跨欄位不變量檢驗、暫態錯誤專用指數退避重試（1/2/4/8s）、安全金鑰與端點校驗、raw/parsed 分開保存、failure_types 多數決共識、原子 Checkpoint 寫入與 Resume。 |
-| `analysis_pipeline.py` | 統計管線 | 補齊未暴露工具調用率、未解鎖產卡率、模型調用數；實作 Missing != Zero 規範（N=0 時輸出 None 並保留分母）；Wilson score 嚴格限制 confidence=0.95。 |
+| `judge_runner.py` | 執行器核心 | Draft 7 嚴格驗證、跨欄位不變量檢驗、暫態錯誤專用指數退避重試（1/2/4/8s）、安全金鑰與端點校驗、raw/parsed 分開保存、failure_types 多數決共識、原子 Checkpoint 寫入與 Resume。 |
+| `analysis_pipeline.py` | 統計管線核心 | 補齊未暴露工具調用率、未解鎖產卡率、模型調用數；實作 Missing != Zero 規範（N=0 時輸出 None 並保留分母）；Wilson score 嚴格限制 confidence=0.95。 |
 | `format_results.py` | 表格格式化 | 產出 Markdown、LaTeX 表格（安全處理 None/null），並提供空白未填入假數據的 `results.csv` 模板。 |
 | `plot_failure_taxonomy.py` | 視覺化 | 產出 ASCII 長條圖與 Headless Matplotlib PNG 圖形生成腳本。 |
 | `results.csv` | 空白模板 | 僅包含欄位表頭與 A/B/C/D 留白行，絕不填入偽造數據。 |
 | `evaluation_methodology.md` | 方法素材 | 評估方法、指標定義、研究誠信防護與論文主張邊界指引。 |
-| `tests/` | 測試套件 | 包含完整的單元與整合測試，覆蓋全部 P0/P1 要求。 |
+| `tests/` | 測試套件 | 包含完整的單元與 CLI 整合測試，覆蓋全部 P0/P1 與 M2.1 需求（共 34 項測試）。 |
 
 ---
 
