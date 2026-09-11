@@ -1,6 +1,7 @@
 {
+  "_description": "Raw/internal execution trajectory example (non-blinded); in blinded evaluation, 'condition' is removed and 'condition_secret' is assigned an opaque identifier.",
   "run_id": "RUN-WS3-EXAMPLE-001",
-  "condition_secret": "COND-D",
+  "condition_secret": null,
   "condition": "D",
   "patient_id": "SP-001",
   "model": "fake-model",
@@ -28,11 +29,11 @@
           "medications": "",
           "medications_status": "MISSING",
           "glucose_metrics": "180",
-          "glucose_metrics_status": "COLLECTED",
+          "glucose_metrics_status": "KNOWN",
           "hypo_history": "",
           "hypo_history_status": "MISSING",
           "concerns_or_side_effects": "肚子脹",
-          "concerns_status": "COLLECTED"
+          "concerns_status": "KNOWN"
         },
         "ddx_candidates": [],
         "evidence_links": []

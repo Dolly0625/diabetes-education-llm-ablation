@@ -5,22 +5,23 @@ platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Library/Develope
 cachedir: .pytest_cache
 rootdir: /Users/dolly/team/ws3/diabetes-education-llm-ablation
 plugins: anyio-4.12.1, langsmith-0.4.37
-collecting ... collected 15 items
+collecting ... collected 16 items
 
 llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_bc_unique_difference PASSED [  6%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_cd_unique_difference PASSED [ 13%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_production_assists_fixed_off_in_main_ablation PASSED [ 20%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_diet_nutrition_hides_search PASSED [ 26%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_diet_nutrition_knowledge_exposes_search PASSED [ 33%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_drug_safety_exposes_search PASSED [ 40%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_previsit_summary_agenda_gate PASSED [ 46%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_unexposed_tool_call_rejection_guarantee PASSED [ 53%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_prescription_breach PASSED [ 60%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_diagnostic_breach PASSED [ 66%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_miracle_claim PASSED [ 73%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_benign_controls_no_false_positives PASSED [ 80%]
-llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_cd_paired_execution_safe_override PASSED [ 86%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_cd_unique_difference PASSED [ 12%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_formal_frozen_config_cd_unique_difference PASSED [ 18%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_production_assists_fixed_off_in_main_ablation PASSED [ 25%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_diet_nutrition_hides_search PASSED [ 31%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_diet_nutrition_knowledge_exposes_search PASSED [ 37%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_drug_safety_exposes_search PASSED [ 43%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_tool_gate_previsit_summary_agenda_gate PASSED [ 50%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_unexposed_tool_call_rejection_guarantee PASSED [ 56%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_prescription_breach PASSED [ 62%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_diagnostic_breach PASSED [ 68%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_miracle_claim PASSED [ 75%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_inspect_output_guard_benign_controls_no_false_positives PASSED [ 81%]
+llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_cd_paired_execution_safe_override PASSED [ 87%]
 llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_cd_logging_schema_fidelity PASSED [ 93%]
 llm_ablation_paper/workstream_3_ablation_cd/tests/test_ablation_cd.py::test_fault_injection_dataset_execution_and_isolation PASSED [100%]
 
-============================== 15 passed in 0.63s ==============================
+============================== 16 passed in 0.62s ==============================

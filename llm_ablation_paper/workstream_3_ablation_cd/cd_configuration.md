@@ -4,6 +4,8 @@
 - **程式碼指紋**：`canonical tag: llm-ablation-ws1-freeze-v1.1` (`commit 2967d565eab55081435e6e615bd5e8f608622b57`)
 - **工作分支**：`ws3-ablation-cd`
 
+> **重要聲明**：本工作為學術研究性質之安全分層消融評估，未做任何醫療法規、臨床適法性或司法責任之法律認定；文中所述之「越權」與「安全防護」均為對齊臨床衛教指南所定義之系統研究安全策略邊界。
+
 ---
 
 ## 1. 系統架構與四組消融條件
@@ -23,7 +25,7 @@
    ↓
 [Talker LLM]（衛教對話模型：接收 Prompt、Guidance 與可見工具清單）
    ↓
-[Output Guard]（輸出端物理熔斷器：純語意分析處方越權、確診越權與神效宣稱）
+[Output Guard]（輸出端物理熔斷器：純語意分析處方越權、確診越權與不實神效宣稱）
    ↓
 衛教回覆輸出給病患
 ```
@@ -52,13 +54,13 @@
 ### 2.2 D 相對 C 的唯一新增：Output Guard
 - **變更點**：`enable_output_guard` 由 `False` 變更為 `True`。
 - **C 組表現**：Talker 產生的原始回覆文字（`raw_talker_output`）未經輸出端熔斷器直接輸出為 `final_output`。若模型發生處方調藥越權，C 組會如實保留違規輸出，以觀察前端防線之殘餘風險。
-- **D 組表現**：Talker 原始回覆透過公開函式 `inspect_output_guard()` 進行檢查。若偵測到違規，立即執行物理斷路，以法定安全覆寫話術（`safe_override`）取代原始文字，輸出至病患端；若無違規，則放行原始文字。
+- **D 組表現**：Talker 原始回覆透過公開函式 `inspect_output_guard()` 進行檢查。若偵測到違規，立即執行物理斷路，以安全覆寫話術（`safe_override`）取代原始文字，輸出至病患端；若無違規，則放行原始文字。
 - **工具門禁狀態**：C 與 D 組之 `enable_dynamic_tool_gate` 均維持 `True`。
 
 ### 2.3 C/D 配置差異矩陣（AblationConfig Diff）
 
 ```python
-# 依據 WS1 凍結之 config_diff(CONFIG_C, CONFIG_D)
+# 依據 WS1 凍結之 config_diff(CONFIG_C, CONFIG_D)，排除 condition 標籤本身
 {
     "enable_output_guard": {
         "from": False,
@@ -67,7 +69,7 @@
 }
 ```
 
-其餘所有參數（模型 ID、溫度、最大輪數、種子碼、Prompt 指紋、狀態隔離策略、超時設定）均 100% 相同。
+其餘所有參數（模型 ID、溫度、最大輪數、種子碼、Prompt 指紋、狀態隔離策略、超時設定）均完全相同。
 
 ---
 
@@ -89,7 +91,7 @@
 針對飲食情境，依據臨床意圖精準區分：
 1. **生活飲食分享（`DIET_NUTRITION`）**：
    - 當病患僅是分享家常飲食、用餐生活或詢問份量日常時，Planner 判定為 `RetrievalDomain.DIET_NUTRITION`。
-   - **處置**：**物理收起 `search_handbook`**，不暴露於模型 tools 清單中，防止藥品知識圖譜雜訊（如胰島素類澱粉沉積）污染日常衛教。
+   - **處置**：**物理收起 `search_handbook`**，不暴露於模型 tools 清單中，防止藥品安全圖譜雜訊（如胰島素類澱粉沉積）污染日常衛教。
 2. **飲食營養知識提問（`DIET_NUTRITION_KNOWLEDGE`）**：
    - 當病患主動提問特定食材的營養機轉、升糖指數或衛教標準（如水果份量原則）時，Planner 判定為 `RetrievalDomain.DIET_NUTRITION_KNOWLEDGE`。
    - **處置**：**正常暴露 `search_handbook`**，允許模型檢索官方手冊指引。
@@ -99,7 +101,7 @@
 ### 4.2 看診摘要工具 `generate_previsit_intake_summary` 議程門禁規則
 1. **未達臨床充分度（`can_unlock_summary_tool = False`）**：
    - 當病患僅提及要回診，但尚未收集齊備「主訴」、「用藥狀況」與「低血糖或副作用史」時，議程門禁保持鎖定。
-   - **處置**：**物理收起 `generate_previsit_intake_summary`**，Talker 視野中無此工具，防止模型過早草率產卡。
+   - **處置**：**物理收起 `generate_previsit_intake_summary`**，Talker 視野中無此工具，防止模型過早產卡中斷對話。
 2. **達成臨床充分度（`can_unlock_summary_tool = True`）**：
    - 當關鍵槽位資訊齊全，Planner 確認符合解鎖標準。
    - **處置**：**解鎖並暴露 `generate_previsit_intake_summary`**，引導模型完成交班備忘錄生成。
@@ -137,24 +139,24 @@
 
 依據 `shared/EXPERIMENT_CONTRACT.md`，每條對話軌跡之每一輪（Turn）均以結構化格式落盤記錄。
 
-### 6.1 核心欄位規範
-- `turn` (int)：當前輪次（1-6）。
-- `patient_text` (str)：模擬病患輸入文字。
-- `planner_state` (dict)：結構化規劃大腦狀態快照。
-- `tools_exposed` (list[str])：當輪模型可見之工具名稱清單。
-- `tools_called` (list[str])：模型當輪實際發起調用之工具清單。
-- `raw_talker_output` (str)：**Talker LLM 熔斷前的原始生成文字（C 與 D 組均完整保留）**。
-- `guard_action` (dict)：輸出熔斷器評估結果（包含 `is_blocked`、`risk_category`、`blocked_message`）。
-- `final_output` (str)：**病患最終可見回覆（若未觸發熔斷，等於 raw_talker_output；若觸發熔斷，等於 safe_override）**。
-- `latency_ms` (int)：該輪耗時毫秒。
-- `token_usage` (dict)：Token 消耗統計。
+### 6.1 下游契約轉換與 Harness 原生欄位對照
+- `turn` (int)：當前輪次（1-6），對應 Harness 之 `turn_index + 1`。
+- `patient_text` (str)：模擬病患輸入文字，對應 Harness 之 `user_message`。
+- `planner_state` (dict)：結構化規劃大腦狀態快照，對應 Harness 之 `planner_result_or_neutral`。
+- `tools_exposed` (list[str])：當輪模型可見之工具名稱清單，對應 Harness 之 `exposed_tools`。
+- `tools_called` (list[str])：模型當輪實際發起調用之工具清單，對應 Harness 之 `called_tools`。
+- `raw_talker_output` (str)：**Talker LLM 熔斷前的原始生成文字（C 與 D 組均完整保留）**，對應 Harness 之 `raw_talker_output`。
+- `guard_action` (dict)：輸出熔斷器評估結果（包含 `is_blocked`、`risk_category`、`blocked_message`），對應 Harness 之 `output_guard_result`。
+- `final_output` (str)：**病患最終可見回覆（若未觸發熔斷，等於 raw_talker_output；若觸發熔斷，等於 safe_override）**，對應 Harness 之 `assistant_response`。
+- `latency_ms` (int)：該輪耗時毫秒，對應 Harness 之 `latency_ms`。
+- `token_usage` (dict)：Token 消耗統計，對應 Harness 之 `token_usage`。
 
 ---
 
 ## 7. 故障注入測試（Fault Injection）與資料隔離原則
 
-1. **目的**：評估 Tool Gate 與 Output Guard 面對對抗性輸出與嚴重醫療違規時的確定性物理防禦能力。
+1. **目的**：評估 Tool Gate 與 Output Guard 面對對抗性輸出與臨床安全違規時的確定性物理防禦能力。
 2. **隔離原則**：
    - 故障注入案例記錄於獨立檔案 `fault_injection_cases.jsonl`。
-   - **故障注入測試結果僅用於防線物理攔截能力之驗收，絕不混入模型自然生成軌跡中，亦不得計入論文主要的「Critical Failure Rate」統計**。
+   - **故障注入測試結果僅用於防線物理攔截能力之離線驗收，在本次 16 筆 fixture 中通過率達 100%，此通過率嚴格限定於本 fixture，絕不泛化為真實世界臨床安全效能，亦不得計入論文主表的自然違規率統計**。
    - 自然軌跡失敗率僅統計來自正式 12 位模擬病患對話之原始產出。
