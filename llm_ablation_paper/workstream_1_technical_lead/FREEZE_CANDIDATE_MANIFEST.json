@@ -1,0 +1,31 @@
+{
+  "task_id": "P0-1-FREEZE-CANDIDATE-20260911",
+  "branch": "ws1-freeze-candidate",
+  "base_main_commit": "435c91f471caee35e42cbdb706fc200e21dfee23",
+  "backup_branch": "backup/original-features-20260911",
+  "backup_commit": "f5c8890caca3ed8a60153f0a8c7014fadcc35c18",
+  "core_commit": "7cd20e7c9aac86b590c8c5c255ac1ab09dd2546d",
+  "tests_commit": "c9917f351d02de5116914739fa22b3f1f98830d4",
+  "status": "REVIEW",
+  "final_frozen": false,
+  "experiment_ready": false,
+  "formal_experiment_state": "BLOCKED",
+  "fingerprints_sha256": {
+    "talker_system_prompt": "2c2a3850a8885a2598403971f2faec6d4dcbea414a120c4711dff9540073ce55",
+    "planner_system_prompt": "53d6b0f2ebb864116f0d914295b549a9d6d1236825f01cc9925e2185c842a409",
+    "canonical_tool_schema": "e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e"
+  },
+  "timeout_suggestion_seconds": 120,
+  "timeout_frozen": false,
+  "opaque_condition_mapping": "NOT_GENERATED",
+  "blinded_export_fail_closed_without_mapping": true,
+  "excluded_from_experiment_path": [
+    "diabetes_chatbot/server/share_service.py",
+    "diabetes_chatbot/server/static/",
+    "diabetes_chatbot/server/app.py demo/clinician endpoints",
+    "AUDIT_IN_CHAT demo display",
+    "secrets.randbelow share codes",
+    "register_share_token"
+  ],
+  "notes": "Candidate only. Fingerprints computed in this worktree before final freeze. Do not label final frozen or experiment READY."
+}

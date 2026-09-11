@@ -1,5 +1,12 @@
 # Workstream 1 接手與第三次驗收清單
 
+## P0-1 Stage 2 狀態（2026-09-11）
+
+- 狀態：`REVIEW`（freeze candidate 待審，尚未 final freeze；不得宣稱正式實驗 READY）。
+- 原功能備份：`backup/original-features-20260911`（完整保存原 working tree 29 項修改）。
+- Freeze candidate：`ws1-freeze-candidate`，自 `origin/main@435c91f` 建立，僅納入核心實驗功能；排除 Demo／醫護網頁／分享服務與隨機調閱碼。
+- 正式 12×4：`BLOCKED`（待 candidate 審核與 final freeze）。
+
 ## 目前判定
 
 狀態維持 `REVIEW`。現有共用核心、Harness、測試與 dry run 可保留，不得從頭重寫。尚未授權 commit、凍結 `RESEARCH_PROTOCOL.md` 或啟動正式實驗。
