@@ -1,6 +1,6 @@
 # Workstream 4 跨工作流驗收規格書（Cross-Workstream Acceptance Specification）
 
-**版本**：v2.0 (STAGE 2: 跨工作流端到端 Fake 驗收完成)  
+**版本**：v2.1 (PHASE M2.2: 跨工作流對抗測試完成)  
 **角色**：WS4（Patient Simulation / Data Provider，agy2）  
 **範圍**：明確規範 WS4、WS1（Batch Controller，agy1）與 WS5（LLM Judge / Analysis，agy3）三方介面契約，防止數據污染與盲態洩漏。
 
@@ -132,3 +132,24 @@ WS4 於 `workstream_4_patient_simulation/tests/test_cross_workstream_acceptance.
 - [x] 串接 agy3 `run_analysis.py` 輸出 `summary.json`、`main_table.md`、`main_table.tex`、`results.csv` 與 `failure_distribution.png`，並驗證 `missing != zero` 不變性（未暴露工具顯示為 `--`，分母完整保留）。
 - [x] 驗證 Fail-Closed 防禦：殘缺軌跡、Pilot 軌跡、Canary 軌跡或明文 A–D 條件均能被正確攔截與拒絕。
 - [x] 全套離線測試 148 passed，0 failed，0 skipped。無 API 呼叫，無正式 Mapping 接觸。
+
+---
+
+## 6. PHASE M2.2 對抗測試成果（Cross-Workstream Adversarial Tests）
+
+WS4 於 `test_cross_workstream_acceptance.py` 實裝並通過嚴格的對抗測試（Adversarial Invariants）：
+1. **解盲方向正確（Deblinding Inversion Alignment）**：
+   - 驗證以 WS1 `generate_frozen_mapping` 生成之 mapping（`A -> COND-...`）進行 `blind-export`，再以同一 mapping 經 WS5 `run_analysis.py` 解盲。
+   - 證明 `summary.json`、`main_table.md` 與 `results.csv` 能精準反轉（`COND-... -> A`）並完整還原 A、B、C、D 各 12 筆之統計分組。
+2. **Mapping 不可覆寫（No-Overwrite Invariant）**：
+   - 驗證對已存在之 mapping 檔呼叫 `generate_frozen_mapping` 或 CLI `generate-mapping` 均觸發 `FileExistsError`（Fail-Closed）。
+   - 驗證磁碟檔案 byte-for-byte 完全不變，且 CLI parser 移除了 `--overwrite` 選項。
+3. **Blind-Export 未完成拒絕（Rejection of Incomplete Trajectories）**：
+   - 驗證殘缺軌跡（`termination_reason=None`）匯出時直接拋出 `ValueError`。
+   - 驗證 `require_completed=False` 遭硬性禁止（Fail-Closed），且 CLI parser 移除了 `--allow-incomplete` 選項。
+4. **Pilot 終止理由嚴格限制（Pilot Termination Reasons Strictness）**：
+   - 驗證 `check_pilot_completed_cleanly` 嚴格僅接受 `{"PATIENT_GOAL_MET", "MAX_TURNS"}` 且 `error=None`。
+   - 包含 `COMMON_INPUT_BLOCK`、`ERROR`、`None`、未知字串或非空 error metadata 時一律拋出 `RuntimeError` 拒絕。
+5. **缺少 API Key 之 Pre-flight 阻斷（Missing Key Fail-Closed Before Network Calls）**：
+   - 驗證 WS5 `run_judge.py` 在 live 模式缺少 `GEMINI_API_KEY` 時，在呼叫 Canary 或任何 API 之前立即以退出碼 1 終止，未發送任何外部網路或 Canary 請求。
+- [x] 全套離線測試擴展至 153 passed，0 failed，0 skipped。未消耗任何 API Token，未接觸真實正式 Mapping。
