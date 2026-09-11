@@ -1,0 +1,73 @@
+{
+  "task_id": "P0-1-FREEZE-CANDIDATE-20260911",
+  "branch": "ws1-freeze-candidate",
+  "base_main_commit": "435c91f471caee35e42cbdb706fc200e21dfee23",
+  "backup_branch": "backup/original-features-20260911",
+  "backup_commit": "f5c8890caca3ed8a60153f0a8c7014fadcc35c18",
+  "core_commit": "7cd20e7c9aac86b590c8c5c255ac1ab09dd2546d",
+  "tests_commit": "4f577f47e55e28b8ec18c626a1ad8f0d907069dd",
+  "status": "READY_FOR_FINAL_REVIEW",
+  "final_frozen": false,
+  "experiment_ready": false,
+  "formal_experiment_state": "BLOCKED",
+  "fingerprints_sha256": {
+    "talker_base_prompt_sha256": "2c2a3850a8885a2598403971f2faec6d4dcbea414a120c4711dff9540073ce55",
+    "talker_prompt_template_bundle_sha256": "9a6b133ac53437e8a567d3c336fe43a99c57faeb82152c21ada6fe4799723f2b",
+    "planner_system_prompt_sha256": "53d6b0f2ebb864116f0d914295b549a9d6d1236825f01cc9925e2185c842a409",
+    "canonical_tool_schema_sha256": "e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e"
+  },
+  "talker_prompt_fingerprint_note": "Talker prompt is dynamic: talker_base_prompt_sha256 covers NURSE_SYSTEM_PROMPT only; talker_prompt_template_bundle_sha256 covers the base plus build_nurse_system_prompt builder source (the context-injection template), so the base SHA is not the full template SHA. patient_context is input data and is not included in any fingerprint.",
+  "subprocess_timeout_seconds": 120.0,
+  "timeout_status": "FROZEN_CANDIDATE_PENDING_FINAL_TAG",
+  "opaque_condition_mapping": "NOT_GENERATED",
+  "blinded_export_fail_closed_without_mapping": true,
+  "excluded_from_experiment_path": [
+    "diabetes_chatbot/server/share_service.py",
+    "diabetes_chatbot/server/static/",
+    "diabetes_chatbot/server/app.py demo/clinician endpoints",
+    "AUDIT_IN_CHAT demo display",
+    "secrets.randbelow share codes",
+    "register_share_token"
+  ],
+  "notes": "Candidate only. Fingerprints computed in this worktree before final freeze. Do not label final frozen or experiment READY.",
+  "formal_runtime_config_canonical_sha256": "7768a47509fb5c04a797c220ea0f33bc78486e9812e42f9d05cd226ba5504e13",
+  "formal_runtime_config": {
+    "talker_model": "gemini-3.5-flash-lite",
+    "talker_temperature": 0.3,
+    "planner_model": "gemini-3.5-flash-lite",
+    "planner_temperature": 0.1,
+    "planner_request_timeout_seconds": 30.0,
+    "patient_agent_model": "gemini-2.5-flash-lite",
+    "patient_agent_temperature": 0.3,
+    "max_turns": 6,
+    "seed": 42,
+    "subprocess_timeout_seconds": 120.0,
+    "input_guard": "ON",
+    "enable_forced_retrieval": false,
+    "enable_fixed_warning_append": false,
+    "enable_question_budget_postprocessing": false,
+    "conditions": {
+      "A": {
+        "enable_planner": false,
+        "enable_dynamic_tool_gate": false,
+        "enable_output_guard": false
+      },
+      "B": {
+        "enable_planner": true,
+        "enable_dynamic_tool_gate": false,
+        "enable_output_guard": false
+      },
+      "C": {
+        "enable_planner": true,
+        "enable_dynamic_tool_gate": true,
+        "enable_output_guard": false
+      },
+      "D": {
+        "enable_planner": true,
+        "enable_dynamic_tool_gate": true,
+        "enable_output_guard": true
+      }
+    }
+  },
+  "runtime_code_commit": "3fb93e1b0474b365ee2b4372477eb27d8e9400f2"
+}

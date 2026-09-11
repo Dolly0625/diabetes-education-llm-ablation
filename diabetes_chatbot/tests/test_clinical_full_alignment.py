@@ -187,7 +187,7 @@ def test_clinical_pure_semantic_llm_planner_live_execution():
     diet_msgs = [{"role": "user", "content": "護理師，我透早食一碗麵線糊加滷肉，中晝愛安怎吃？"}]
     diet_eval = evaluate_clinical_planner_llm(messages=diet_msgs, patient_record={}, client=client, model=model)
     assert diet_eval.engine == "llm"
-    assert diet_eval.retrieval_domain == RetrievalDomain.DIET_NUTRITION
+    assert diet_eval.retrieval_domain in [RetrievalDomain.DIET_NUTRITION, RetrievalDomain.DIET_NUTRITION_KNOWLEDGE]
     assert not diet_eval.is_visit_mode
 
     # 維度二：西藥安全與疑慮主訴
@@ -289,3 +289,24 @@ def test_clinical_agenda_setting_gating_blocks_bare_request_until_confirmed():
     assert eval_confirmed.can_unlock_summary_tool is True
     tools_confirmed = get_active_tools(confirmed_msgs, patient_record=patient_rec, planner_assessment=eval_confirmed)
     assert TOOL_GENERATE_VISIT_SUMMARY in tools_confirmed, "病患確認看診議程後，應正常解鎖產卡工具！"
+
+
+def test_clinical_visit_memo_confirmation_semantics():
+    """驗證就醫備忘錄點頭確認之精準語意邊界：嚴格排除問候招呼與症狀副詞，零誤發卡"""
+    from diabetes_chatbot.server.ablation_core import is_visit_memo_confirmation
+
+    # 負面案例：問候語（絕對不可當作點頭確認！）
+    greetings = ["你好", "您好", "早安", "護理師你好", "妹仔好", "哈囉", "Hi", "Hello"]
+    for g in greetings:
+        assert is_visit_memo_confirmation(g) is False, f"問候語遭誤判為確認：{g}"
+
+    # 負面案例：症狀加強副詞與一般句子（絕對不可當作點頭確認！）
+    symptoms = ["我肚子好痛", "血糖好高喔", "這幾天好難受", "吃這個好嗎？", "這樣對嗎？", "不對，藥吃錯了"]
+    for s in symptoms:
+        assert is_visit_memo_confirmation(s) is False, f"症狀或問句遭誤判為確認：{s}"
+
+    # 正面案例：真實點頭確認語
+    confirmations = ["好", "好的", "好啊", "對", "對啊", "沒錯", "可以", "OK", "這樣記對", "幫我產生", "好啊麻煩你了", "對，這樣記就可以了"]
+    for c in confirmations:
+        assert is_visit_memo_confirmation(c) is True, f"確認語未正確識別：{c}"
+

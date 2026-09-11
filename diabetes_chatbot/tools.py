@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import secrets
 import sys
 import time
 from datetime import datetime, timezone
@@ -46,7 +45,7 @@ HPA_DIET_GUIDELINE_DEFAULT = (
 def _is_diet_or_meal_query(keyword: str, user_raw_input: str = "", domain: object = "") -> bool:
     """確定性判定是否屬於飲食或餐點查詢意圖，支援臨床規劃大腦領域標籤（字串或 Enum）或語意概念判定"""
     domain_str = getattr(domain, "value", str(domain or "")).upper()
-    if domain_str == "DIET_NUTRITION":
+    if "DIET_NUTRITION" in domain_str:
         return True
     combined = f"{keyword} {user_raw_input}".lower()
     return any(term in combined for term in DIET_INTENT_KEYWORDS)
@@ -231,8 +230,12 @@ def _format_glucose_section(
     hypo_history: str,
     glucose_range=None,
     side_effects_or_concerns: str = "",
+    diet_lifestyle: str = None,
 ) -> str:
-    """糖線三數字：最近/最低/平常 + 不適故事/低血糖史"""
+    """糖線與生活飲食：最近/最低/平常 + 不適故事/低血糖史 + 飲食記錄"""
+    diet_clean = _to_clean_str(diet_lifestyle, default="")
+    diet_suffix = f"；飲食生活：{diet_clean}" if (diet_clean and diet_clean not in ("未特別說明", "無")) else ""
+
     if glucose_range and isinstance(glucose_range, dict):
         recent = glucose_range.get("recent")
         lowest = glucose_range.get("lowest")
@@ -247,23 +250,29 @@ def _format_glucose_section(
             parts.append(f"平常 {usual}")
         base = " / ".join(parts) if parts else _to_clean_str(glucose_metrics)
         if story:
-            return f"{base}；不適故事：{story}" if base else story
-        hypo_clean = _to_clean_str(hypo_history, default="")
-        if hypo_clean and hypo_clean not in ("近期未提及或無發生", "近期無低血糖事件", "無特別異常", "未特別說明", "", "無", "無低血糖事件"):
-            if "無低血糖" not in hypo_clean and "未提及" not in hypo_clean and hypo_clean != "無":
-                return f"{base}；低血糖史：{hypo_clean}"
-        return base
+            res = f"{base}；不適故事：{story}" if base else story
+        else:
+            hypo_clean = _to_clean_str(hypo_history, default="")
+            if hypo_clean and hypo_clean not in ("近期未提及或無發生", "近期無低血糖事件", "無特別異常", "未特別說明", "", "無", "無低血糖事件"):
+                if "無低血糖" not in hypo_clean and "未提及" not in hypo_clean and hypo_clean != "無":
+                    res = f"{base}；低血糖史：{hypo_clean}"
+                else:
+                    res = base
+            else:
+                res = base
+        return f"{res}{diet_suffix}" if diet_suffix and "飲食生活" not in res else res
     elif glucose_range is not None:
         if not isinstance(glucose_range, dict):
             s = str(glucose_range).strip()
             if s:
-                return s
+                return f"{s}{diet_suffix}" if diet_suffix and "飲食生活" not in s else s
     gm = _to_clean_str(glucose_metrics)
     hypo = _to_clean_str(hypo_history, default="")
     if hypo and hypo not in ("近期未提及或無發生", "近期無低血糖事件", "無特別異常", "未特別說明", "", "無", "無低血糖事件"):
         if "無低血糖" not in hypo and "未提及" not in hypo and hypo != "無":
-            return f"{gm}；低血糖史：{hypo}"
-    return gm
+            base_str = f"{gm}；低血糖史：{hypo}"
+            return f"{base_str}{diet_suffix}" if diet_suffix and "飲食生活" not in base_str else base_str
+    return f"{gm}{diet_suffix}" if diet_suffix and "飲食生活" not in gm else gm
 
 
 def _normalize_ddx_list(
@@ -300,10 +309,10 @@ def _normalize_ddx_list(
                 check = str(check).strip()
                 if not label:
                     continue
-                if "待確認" not in label:
+                if not any(label.startswith(p) for p in ("待確認", "待釐清", "待評估", "待追蹤", "待討論")):
                     label = f"待確認{label}"
                 if "待做檢查" not in label and not check:
-                    check = "回診與醫師討論並視需要安排檢查"
+                    check = "回診抽 HbA1c，核對血糖紀錄簿與藥物劑量"
                 if check:
                     if "待做檢查" in label:
                         normalized.append(label)
@@ -315,32 +324,109 @@ def _normalize_ddx_list(
                 s = str(item).strip()
                 if not s:
                     continue
-                if "待確認" not in s:
+                if not any(s.startswith(p) for p in ("待確認", "待釐清", "待評估", "待追蹤", "待討論")):
                     s = f"待確認{s}"
                 if "待做檢查" not in s:
-                    s = f"{s} — 待做檢查：回診與醫師討論"
+                    s = f"{s} — 待做檢查：核對血糖紀錄簿與藥物劑量"
                 normalized.append(s)
         normalized = [n for n in normalized if n.strip()]
         if len(normalized) == 1:
-            normalized.append("待確認整體血糖穩定性 — 待做檢查：回診抽 HbA1c 並帶血糖紀錄")
+            normalized.append("待確認整體血糖穩定性 — 待做檢查：回診抽 HbA1c 並帶血糖紀錄簿")
         if len(normalized) >= 2:
-            return normalized[:3]
+            return _diversify_ddx_checks(normalized[:3])
         if len(normalized) == 0:
             pass
         else:
-            return normalized[:3]
+            return _diversify_ddx_checks(normalized[:3])
     fallback = []
     if hypo_history and hypo_history.strip() not in ("近期未提及或無發生", "近期無低血糖事件", "無特別異常", "未特別說明", "", "無", "無低血糖事件", "近期無低血糖或冷汗心悸發作"):
         if "無低血糖" not in hypo_history and "未提及" not in hypo_history and hypo_history.strip() != "無":
-            fallback.append(f"待確認低血糖症狀與血糖偏低的關聯 — 待做檢查：回診抽 HbA1c、檢視近期血糖紀錄與飲食時間（自述：{hypo_history}）")
+            fallback.append(f"待確認低血糖症狀與血糖偏低的關聯 — 待做檢查：回診抽 HbA1c、核對血糖紀錄簿與藥物劑量（自述：{hypo_history}）")
     if side_effects_or_concerns and side_effects_or_concerns.strip() not in ("無特別異常", "無", "", "未特別說明", "無特別異常"):
         if side_effects_or_concerns.strip() not in (hypo_history or ""):
-            fallback.append(f"待確認用藥後不適感受的相關性 — 待做檢查：回診與醫師討論不適時間與藥袋紀錄（自述：{side_effects_or_concerns}）")
+            fallback.append(f"待確認用藥後不適感受的相關性 — 待做檢查：回診與醫師討論不適時間與藥袋紀錄，評估更換腸胃友善劑型（自述：{side_effects_or_concerns}）")
     if len(fallback) < 2:
-        fallback.append("待確認飲食與血糖波動的關聯 — 待做檢查：回診提供近期飲食與血糖日誌請醫師評估")
+        fallback.append("待確認飲食與血糖波動的關聯 — 待做檢查：轉介新陳代謝科營養諮詢，評估水果與醣類份量")
     if len(fallback) < 2:
-        fallback.append("待確認整體用藥順從性與血糖控制 — 待做檢查：回診攜藥袋核對並討論是否需轉衛教")
-    return fallback[:3]
+        fallback.append("待確認整體用藥順從性與血糖控制 — 待做檢查：回診攜藥袋核對並評估是否需轉衛教")
+    return _diversify_ddx_checks(fallback[:3])
+
+
+def _diversify_ddx_checks(ddx_items: list) -> list:
+    """若多條待確認方向的待做檢查完全相同，依各條主題智慧分化具體檢查項目，嚴禁兩條印同一句"""
+    if not ddx_items:
+        return []
+    parsed = []
+    for item in ddx_items:
+        s_item = str(item).strip()
+        if " — 待做檢查：" in s_item:
+            d, c = s_item.split(" — 待做檢查：", 1)
+            parsed.append({"dir": d.strip(), "check": c.strip()})
+        elif "待做檢查：" in s_item:
+            d, c = s_item.split("待做檢查：", 1)
+            parsed.append({"dir": d.rstrip(" —-").strip(), "check": c.strip()})
+        else:
+            parsed.append({"dir": s_item, "check": ""})
+
+    used_checks = set()
+    result = []
+    for idx, p in enumerate(parsed):
+        d_text = p["dir"]
+        c_text = p["check"]
+        dl = d_text.lower()
+
+        needs_diff = not c_text or (c_text in used_checks) or (c_text == "核對血糖紀錄簿與藥物劑量" and idx > 0)
+
+        if needs_diff:
+            if any(k in dl for k in ["低血糖", "血糖偏低", "65", "70", "頭暈", "冷汗", "心悸", "冒汗"]):
+                candidate = "抽 HbA1c 與檢視近週血糖紀錄簿"
+            elif any(k in dl for k in ["腸胃", "胃", "脹", "腹", "便秘", "腹瀉", "噁心", "吃不下", "胃逆", "消化"]):
+                candidate = "攜藥袋現場核對，請醫師評估腸胃友善劑型"
+            elif any(k in dl for k in ["調藥", "調整", "劑量", "加藥", "減藥", "停藥"]):
+                candidate = "請醫師全面評估降血糖藥物劑量與肝腎功能"
+            elif any(k in dl for k in ["飲食", "芭樂", "水果", "澱粉", "包子", "米漿", "糖分", "熱量", "生活"]):
+                candidate = "轉介新陳代謝科營養諮詢，評估水果與醣類份量"
+            else:
+                candidate = "回診攜帶藥袋至診間核對，評估慢性病連續處方箋"
+
+            if candidate in used_checks:
+                if "抽" not in " ".join(used_checks):
+                    candidate = "回診抽血檢驗 HbA1c 並檢核空腹血糖數值"
+                elif "藥袋" not in " ".join(used_checks):
+                    candidate = "現場攜帶完整藥袋與處方明細，請醫師逐一比對"
+                elif "營養" not in " ".join(used_checks):
+                    candidate = "轉介個別化衛教諮詢，檢核飲食與服藥時機"
+                else:
+                    candidate = f"與主治專科醫師討論臨床處置方針（項目 {idx+1}）"
+
+            c_text = candidate
+
+        used_checks.add(c_text)
+        result.append(f"{d_text} — 待做檢查：{c_text}")
+
+    return result
+
+
+def _clean_evidence_human_source(source_or_url: str) -> str:
+    """將 URL 或雜訊轉為官方來源人話名，只印來源名不印網址"""
+    s = str(source_or_url).strip()
+    if not s:
+        return ""
+    # 去除括號內的網址，如 衛生福利部國民健康署（https://www.hpa.gov.tw）
+    s = re.sub(r"[（\(]https?://[^\s\)]+[）\)]", "", s).strip()
+    sl = s.lower()
+    if "hpa.gov.tw" in sl or "國民健康署" in s or "國健署" in s:
+        return "衛生福利部國民健康署《糖尿病與我》手冊"
+    elif "fda.gov.tw" in sl or "tfda" in sl or "仿單" in s:
+        return "衛生福利部食品藥物管理署 (TFDA) 官方藥品仿單"
+    elif "tade.org.tw" in sl or "糖尿病衛教學會" in s:
+        return "社團法人中華民國糖尿病衛教學會 (TADE) 臨床指引"
+    elif "mohw.gov.tw" in sl or "衛福部" in s or "衛生福利部" in s:
+        return "衛生福利部臨床照護指引"
+    elif s.startswith("http://") or s.startswith("https://"):
+        return "衛生福利部國民健康署《糖尿病與我》手冊"
+    s = re.sub(r"https?://\S+", "", s).strip()
+    return s if s else "衛生福利部國民健康署《糖尿病與我》手冊"
 
 
 def _format_evidence_lines(evidence_links) -> list:
@@ -349,26 +435,185 @@ def _format_evidence_lines(evidence_links) -> list:
     lines = []
     for item in evidence_links:
         if isinstance(item, dict):
-            text = (
+            raw_text = (
                 item.get("text")
                 or item.get("title")
                 or item.get("source")
                 or item.get("citation")
                 or ""
             )
-            url = item.get("url") or item.get("link") or ""
-            text = str(text).strip()
-            if not text:
-                continue
-            if url:
-                lines.append(f"{text}（{url}）")
-            else:
-                lines.append(text)
+            raw_url = item.get("url") or item.get("link") or ""
+            combined = f"{raw_text} {raw_url}".strip()
+            human_name = _clean_evidence_human_source(combined if combined else str(item))
+            if human_name and human_name not in lines:
+                lines.append(human_name)
         else:
-            s = str(item).strip()
-            if s:
-                lines.append(s)
+            human_name = _clean_evidence_human_source(str(item))
+            if human_name and human_name not in lines:
+                lines.append(human_name)
     return lines
+
+
+STOP_MED_WORDS = {"換藥", "藥物", "藥品", "吃藥", "降血糖藥", "西藥", "藥袋", "規則", "目前"}
+
+
+def _extract_discontinued_keywords(s: str) -> set:
+    """從藥物字串中提取所有停用標記關聯之藥名與成分關鍵字"""
+    if not s:
+        return set()
+    disc = set()
+    # 模式 1: 藥名（已停用換藥）或（已停用）或（停藥）
+    for m in re.finditer(r"([A-Za-z\u4e00-\u9fa5]{2,15}?)(?:\s*\d+[^\(（]*?)?[（\(](?:已停用換藥|已停用|已停服|停藥)[）\)]", s):
+        name = re.sub(r"[\d\s]+", "", m.group(1)).strip()
+        if len(name) >= 2 and name not in STOP_MED_WORDS:
+            disc.add(name)
+    # 模式 2: 已停服XX, 已停用XX, 停用XX, 停藥XX, 不要吃XX
+    for m in re.finditer(r"(?:已停服|已停用|停服|停用|停藥|換掉|不要吃|不吃|停吃)\s*([A-Za-z\u4e00-\u9fa5]{2,10})", s):
+        name = m.group(1).strip()
+        if len(name) >= 2 and name not in STOP_MED_WORDS:
+            disc.add(name)
+    # 模式 3: XX已停用, XX已停服, XX不要吃
+    for m in re.finditer(r"([A-Za-z\u4e00-\u9fa5]{2,10})\s*(?:已停服|已停用|停服|停用|停藥|不要吃了|不要吃|不吃了)", s):
+        name = m.group(1).strip()
+        name = re.sub(r"^(?:自述|目前|已|並|且|要|說|幫我|把)", "", name).strip()
+        name = re.sub(r"已$", "", name).strip()
+        if len(name) >= 2 and name not in STOP_MED_WORDS:
+            disc.add(name)
+
+    alias_groups = [
+        {"癲通", "卡巴氮平", "tegretol", "carbamazepine"},
+        {"庫魯化", "二甲雙胍", "metformin", "glucophage"},
+        {"得爾美", "diamicron", "gliclazide"},
+        {"佳糖維", "januvia", "sitagliptin"},
+        {"愛妥糖", "actos", "pioglitazone"},
+    ]
+    expanded = set(disc)
+    for k in disc:
+        kl = k.lower()
+        for grp in alias_groups:
+            if any(len(kl) >= 2 and (member.lower() in kl or kl in member.lower()) for member in grp):
+                expanded.update(grp)
+    return expanded
+
+
+def _format_medications_for_display(med_text: str) -> str:
+    """文字卡與 Flex 卡用藥顯示層停用調和：
+    1. 現行用藥清單只呈現未停用藥品；
+    2. 停用藥若呈現必須帶（已停用換藥）標註；
+    3. 同一張卡的任何位置，停用藥只以停用身份出現一次；
+    4. 長串英文學名摺疊為清爽短格式。
+    """
+    if not med_text or not str(med_text).strip():
+        return "未特別說明"
+    s = str(med_text).strip()
+    if s in ("未特別說明", "無", "無特別異常"):
+        return "未特別說明"
+
+    expanded_disc = _extract_discontinued_keywords(s)
+    has_bag_note = ("藥袋" in s or "現場" in s or "核對" in s)
+
+    s_norm = s.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    s_norm = re.sub(r"其他降血糖藥物建議攜帶完整藥袋至現場核對[；;，,\s]*", "", s_norm)
+    s_norm = re.sub(r"建議攜帶完整藥袋至現場核對[；;，,\s]*", "", s_norm)
+    s_norm = re.sub(r"（藥袋已帶待現場核對）|（藥袋已帶待核對）", "", s_norm)
+
+    raw_tokens = re.split(r"[;；，,\n|、]+", s_norm)
+    active_tokens = []
+    disc_candidates = []
+    seen_active = set()
+
+    for tok in raw_tokens:
+        tok = tok.strip()
+        if not tok:
+            continue
+        tok = re.sub(r"^(?:目前持有|藥袋已辨識|目前用藥|服藥規則|自述目前服用|目前服藥)[：:\s]*", "", tok).strip()
+        tok = re.sub(r"藥袋$", "", tok).strip()
+        if not tok:
+            continue
+
+        has_zh = bool(re.search(r"[\u4e00-\u9fa5]", tok))
+        tok_lower = tok.lower()
+        is_disc = any(dk.lower() in tok_lower for dk in expanded_disc)
+
+        m_dose = re.search(r"(\d+(?:\.\d+)?\s*(?:毫克|mg|公克|g|微克|mcg))", tok, re.IGNORECASE)
+        dose_str = m_dose.group(1).replace(" ", "") if m_dose else ""
+
+        zh_name = re.sub(r"[（\(].*?[）\)]", "", tok)
+        zh_name = re.sub(r"[A-Za-z*./\-]+", "", zh_name)
+        if dose_str:
+            zh_name = zh_name.replace(dose_str, "")
+        zh_name = re.sub(r"\d+", "", zh_name).strip()
+        zh_name = re.sub(r"^(?:已停服|已停用|停用|停服|停藥)", "", zh_name).strip()
+        zh_name = re.sub(r"\s+", "", zh_name)
+
+        if is_disc:
+            if has_zh and zh_name and len(zh_name) >= 2 and zh_name not in STOP_MED_WORDS:
+                short_disc = f"{zh_name} {dose_str}".strip() if dose_str else zh_name
+                disc_candidates.append((short_disc, dose_str, tok))
+        else:
+            if has_zh and zh_name and len(zh_name) >= 2 and zh_name not in STOP_MED_WORDS:
+                short_act = f"{zh_name} {dose_str}".strip() if dose_str else zh_name
+                core_key = zh_name[:2]
+                if core_key not in seen_active:
+                    seen_active.add(core_key)
+                    active_tokens.append(short_act)
+            elif any(k in tok for k in ["服藥規律", "規律服藥", "按時服藥"]):
+                if "服藥規律" not in active_tokens:
+                    active_tokens.append("服藥規律")
+
+    disc_items = []
+    seen_disc_core = set()
+    disc_candidates.sort(key=lambda x: (len(x[1]) > 0, len(x[0])), reverse=True)
+    for short_name, dose, orig in disc_candidates:
+        core = re.sub(r"\d.*", "", short_name)[:2]
+        if core and core not in seen_disc_core:
+            seen_disc_core.add(core)
+            clean_short = short_name.replace("已停用", "").replace("已停服", "").strip()
+            disc_items.append(f"{clean_short}（已停用換藥）")
+
+    display_parts = []
+    if active_tokens:
+        display_parts.append("、".join(active_tokens))
+    if disc_items:
+        display_parts.append("；".join(disc_items))
+    display_res = "；".join(display_parts) if (active_tokens and disc_items) else (display_parts[0] if display_parts else "未特別說明")
+    if has_bag_note and "（藥袋" not in display_res:
+        display_res = f"{display_res} （藥袋已帶待現場核對）"
+    return display_res
+
+
+def _format_medications_for_data(med_text: str) -> str:
+    """QR payload 資料層停用調和：保留完整藥袋全名與學名，但嚴格標註（已停用換藥），全卡只出現一次"""
+    if not med_text or not str(med_text).strip():
+        return "未特別說明"
+    s = str(med_text).strip()
+    if s in ("未特別說明", "無", "無特別異常"):
+        return "未特別說明"
+
+    expanded_disc = _extract_discontinued_keywords(s)
+    data_res = s
+    if expanded_disc:
+        for dk in expanded_disc:
+            data_res = re.sub(rf"(?:[，,、\s]*已停服{dk}[，,、\s]*)", "，", data_res)
+            data_res = re.sub(rf"(?:[，,、\s]*已停用{dk}[，,、\s]*)", "，", data_res)
+            data_res = re.sub(rf"(?:[，,、\s]*{dk}已停用[，,、\s]*)", "，", data_res)
+            data_res = re.sub(rf"(?:[，,、\s]*{dk}不要吃[，,、\s]*)", "，", data_res)
+        data_res = re.sub(r"^[，,、\s;；]+|[，,、\s;；]+$", "", data_res)
+        data_res = re.sub(r"[，,]{2,}", "，", data_res)
+
+        if "藥袋已辨識" in data_res:
+            bag_idx = data_res.index("藥袋已辨識")
+            pre_part = data_res[:bag_idx]
+            bag_part = data_res[bag_idx:]
+            if any(k.lower() in bag_part.lower() for k in expanded_disc) and "（已停用換藥）" not in bag_part:
+                bag_part = f"{bag_part.rstrip()}（已停用換藥）"
+            data_res = pre_part + bag_part
+        elif any(k.lower() in data_res.lower() for k in expanded_disc) and "（已停用換藥）" not in data_res:
+            data_res = f"{data_res}（已停用換藥）"
+
+    if "藥袋" not in data_res:
+        data_res = f"{data_res}（藥袋已帶待核對）"
+    return data_res
 
 
 def _format_patient_quote(patient_quote) -> str:
@@ -387,13 +632,10 @@ def generate_previsit_intake_summary(
     evidence_links=None,
     patient_quote=None,
     glucose_range=None,
+    diet_lifestyle: str = None,
 ) -> str:
-    meds_display = _to_clean_str(medications)
-    if "藥袋" not in meds_display:
-        meds_with_bag = f"{meds_display}（藥袋已帶待核對）"
-    else:
-        meds_with_bag = meds_display
-    glucose_section = _format_glucose_section(glucose_metrics, hypo_history, glucose_range, side_effects_or_concerns)
+    meds_with_bag = _format_medications_for_display(medications)
+    glucose_section = _format_glucose_section(glucose_metrics, hypo_history, glucose_range, side_effects_or_concerns, diet_lifestyle=diet_lifestyle)
     ddx_list = _normalize_ddx_list(ddx_candidates, side_effects_or_concerns, hypo_history)
     evidence_lines = _format_evidence_lines(evidence_links)
     quote_text = _format_patient_quote(patient_quote)
@@ -405,7 +647,7 @@ def generate_previsit_intake_summary(
     lines.append("=" * 50)
     lines.append(f"① 主訴一句話：{visit_reason}")
     lines.append(f"② 用藥現況：{meds_with_bag}")
-    lines.append(f"③ 糖線三數字：{glucose_section}")
+    lines.append(f"③ 糖線與生活飲食：{glucose_section}")
     lines.append("④ 待確認方向（請醫師評估 2-3 條，每條含待做檢查）：")
     for item in ddx_list:
         lines.append(f"  • {item}")
@@ -452,10 +694,11 @@ TOOL_GENERATE_PREVISIT_SUMMARY = {
                 "glucose_metrics": {"type": "string", "description": "近期居家空腹/餐後血糖範圍，或最近一季 HbA1c 數據"},
                 "hypo_history": {"type": "string", "description": "近一個月有無低血糖事件（冒冷汗、心悸、手抖、頭暈等），若無請寫「近期無低血糖事件」"},
                 "side_effects_or_concerns": {"type": "string", "description": "服藥後有無不適（如脹氣腹瀉），或足部麻木/視力變化等併發症警訊"},
+                "diet_lifestyle": {"type": "string", "description": "病患自述之日常飲食與生活習慣記錄（例如自述攝取特定水果份量、外食或正餐習慣等），若未提及請填「未特別說明」"},
                 "ddx_candidates": {"type": "array", "items": {"type": "string"}, "description": "待確認方向 2-3 條人話，每條含待做檢查，僅用待確認語氣禁止確診字眼"},
                 "evidence_links": {"type": "array", "items": {"type": "string"}, "description": "RAG 真查到才提供的出處（國健署/TFDA 人話），無則留空不可捏造頁碼"},
                 "patient_quote": {"type": "string", "description": "阿嬤原話不潤飾，保留病患原句"},
-                "glucose_range": {"type": "string", "description": "糖線三數字：最高/最低/平常與不適故事，例如：最高180 最低65 平常110 週三晨空腹65暈10分鐘3顆糖緩解"}
+                "glucose_range": {"type": "string", "description": "最高/最低/平常三數字與不適故事，僅能使用病患對話中實際自述的數值與情節；嚴禁使用本說明中的任何示例數值、星期或時間長度；病患未提及請留空"}
             },
             "required": ["visit_reason", "medications", "glucose_metrics", "hypo_history", "side_effects_or_concerns"]
         }
@@ -475,13 +718,10 @@ def generate_line_flex_bubble(
     patient_quote=None,
     glucose_range=None,
     share_code: str = None,
+    diet_lifestyle: str = None,
 ) -> dict:
-    meds_display = _to_clean_str(medications)
-    if "藥袋" not in meds_display:
-        meds_with_bag = f"{meds_display}（藥袋已帶待核對）"
-    else:
-        meds_with_bag = meds_display
-    glucose_section = _format_glucose_section(glucose_metrics, hypo_history, glucose_range, side_effects_or_concerns)
+    meds_with_bag = _format_medications_for_display(medications)
+    glucose_section = _format_glucose_section(glucose_metrics, hypo_history, glucose_range, side_effects_or_concerns, diet_lifestyle=diet_lifestyle)
     ddx_list = _normalize_ddx_list(ddx_candidates, side_effects_or_concerns, hypo_history)
     evidence_lines = _format_evidence_lines(evidence_links)
     quote_text = _format_patient_quote(patient_quote)
@@ -509,7 +749,7 @@ def generate_line_flex_bubble(
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {"type": "text", "text": "③ 糖線三數字", "weight": "bold", "color": "#0D47A1", "size": "md"},
+                {"type": "text", "text": "③ 糖線與生活飲食", "weight": "bold", "color": "#0D47A1", "size": "md"},
                 {"type": "text", "text": glucose_section, "wrap": True, "size": "sm", "color": "#333333"}
             ]
         },
@@ -556,14 +796,72 @@ def generate_line_flex_bubble(
         ]
     })
 
-    # 格式化 6 位診間調閱短碼
-    if not share_code:
-        share_code = f"{secrets.randbelow(1_000_000):06d}"
-    clean_code = re.sub(r"[\s\-]", "", str(share_code)).strip()
-    if len(clean_code) == 6:
-        display_code = f"{clean_code[:3]} - {clean_code[3:]}"
+    if share_code:
+        clean_code = re.sub(r"[\s\-]", "", str(share_code)).strip()
+        display_code = f"{clean_code[:3]} - {clean_code[3:]}" if len(clean_code) == 6 else str(share_code)
     else:
-        display_code = str(share_code)
+        display_code = ""
+
+    footer_contents = []
+    if display_code:
+        footer_contents.extend([
+            {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#194B8F",
+                "cornerRadius": "10px",
+                "paddingAll": "12px",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "【醫師診間調閱碼】",
+                        "color": "#BBDEFB",
+                        "size": "xs",
+                        "align": "center",
+                        "weight": "bold"
+                    },
+                    {
+                        "type": "text",
+                        "text": display_code,
+                        "color": "#FFFFFF",
+                        "size": "xxl",
+                        "align": "center",
+                        "weight": "bold",
+                        "margin": "xs"
+                    },
+                    {
+                        "type": "text",
+                        "text": "（有效期限 10 分鐘，出示給醫師輸入即可）",
+                        "color": "#E3F2FD",
+                        "size": "xxs",
+                        "align": "center",
+                        "margin": "xs"
+                    }
+                ]
+            },
+            {
+                "type": "text",
+                "text": "請於看診時出示本卡片或提供上方調閱碼給醫護人員",
+                "align": "center",
+                "size": "xs",
+                "color": "#666666"
+            },
+        ])
+    else:
+        footer_contents.append({
+            "type": "text",
+            "text": "請於看診時出示本卡片給醫護人員",
+            "align": "center",
+            "size": "xs",
+            "color": "#666666"
+        })
+    footer_contents.append({
+        "type": "text",
+        "text": "僅供看診溝通輔助，用藥處方由主治醫師親自診察確認",
+        "align": "center",
+        "size": "xxs",
+        "color": "#999999"
+    })
 
     return {
         "type": "bubble",
@@ -603,56 +901,7 @@ def generate_line_flex_bubble(
             "spacing": "md",
             "paddingAll": "16px",
             "backgroundColor": "#F4F6FA",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": "#194B8F",
-                    "cornerRadius": "10px",
-                    "paddingAll": "12px",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "【醫師診間調閱碼】",
-                            "color": "#BBDEFB",
-                            "size": "xs",
-                            "align": "center",
-                            "weight": "bold"
-                        },
-                        {
-                            "type": "text",
-                            "text": display_code,
-                            "color": "#FFFFFF",
-                            "size": "xxl",
-                            "align": "center",
-                            "weight": "bold",
-                            "margin": "xs"
-                        },
-                        {
-                            "type": "text",
-                            "text": "（有效期限 10 分鐘，出示給醫師輸入即可）",
-                            "color": "#E3F2FD",
-                            "size": "xxs",
-                            "align": "center",
-                            "margin": "xs"
-                        }
-                    ]
-                },
-                {
-                    "type": "text",
-                    "text": "請於看診時出示本卡片或提供上方調閱碼給醫護人員",
-                    "align": "center",
-                    "size": "xs",
-                    "color": "#666666"
-                },
-                {
-                    "type": "text",
-                    "text": "僅供看診溝通輔助，用藥處方由主治醫師親自診察確認",
-                    "align": "center",
-                    "size": "xxs",
-                    "color": "#999999"
-                }
-            ]
+            "contents": footer_contents
         }
     }
 
@@ -667,22 +916,31 @@ def generate_clinic_qr_payload(
     evidence_links=None,
     patient_quote=None,
     glucose_range=None,
+    diet_lifestyle: str = None,
 ) -> str:
+    # 診間 QR Code 維持精簡糖線三數字（不重複內嵌飲食文字，節省容量提高掃描成功率）
     glucose_section = _format_glucose_section(glucose_metrics, hypo_history, glucose_range, side_effects_or_concerns)
     ddx_list = _normalize_ddx_list(ddx_candidates, side_effects_or_concerns, hypo_history)
     evidence_lines = _format_evidence_lines(evidence_links)
     quote_text = _format_patient_quote(patient_quote)
     ddx_str = " | ".join(ddx_list)
     ev_str = " | ".join(evidence_lines) if evidence_lines else "無"
-    meds_str = _to_clean_str(medications)
+    meds_with_bag = _format_medications_for_data(medications)
     vr_str = _to_clean_str(visit_reason)
     gm_str = _to_clean_str(glucose_metrics)
     hypo_str = _to_clean_str(hypo_history, default="近期未提及")
     se_str = _to_clean_str(side_effects_or_concerns, default="無")
+    
+    # 飲食生活欄位：僅在有具體自述時附加於末端鍵值，未填或無則不附加
+    diet_clean = str(diet_lifestyle or "").strip()
+    diet_part = ""
+    if diet_clean and diet_clean not in ("未特別說明", "無", "未提供", "待查"):
+        diet_part = f"|飲食生活:{diet_clean}"
+
     qr = (
-        f"TFDA-INTAKE-V2|主訴一句話:{vr_str}|用藥現況:{meds_str}（藥袋已帶待核對）|"
+        f"TFDA-INTAKE-V2|主訴一句話:{vr_str}|用藥現況:{meds_with_bag}|"
         f"糖線三數字:{glucose_section}|待確認方向:{ddx_str}|阿嬤原話:{quote_text}|"
         f"出處小字:{ev_str}|醫師空白欄:□抽 HbA1c □聊調藥 □轉衛教"
-        f"|血糖:{gm_str}|低血糖:{hypo_str}|主訴:{se_str}"
+        f"|血糖:{gm_str}|低血糖:{hypo_str}|主訴:{se_str}{diet_part}"
     )
     return qr

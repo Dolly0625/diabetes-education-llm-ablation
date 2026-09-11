@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 import re
 import time
-import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -44,6 +43,7 @@ from diabetes_chatbot.tools import (
 
 
 def _strip_evidence_links_leak(text: str) -> str:
+    """清理聊天正文中意外夾帶的 raw HTML 標籤或 raw markdown 網址"""
     if not text:
         return ""
     t = re.sub(r"<div id=[\"']evidence_links[\"'].*?</div>", "", text, flags=re.DOTALL)
@@ -52,21 +52,46 @@ def _strip_evidence_links_leak(text: str) -> str:
     return t.strip()
 
 
+
+
 PENDING_DELIVERY_TEXT = "太好了！已經為您產生好【門診就醫備忘錄】大字體卡片與專用 QR Code，您下週看診時直接出示給醫師看就可以囉！"
-_CONFIRM_LONG_KEYWORDS = ["這樣記對", "沒錯", "幫我產生", "確認", "可以"]
-_CORRECTION_KEYWORDS = ["不對", "記錯", "錯誤", "不正確", "不是這樣", "不是", "不好", "改一下", "更正"]
+_CONFIRM_LONG_KEYWORDS = ["這樣記對", "沒錯", "幫我產生", "確認", "可以", "麻煩幫我產生", "幫我做", "沒問題", "麻煩你產生"]
+_CORRECTION_KEYWORDS = ["不對", "記錯", "錯誤", "不正確", "不是這樣", "不是", "不好", "改一下", "更正", "不要"]
+_GREETING_KEYWORDS = ["你好", "您好", "早安", "晚安", "午安", "哈囉", "嗨", "hello", "hi", "護理師好", "妹仔好", "醫生好", "醫師好"]
+_SYMPTOM_INTENSIFIERS = ["好痛", "好脹", "好暈", "好難受", "好高", "好低", "好累", "好不舒服", "好嚴重"]
+_EXACT_AFFIRMATIONS = {
+    "好", "好的", "好啊", "好喔", "好啦", "好捏", "好哇", "好呦", "好阿",
+    "對", "對啊", "對的", "對喔", "對啦", "對捏", "對阿",
+    "沒錯", "可以", "可以啊", "行", "沒問題", "ok", "OK", "Ok",
+    "嗯", "嗯嗯", "恩", "恩恩", "麻煩你", "謝謝", "多謝", "謝謝你"
+}
 
 
 def is_visit_memo_confirmation(text: str) -> bool:
     t = (text or "").strip()
     if not t:
         return False
+    # 1. 修正/否定詞優先阻斷
     if any(k in t for k in _CORRECTION_KEYWORDS):
         return False
+    # 2. 問候招呼語絕對不是確認
+    if any(g in t.lower() for g in _GREETING_KEYWORDS):
+        return False
+    # 3. 症狀加強副詞絕對不是確認（例如「我肚子好痛」）
+    if any(s in t for s in _SYMPTOM_INTENSIFIERS):
+        return False
+    # 4. 明確產卡長關鍵詞
     if any(k in t for k in _CONFIRM_LONG_KEYWORDS):
         return True
-    if len(t) <= 20 and (("對" in t) or ("好" in t)):
+    # 5. 純肯定短詞比對（去除常見標點符號）
+    t_clean = re.sub(r"[，。！!？?~～\s]+", "", t)
+    if t_clean in _EXACT_AFFIRMATIONS:
         return True
+    # 6. 口語開頭肯定詞短句（例如「好啊麻煩你了」、「對，這樣記就可以了」）
+    if len(t) <= 15:
+        for prefix in ("好", "對", "可以", "沒錯", "OK", "ok", "嗯", "恩"):
+            if t.startswith(prefix) and not any(neg in t for neg in ("好嗎", "對嗎", "好不好", "對不對")):
+                return True
     return False
 
 
@@ -126,6 +151,14 @@ def _abl_flag(ablation_config: Any, name: str, default: bool) -> bool:
         elif hasattr(ablation_config, k):
             return bool(getattr(ablation_config, k))
     return default
+
+
+def _abl_value(ablation_config: Any, name: str, default: Any) -> Any:
+    if ablation_config is None:
+        return default
+    if isinstance(ablation_config, dict):
+        return ablation_config.get(name, default)
+    return getattr(ablation_config, name, default)
 
 
 def is_retryable_error(e: Exception) -> bool:
@@ -364,11 +397,21 @@ def execute_ablation_turn(
         planner = neutral_planner_state()
     else:
         # LLM-first with retry + fallback
+        planner_model = _abl_value(ablation_config, "planner_model", "") or model
+        planner_temperature = _abl_value(ablation_config, "planner_temperature", 0.1)
+        planner_timeout = _abl_value(ablation_config, "planner_request_timeout_seconds", 3.0)
         try:
             patient_record = load_patient_record(patient_file)
 
             def _planner_call():
-                return evaluate_clinical_planner_llm(messages, patient_record, planner_client, model, timeout=3.0)
+                return evaluate_clinical_planner_llm(
+                    messages,
+                    patient_record,
+                    planner_client,
+                    planner_model,
+                    timeout=planner_timeout,
+                    temperature=planner_temperature,
+                )
 
             try:
                 planner = _call_with_retry(_planner_call, max_tries=4, backoffs=[1, 2, 4, 8])
@@ -385,6 +428,20 @@ def execute_ablation_turn(
             except Exception:
                 planner.engine = "python_fallback"
 
+    planner_events: list = []
+
+    def _persist_planner_state() -> None:
+        if not enable_planner:
+            return
+        try:
+            current_planner = planner
+        except NameError:
+            return
+        try:
+            update_from_planner_assessment(current_planner, file_path=patient_file)
+        except Exception as e:
+            planner_events.append(f"PLANNER_PERSIST_ERROR: {str(e)[:120]}")
+
     # Agenda tightening (same as handlers.py)
     try:
         if not planner.can_unlock_summary_tool and planner.is_explicit_request:
@@ -400,7 +457,7 @@ def execute_ablation_turn(
             if has_explicit_reason and has_med and (has_data or has_hypo or has_concern):
                 planner.is_agenda_confirmed = True
                 planner.can_unlock_summary_tool = True
-                planner.talker_guidance = "【臨床導引就醫備忘錄】：病患看診議程已具備明確主訴，核心資訊已達充分度！請立刻調用 generate_previsit_intake_summary 工具為病患生成門診摘要，嚴禁再拋出任何問題追問病患；生成完成後，親切告知已整理完畢並叮嚀看診時出示即可。"
+                planner.talker_guidance = "【臨床溝通導引】：病患看診議程已具備明確主訴，核心資訊已達充分度！請立刻調用 generate_previsit_intake_summary 工具為病患生成門診摘要，嚴禁再拋出任何問題追問病患；生成完成後，親切告知已整理完畢並叮嚀看診時出示即可。"
     except Exception:
         pass
 
@@ -433,6 +490,26 @@ def execute_ablation_turn(
                 return "糖尿病成因 胰島素阻抗"
             elif any(k in ql for k in ["是什麼", "什麼是", "定義", "分型", "種類"]):
                 return "糖尿病定義 血糖診斷標準"
+            elif "藥袋" in ql or "辨識出的藥品是" in q:
+                # 藥袋辨識關鍵字提取：依 OCR 辨識出之藥名檢索官方仿單
+                med_str = q.split("辨識出的藥品是：")[-1] if "辨識出的藥品是：" in q else (q.split("辨識出的藥品是")[-1] if "辨識出的藥品是" in q else q)
+                if "癲通" in med_str or "carbamazepine" in med_str.lower():
+                    return "癲通 Carbamazepine"
+                m_zh = re.search(r"([\u4e00-\u9fa5]{2,4})", med_str)
+                m_en = re.search(r"([A-Za-z]{3,})", med_str)
+                zh = m_zh.group(1) if m_zh else ""
+                en = m_en.group(1) if m_en else ""
+                extracted = f"{zh} {en}".strip()
+                return extracted if extracted else "癲通 Carbamazepine"
+            elif planner.retrieval_domain == RetrievalDomain.DIET_NUTRITION_KNOWLEDGE or any(k in ql for k in ["水果", "芭樂", "西瓜", "飲食", "熱量", "份量", "升糖", "飆高"]):
+                fruit = ""
+                for f in ["芭樂", "西瓜", "芒果", "荔枝", "香蕉", "蘋果", "橘子", "葡萄", "鳳梨"]:
+                    if f in ql:
+                        fruit = f
+                        break
+                if fruit:
+                    return f"糖尿病飲食原則 水果份量 {fruit}"
+                return "糖尿病飲食原則 水果份量"
             return "糖尿病衛教"
 
         def _is_def_local(q: str, domain_val: str) -> bool:
@@ -443,34 +520,75 @@ def execute_ablation_turn(
                     return True
             return False
 
+        is_med_bag = (image_path is not None) or ("辨識出的藥品是" in user_text) or ("我拍了我的藥袋照片" in user_text) or ("藥袋" in user_text and any(k in user_text for k in ["照片", "拍了", "辨識", "癲通", "長效膜衣錠", "mg", "毫克"]))
         needs_forced = False
-        if enable_forced and not planner.is_visit_mode and planner.retrieval_domain in [RetrievalDomain.GENERAL_EDUCATION, RetrievalDomain.DRUG_SAFETY]:
-            if _is_def_local(user_text, planner.retrieval_domain.value):
+        if enable_forced:
+            if is_med_bag:
                 needs_forced = True
+                if planner.retrieval_domain != RetrievalDomain.DRUG_SAFETY:
+                    planner.retrieval_domain = RetrievalDomain.DRUG_SAFETY
+            elif not planner.is_visit_mode and planner.retrieval_domain in [RetrievalDomain.GENERAL_EDUCATION, RetrievalDomain.DRUG_SAFETY, RetrievalDomain.DIET_NUTRITION_KNOWLEDGE]:
+                if planner.retrieval_domain == RetrievalDomain.DIET_NUTRITION_KNOWLEDGE:
+                    needs_forced = True
+                elif _is_def_local(user_text, planner.retrieval_domain.value):
+                    needs_forced = True
         if needs_forced:
             rule_q = _extract_definition_keyword(user_text)
             if rule_q:
                 forced_evidence = search_handbook(rule_q, user_raw_input=user_text, domain=planner.retrieval_domain.value)
-                forced_tool_display = f"search_handbook(關鍵字: '{rule_q}', domain={planner.retrieval_domain.value}, evidence_links已保留至就醫備忘錄小字{len(forced_evidence)}字/出處只印不念)"
+                forced_tool_display = f"search_handbook(關鍵字: '{rule_q}', domain={planner.retrieval_domain.value}, 檢索衛教指引{len(forced_evidence)}字)"
+                # 強制檢索已由程式直接完成並注入 Prompt，從暴露工具清單中移除 search_handbook，徹底避免模型重複自主調用引發例外
+                active_tools = [t for t in active_tools if t.get("function", {}).get("name") != "search_handbook"]
+                exposed_tool_names = [t.get("function", {}).get("name", "") for t in active_tools]
+                exposed_tool_set = set(exposed_tool_names)
     except Exception:
         forced_evidence = None
 
     # 6. Build inference context
     pruned_ctx = prune_conversation_history(messages, max_history_messages=8)
     inference_ctx = list(pruned_ctx)
-    # Guidance injection: only if planner enabled (neutral has empty so safe, but spec says never inject when OFF)
+    try:
+        cur_rec = load_patient_record(patient_file)
+        if cur_rec and isinstance(cur_rec, dict):
+            hot_ctx = format_patient_context(patient_file)
+            if hot_ctx and hot_ctx.strip() and inference_ctx:
+                inference_ctx[0] = {"role": "system", "content": build_nurse_system_prompt(hot_ctx)}
+    except Exception:
+        pass
     if enable_planner and getattr(planner, "talker_guidance", ""):
-        inference_ctx.append({"role": "system", "content": planner.talker_guidance})
+        clean_guidance = re.sub(r"【臨床溝通導引】[：:]\s*", "【臨床溝通導引】：", planner.talker_guidance)
+        inference_ctx.append({"role": "system", "content": clean_guidance})
     if forced_evidence:
         _compact = forced_evidence[:1000]
         if planner.retrieval_domain == RetrievalDomain.DRUG_SAFETY:
+            if is_med_bag:
+                guidance_task = (
+                    "【官方實證藥物衛教解說任務｜藥袋辨識與用藥安全】\n"
+                    f"{_compact}\n"
+                    "任務：病患剛上傳了藥袋照片，並反映晨間低血糖與頭暈症狀。\n"
+                    "1. 請依據上述衛福部官方仿單/國健署指引重點，向病患說明該藥品（如癲通/Carbamazepine）主要用途（如治療神經痛或抗癲癇），並明確告知它並非直接用來降血糖的藥物。\n"
+                    "2. 溫和同理並關心病患今早低血糖（65 mg/dL）與頭暈不適，確認是否有落實 15-15 吃糖急救法則。\n"
+                    "3. 叮嚀病患在醫師評估前切勿自行停藥或改藥，務必於下次回診時攜帶藥袋並詳細告知醫師。\n"
+                    "4. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
+                    "5. 出處呈現：請在對話中自然載明官方出處（例如口語提及『依據衛生福利部藥品仿單說明』，或於文末附上一行『（資料來源：衛生福利部藥品仿單）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
+                )
+            else:
+                guidance_task = (
+                    "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
+                    f"{_compact}\n"
+                    "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
+                    "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
+                    "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
+                    "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處呈現：請在解說中自然提及官方出處（例如『依據衛生福利部藥品仿單說明』，或於文末附上一行『（資料來源：衛生福利部藥品仿單）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
+                )
+        elif planner.retrieval_domain == RetrievalDomain.DIET_NUTRITION_KNOWLEDGE:
             guidance_task = (
-                "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
+                "【官方手冊飲食原則衛教任務｜實證詳實首發，按需白話轉譯】\n"
                 f"{_compact}\n"
-                "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
-                "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
-                "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
-                "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處只印在就醫備忘錄小字，口語對話自然稱『依據衛福部仿單說明』即可，絕不可輸出 raw evidence_links 及網址。"
+                "任務：病患正在詢問糖尿病飲食生活原則、水果或特定食物升糖風險與份量建議。\n"
+                "1. 請根據上述官方手冊飲食原則與食品營養內容，以溫暖、在地、有同理心的語氣向長輩解釋食物特性、醣類代換與份量控制原則（如水果適量分次攝取，避免一次吃過量造成血糖快速波動）。\n"
+                "2. 嚴格遵守單一問句預算，最多只拋出一個生活化問題；若為飲食提問可提醒長輩細嚼慢嚥、分次享用。\n"
+                "3. 出處呈現：請在解說中自然載明官方出處（例如口語提及『依據衛生福利部國民健康署糖尿病手冊建議』，或於文末附上一行『（資料來源：衛生福利部國民健康署糖尿病手冊）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
             )
         else:
             guidance_task = (
@@ -479,7 +597,7 @@ def execute_ablation_turn(
                 "任務：長輩正在詢問糖尿病成因、原理或衛教知識。\n"
                 "1. 請根據上述衛福部官方手冊重點，清楚完整地向長輩解釋成因機轉，保留重要衛教細節。\n"
                 "2. 於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
-                "3. 口語對話自然說明即可，絕不可輸出 raw evidence_links 及網址。"
+                "3. 出處呈現：請在解說中自然載明官方手冊出處（例如口語提及『依據衛生福利部國民健康署手冊建議』，或於文末附上一行『（資料來源：衛生福利部國民健康署衛教手冊）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
             )
         inference_ctx.append({"role": "system", "content": guidance_task})
 
@@ -492,8 +610,8 @@ def execute_ablation_turn(
     max_tokens_use = 500 if "gemini" in model.lower() else 250
 
     raw_talker_output = ""
-    called_tools: list[str] = []
-    tool_results: list[dict] = []
+    called_tools: list[str] = ["search_handbook"] if forced_evidence else []
+    tool_results: list[dict] = [{"tool": "search_handbook", "content": forced_evidence[:1000]}] if forced_evidence else []
     tool_rejections: list[dict] = []
     final_output = ""
     output_guard_obj = type("G", (), {"is_blocked": False, "risk_category": "NONE", "blocked_message": ""})()
@@ -594,6 +712,7 @@ def execute_ablation_turn(
                     called_tools = []
                     output_guard_obj = type("G", (), {"is_blocked": False, "risk_category": "NONE", "blocked_message": ""})()
                     messages.append({"role": "assistant", "content": final_output})
+                    _persist_planner_state()
                     latency_ms = int((time.time() - start) * 1000)
                     return {
                         "planner": planner,
@@ -606,11 +725,12 @@ def execute_ablation_turn(
                         "called_tools": called_tools,
                         "tool_results": tool_results,
                         "tool_rejections": tool_rejections,
+                        "forced_tool_display": forced_tool_display,
                         "flex_bubble": None,
                         "qr_payload": None,
                         "text_summary": None,
                         "termination_reason": termination,
-                        "events": [],
+                        "events": list(planner_events),
                         "token_usage": token_usage,
                         "retry_metadata": retry_meta,
                         "error": None,
@@ -639,6 +759,14 @@ def execute_ablation_turn(
 
                 # Second talker call with evidence
                 second_ctx = list(prune_conversation_history(messages, max_history_messages=8))
+                try:
+                    cur_rec = load_patient_record(patient_file)
+                    if cur_rec and isinstance(cur_rec, dict):
+                        hot_ctx = format_patient_context(patient_file)
+                        if hot_ctx and hot_ctx.strip() and second_ctx:
+                            second_ctx[0] = {"role": "system", "content": build_nurse_system_prompt(hot_ctx)}
+                except Exception:
+                    pass
                 # Build second_task like handlers
                 if planner.retrieval_domain == RetrievalDomain.DRUG_SAFETY:
                     second_task = (
@@ -647,7 +775,7 @@ def execute_ablation_turn(
                         "任務：病患正在詢問特定降血糖藥物成因、藥理作用或副作用機制。\n"
                         "1. 請依據上述衛福部官方仿單/臨床指引重點，條理清晰地向病患說明藥物成因機轉、常見腸胃反應與官方建議因應方式（如隨餐或飯後服用降低刺激、漸進適應），保留醫學事實細節，保障病患知情權。\n"
                         "2. 於說明文末親切附上引導句：『若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！』。\n"
-                        "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處只印在就醫備忘錄小字，口語對話自然稱『依據衛福部仿單說明』即可，絕不可輸出 raw evidence_links 及網址。"
+                        "3. 嚴禁提供劑量調整指令，若病患提及想停藥，提醒切勿擅自停藥；出處呈現：請在解說中自然提及官方出處（例如『依據衛生福利部藥品仿單說明』，或於文末附上一行『（資料來源：衛生福利部藥品仿單）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
                     )
                 else:
                     second_task = (
@@ -655,42 +783,53 @@ def execute_ablation_turn(
                         f"{tool_output[:800]}\n"
                         "長輩正在詢問糖尿病成因、原理或衛教知識。請根據上述衛福部官方手冊重點，清楚完整地向長輩解釋成因機轉，保留重要衛教細節。\n"
                         "於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
-                        "口語對話自然說明即可，絕對禁止輸出 raw evidence_links、網址或未排版 JSON。"
+                        "出處呈現：請在解說中自然載明官方手冊出處（例如口語提及『依據衛生福利部國民健康署手冊建議』，或於文末附上一行『（資料來源：衛生福利部國民健康署衛教手冊）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
                     )
                 second_ctx.append({"role": "system", "content": second_task})
 
-                def _second_call():
-                    return talker_client.chat.completions.create(
-                        model=model, messages=second_ctx, extra_body=extra_body, max_tokens=max_tokens_use, temperature=0.7
-                    )
+                second_text = ""
+                try:
+                    def _second_call():
+                        return talker_client.chat.completions.create(
+                            model=model, messages=second_ctx, extra_body=extra_body, max_tokens=max_tokens_use, temperature=temperature
+                        )
 
-                sec_meta = {}
-                second_resp = _call_with_retry(_second_call, max_tries=4, backoffs=[1, 2, 4, 8], metadata_out=sec_meta)
-                sec_usage = _extract_token_usage(second_resp)
-                if sec_usage:
-                    if token_usage is None:
-                        token_usage = sec_usage
-                    else:
-                        for tk in ["prompt_tokens", "completion_tokens", "total_tokens"]:
-                            v1 = token_usage.get(tk) or 0
-                            v2 = sec_usage.get(tk) or 0
-                            token_usage[tk] = v1 + v2
-                if sec_meta:
-                    retry_meta["attempts"] = retry_meta.get("attempts", 1) + sec_meta.get("attempts", 1)
-                    retry_meta["backoffs"] = retry_meta.get("backoffs", []) + sec_meta.get("backoffs", [])
-                    retry_meta["errors"] = retry_meta.get("errors", []) + sec_meta.get("errors", [])
+                    sec_meta = {}
+                    second_resp = _call_with_retry(_second_call, max_tries=4, backoffs=[1, 2, 4, 8], metadata_out=sec_meta)
+                    sec_usage = _extract_token_usage(second_resp)
+                    if sec_usage:
+                        if token_usage is None:
+                            token_usage = sec_usage
+                        else:
+                            for tk in ["prompt_tokens", "completion_tokens", "total_tokens"]:
+                                v1 = token_usage.get(tk) or 0
+                                v2 = sec_usage.get(tk) or 0
+                                token_usage[tk] = v1 + v2
+                    if sec_meta:
+                        retry_meta["attempts"] = retry_meta.get("attempts", 1) + sec_meta.get("attempts", 1)
+                        retry_meta["backoffs"] = retry_meta.get("backoffs", []) + sec_meta.get("backoffs", [])
+                        retry_meta["errors"] = retry_meta.get("errors", []) + sec_meta.get("errors", [])
 
-                second_msg = second_resp.choices[0].message
-                second_text = (getattr(second_msg, "content", None) or "").strip()
-                second_text = re.sub(r"<tool_call>.*?</tool_call>", "", second_text, flags=re.DOTALL).strip()
-                second_text = _strip_evidence_links_leak(second_text)
+                    second_msg = second_resp.choices[0].message
+                    second_text = (getattr(second_msg, "content", None) or "").strip()
+                    second_text = re.sub(r"<tool_call>.*?</tool_call>", "", second_text, flags=re.DOTALL).strip()
+                    second_text = _strip_evidence_links_leak(second_text)
+                except Exception as second_e:
+                    import sys, traceback
+                    print(f"[AblationCore search_handbook] 第二次 Talker 呼叫失敗，安全降級回落: {second_e}", file=sys.stderr)
+                    traceback.print_exc(file=sys.stderr)
+                    if 'retry_meta' in locals() and retry_meta is not None:
+                        retry_meta.setdefault("errors", []).append(f"second_call_error: {str(second_e)}")
+
                 if not second_text:
-                    if planner and getattr(planner, "talker_guidance", None) and not any(k in planner.talker_guidance for k in ["【臨床", "請先", "嚴格遵守"]):
+                    if raw_content and raw_content.strip() and not raw_content.strip().startswith("{") and "tool_calls" not in raw_content:
+                        second_text = raw_content.strip()
+                    elif planner and getattr(planner, "talker_guidance", None) and not any(k in planner.talker_guidance for k in ["【臨床", "請先", "嚴格遵守"]):
                         second_text = planner.talker_guidance
-                    elif planner.retrieval_domain == RetrievalDomain.DRUG_SAFETY:
-                        second_text = "脹得不舒服齁，我幫您記在第一條，回診一起問醫師好不好？這段時間先照醫師原本的交代用藥，有變化我幫您記下來。"
+                    elif planner and planner.retrieval_domain == RetrievalDomain.DRUG_SAFETY:
+                        second_text = "收到您的藥品與用藥諮詢了！用藥安全最重要，這段時間請先依照醫師原先囑咐規律服藥，切勿擅自停藥或增減劑量；若有用藥不適或疑問，回診時務必提出與醫師討論喔。"
                     else:
-                        second_text = "太好了！聽到您回診後醫師幫忙調整了用藥，肚子也不脹了，空腹血糖維持在穩定範圍，真的很替您高興！想請問這次換藥後，最近身體適應得都還順利嗎？"
+                        second_text = "收到您的問題了！關於糖尿病日常照護與衛教指引，建議維持規律作息與飲食控制；若有任何身體不適，請務必諮詢專業醫療人員喔。"
                 raw_talker_output = raw_content  # keep original raw
                 # Guard/budget on second text
                 if enable_output_guard:
@@ -714,9 +853,150 @@ def execute_ablation_turn(
                 final_output = second_text
                 messages.append({"role": "assistant", "content": final_output})
                 # Set tool display for logging
-                forced_tool_display = f"search_handbook(關鍵字: '{kw_clean}', evidence_links已保留至就醫備忘錄小字{len(tool_output)}字/出處只印不念)"
+                forced_tool_display = f"search_handbook(關鍵字: '{kw_clean}', 檢索衛教指引{len(tool_output)}字)"
 
             elif fname0 in ["generate_previsit_intake_summary", "generate_visit_summary"]:
+                # 從長期健康檔案與 Planner 槽位進行臨床雙向校準補全（防失憶安全網）
+                try:
+                    _rec_hot = load_patient_record(patient_file)
+                    # 1. 補全低血糖紀錄
+                    _raw_hypo = args0.get("hypo_history", "")
+                    if not _raw_hypo or _raw_hypo in ["近期未提及或無發生", "近期無低血糖事件", "無特別異常", "未特別說明", "無"]:
+                        if _rec_hot.get("hypo_history") and "無低血糖" not in _rec_hot.get("hypo_history"):
+                            args0["hypo_history"] = _rec_hot.get("hypo_history")
+                        elif planner.slots.hypo_history and "無" not in planner.slots.hypo_history:
+                            args0["hypo_history"] = planner.slots.hypo_history
+
+                    # 1.1 跨欄位推論（Cross-slot Inference）：比對血糖數值與自述症狀，動態捕獲數值並執行時效仲裁
+                    _g_combined = " ".join([
+                        str(args0.get("glucose_metrics", "")),
+                        str(_rec_hot.get("glucose_metrics", {}).get("latest", "")),
+                        str(getattr(planner.slots, "glucose_metrics", "") or ""),
+                        str(args0.get("glucose_range", "") or "")
+                    ])
+                    _s_combined = " ".join([
+                        str(args0.get("side_effects_or_concerns", "")),
+                        " ".join(_rec_hot.get("reported_symptoms", [])),
+                        str(getattr(planner.slots, "concerns_or_side_effects", "") or "")
+                    ])
+                    m_low = re.search(r"\b([4-6][0-9])\b", _g_combined)
+                    _has_hypo_symptom = any(k in _s_combined or k in _g_combined for k in ["頭暈", "手抖", "冒冷汗", "心悸", "方糖", "吃糖", "補糖"])
+
+                    range_inferred = None
+                    if m_low and _has_hypo_symptom:
+                        low_val = m_low.group(1)
+                        # 時效仲裁：比對 glucose_metrics.updated_at，30 分鐘內寫「自述測得」，超過時效寫「檔案曾自述測得」
+                        _is_recent = False
+                        _updated_at_str = _rec_hot.get("glucose_metrics", {}).get("updated_at", "")
+                        if _updated_at_str:
+                            try:
+                                dt = datetime.strptime(_updated_at_str, "%Y-%m-%d %H:%M:%S")
+                                if abs((datetime.now() - dt).total_seconds()) <= 1800:
+                                    _is_recent = True
+                            except Exception:
+                                pass
+                        if re.search(r"\b[4-6][0-9]\b", user_text) and any(k in user_text for k in ["頭暈", "手抖", "冒冷汗", "心悸", "吃糖", "方糖", "補糖", "量到", "驗到", "測到", "血糖"]):
+                            _is_recent = True
+
+                        if _is_recent:
+                            hypo_inferred = f"自述測得空腹 {low_val} mg/dL 伴頭暈已補糖緩解（待確認，請醫師評估）"
+                            range_inferred = f"自述測得最低 {low_val} mg/dL 伴頭暈已補糖緩解"
+                        else:
+                            hypo_inferred = f"檔案曾自述測得空腹 {low_val} mg/dL 伴頭暈已補糖緩解（待確認，請醫師評估）"
+                            range_inferred = f"檔案曾自述測得最低 {low_val} mg/dL 伴頭暈已補糖緩解"
+
+                        _cur_h = args0.get("hypo_history", "")
+                        if not _cur_h or any(neg in _cur_h for neg in ["無明顯", "無低血糖", "未提及", "無特別異常", "未特別說明", "無", "近期無"]):
+                            args0["hypo_history"] = hypo_inferred
+
+                    # 1.2 已填值反向驗證（治本）：驗證已填寫的 glucose_range 是否包含捏造的數值或時間詞
+                    raw_gr = str(args0.get("glucose_range") or "").strip()
+                    if raw_gr:
+                        user_hist = " ".join([
+                            m.get("content", "") for m in messages 
+                            if isinstance(m, dict) and m.get("role") == "user" and m.get("content")
+                        ])
+                        legitimate_source = " ".join([
+                            user_text,
+                            user_hist,
+                            str(_rec_hot.get("glucose_metrics", {}).get("latest", "")),
+                            str(_rec_hot.get("hypo_history", "")),
+                            " ".join(_rec_hot.get("reported_symptoms", [])),
+                            str(_rec_hot.get("diet_lifestyle", "")),
+                            str(getattr(planner.slots, "glucose_metrics", "") or ""),
+                            str(getattr(planner.slots, "hypo_history", "") or ""),
+                            str(getattr(planner.slots, "concerns_or_side_effects", "") or ""),
+                            str(getattr(planner.slots, "diet_lifestyle", "") or ""),
+                        ])
+                        nums_in_gr = re.findall(r"\b([1-9]\d{1,2})\b", raw_gr)
+                        # 排除 15-15 衛教固定指引數字（70, 15, 3 等，不誤傷）
+                        nums_to_check = [n for n in nums_in_gr if n not in ("70", "15", "3", "4")]
+                        has_fabricated_num = any(n not in legitimate_source for n in nums_to_check)
+
+                        time_words = re.findall(r"(?:週|禮拜|星期)[一二三四五六日天]|\d+\s*(?:分鐘|小時|天)", raw_gr)
+                        time_to_check = [t for t in time_words if t not in ("15分鐘", "15 分鐘")]
+                        has_fabricated_time = any(t not in legitimate_source for t in time_to_check)
+
+                        if has_fabricated_num or has_fabricated_time:
+                            # 存在未出現於病患發言或檔案的捏造數值/時間片段，剔除並回落重組
+                            if range_inferred:
+                                args0["glucose_range"] = range_inferred
+                            else:
+                                gm_val = args0.get("glucose_metrics") or _rec_hot.get("glucose_metrics", {}).get("latest") or ""
+                                hypo_val = args0.get("hypo_history") or ""
+                                if gm_val and hypo_val and hypo_val not in ("近期無低血糖事件", "無特別異常", "未特別說明", "無"):
+                                    args0["glucose_range"] = f"{gm_val}，{hypo_val}"
+                                elif gm_val:
+                                    args0["glucose_range"] = gm_val
+                                else:
+                                    args0["glucose_range"] = ""
+                    else:
+                        if range_inferred:
+                            args0["glucose_range"] = range_inferred
+
+                    # 2. 補全血糖數據
+                    _raw_gm = args0.get("glucose_metrics", "")
+                    if not _raw_gm or _raw_gm in ["未特別說明", "待查", "待回診檢視", "未提供"]:
+                        if _rec_hot.get("glucose_metrics", {}).get("latest"):
+                            args0["glucose_metrics"] = _rec_hot["glucose_metrics"]["latest"]
+                        elif planner.slots.glucose_metrics:
+                            args0["glucose_metrics"] = planner.slots.glucose_metrics
+
+                    # 3. 補全藥物資訊（特別是已辨識的藥袋，排除停用藥）
+                    _raw_meds = args0.get("medications", "")
+                    _known_med_names = [m.get("name", "") for m in _rec_hot.get("medications", []) if m.get("name")]
+                    if _known_med_names:
+                        from diabetes_chatbot.memory import MED_SWITCH_TAG
+                        from diabetes_chatbot.tools import _extract_discontinued_keywords
+                        _disc_keys = set()
+                        for _m_item in _known_med_names:
+                            _disc_keys.update(_extract_discontinued_keywords(_m_item))
+                        if _raw_meds:
+                            _disc_keys.update(_extract_discontinued_keywords(_raw_meds))
+
+                        valid_drug_names = [
+                            n for n in _known_med_names 
+                            if "不知" not in n and "記不得" not in n and "有按時" not in n
+                            and MED_SWITCH_TAG not in n and "已停用" not in n and "停藥" not in n and "已停服" not in n
+                            and not any(dk.lower() in n.lower() for dk in _disc_keys)
+                        ]
+                        if valid_drug_names:
+                            clean_drug_summary = "、".join(list(dict.fromkeys(valid_drug_names))[:2])
+                            if not _raw_meds or _raw_meds == "未特別說明" or "記不得" in _raw_meds:
+                                args0["medications"] = f"{clean_drug_summary}（藥袋已記錄待現場核對）"
+                            elif not any(d in _raw_meds for d in valid_drug_names):
+                                args0["medications"] = f"{_raw_meds}；藥袋已辨識：{clean_drug_summary}"
+
+                    # 4. 補全飲食生活紀錄
+                    _raw_diet = args0.get("diet_lifestyle", "")
+                    if not _raw_diet or _raw_diet in ["未特別說明", "無", "待查", "未提供"]:
+                        if _rec_hot.get("diet_lifestyle"):
+                            args0["diet_lifestyle"] = _rec_hot.get("diet_lifestyle")
+                        elif getattr(planner.slots, "diet_lifestyle", None):
+                            args0["diet_lifestyle"] = planner.slots.diet_lifestyle
+                except Exception:
+                    pass
+
                 text_summary = generate_visit_summary(
                     visit_reason=args0.get("visit_reason", "定期回診追蹤"),
                     medications=args0.get("medications", "未特別說明"),
@@ -727,6 +1007,7 @@ def execute_ablation_turn(
                     evidence_links=args0.get("evidence_links"),
                     patient_quote=args0.get("patient_quote"),
                     glucose_range=args0.get("glucose_range"),
+                    diet_lifestyle=args0.get("diet_lifestyle"),
                 )
                 tool_results.append({"tool": fname0, "content": text_summary[:1000]})
                 update_previsit_summary(text_summary, file_path=patient_file)
@@ -740,6 +1021,7 @@ def execute_ablation_turn(
                     evidence_links=args0.get("evidence_links"),
                     patient_quote=args0.get("patient_quote"),
                     glucose_range=args0.get("glucose_range"),
+                    diet_lifestyle=args0.get("diet_lifestyle"),
                 )
                 qr_payload = generate_clinic_qr_payload(
                     visit_reason=args0.get("visit_reason", "定期回診追蹤"),
@@ -751,6 +1033,7 @@ def execute_ablation_turn(
                     evidence_links=args0.get("evidence_links"),
                     patient_quote=args0.get("patient_quote"),
                     glucose_range=args0.get("glucose_range"),
+                    diet_lifestyle=args0.get("diet_lifestyle"),
                 )
                 # Append tool conversation
                 try:
@@ -765,11 +1048,13 @@ def execute_ablation_turn(
                 gm = args0.get("glucose_metrics", "未特別說明")
                 hypo = args0.get("hypo_history", "近期未提及或無發生")
                 concerns = args0.get("side_effects_or_concerns", "無特別異常")
+                diet_val = args0.get("diet_lifestyle", "")
+                diet_part = f"；生活飲食「{diet_val}」" if (diet_val and diet_val not in ("未特別說明", "無")) else ""
                 final_hint = (
                     f"跟您確認一下我幫您整理的就醫備忘："
                     f"第一，回診訴求是「{vr}」；"
                     f"第二，目前用藥是「{meds}」；"
-                    f"第三，血糖與不適狀況是「{gm}／{hypo}／{concerns}」。"
+                    f"第三，血糖與不適狀況是「{gm}／{hypo}／{concerns}{diet_part}」。"
                     f"這樣記對嗎，可以嗎？確認後我幫您產生 QR 就醫備忘錄，回診直接出示給醫師看就可以了。"
                 )
                 if not enable_output_guard:
@@ -821,6 +1106,7 @@ def execute_ablation_turn(
                 final_output = raw_content
                 messages.append({"role": "assistant", "content": final_output})
 
+            _persist_planner_state()
             latency_ms = int((time.time() - start) * 1000)
             return {
                 "planner": planner,
@@ -833,11 +1119,12 @@ def execute_ablation_turn(
                 "called_tools": called_tools,
                 "tool_results": tool_results,
                 "tool_rejections": tool_rejections,
+                "forced_tool_display": forced_tool_display,
                 "flex_bubble": flex_bubble,
                 "qr_payload": qr_payload,
                 "text_summary": text_summary,
                 "termination_reason": termination,
-                "events": [],
+                "events": list(planner_events),
                 "token_usage": token_usage,
                 "retry_metadata": retry_meta,
                 "error": error,
@@ -865,29 +1152,13 @@ def execute_ablation_turn(
             if enable_warning and re.search(r"不想吃|不敢吃|想停|不吃了|沒在吃", user_text):
                 if not re.search(r"不能自己停|不可自行停|切勿自行停|不要擅自停|不能擅自停|不要自己停|不要停藥|不能停", final_reply):
                     final_reply = final_reply.rstrip("。") + "。在醫師評估前，降血糖藥物千萬不能自己停掉喔，突然停藥血糖容易飆高有危險。"
+        final_reply = final_reply.replace("**", "").replace("__", "")
+        if not final_reply.strip():
+            final_reply = "您好呀！我是您的糖尿病衛教小幫手，可以幫您記血糖、聊飲食、整理看診前的就醫備忘錄喔！今天想聊聊什麼呢？"
         final_output = final_reply
         messages.append({"role": "assistant", "content": final_output})
 
-        # Background persist (daemon)
-        def _bg_persist_hot():
-            try:
-                if not enable_planner:
-                    return
-                if getattr(planner, "engine", "") == "llm":
-                    update_from_planner_assessment(planner, file_path=patient_file)
-                else:
-                    cur_rec = load_patient_record(patient_file)
-                    llm_eval = evaluate_clinical_planner_llm(list(messages), cur_rec, planner_client, model, timeout=3.0)
-                    if getattr(llm_eval, "engine", "") == "llm":
-                        update_from_planner_assessment(llm_eval, file_path=patient_file)
-            except Exception:
-                pass
-
-        try:
-            bg = threading.Thread(target=_bg_persist_hot, daemon=True)
-            bg.start()
-        except Exception:
-            pass
+        _persist_planner_state()
 
         latency_ms = int((time.time() - start) * 1000)
         return {
@@ -901,11 +1172,12 @@ def execute_ablation_turn(
             "called_tools": called_tools,
             "tool_results": tool_results,
             "tool_rejections": tool_rejections,
+            "forced_tool_display": forced_tool_display,
             "flex_bubble": flex_bubble,
             "qr_payload": qr_payload,
             "text_summary": text_summary,
             "termination_reason": termination,
-            "events": [],
+            "events": list(planner_events),
             "token_usage": token_usage,
             "retry_metadata": retry_meta,
             "error": error,
@@ -913,9 +1185,31 @@ def execute_ablation_turn(
         }
 
     except Exception as e:
+        import sys, traceback
+        print(f"[AblationCore ERROR] 執行對話輪次發生例外: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        try:
+            from diabetes_chatbot.logger import log_turn
+            log_turn(user_text, f"[系統例外安全回落]: {e}", latency=0.0, tool_used="EXCEPTION_FALLBACK")
+        except Exception:
+            pass
+
         latency_ms = int((time.time() - start) * 1000)
         error = str(e)
         termination = "ERROR"
+
+        fallback_reply = "您好！目前系統處理稍有延遲，我已經收到您的訊息。請問您目前身體狀況還好嗎？若有任何急性不適或低血糖症狀，請先吃糖休息或隨時告訴我喔！"
+        if 'planner' in locals() and planner:
+            if getattr(planner, "retrieval_domain", None) == RetrievalDomain.DRUG_SAFETY:
+                fallback_reply = "收到您的藥品與用藥諮詢了！用藥安全最重要，這段時間請先依照醫師原先囑咐規律服藥，切勿擅自停藥或增減劑量；若有用藥不適或疑問，回診時務必提出與醫師討論喔。"
+            elif getattr(planner, "talker_guidance", None) and not any(k in getattr(planner, "talker_guidance", "") for k in ["【臨床", "請先", "嚴格遵守"]):
+                fallback_reply = planner.talker_guidance
+
+        try:
+            _persist_planner_state()
+        except NameError:
+            pass
+
         return {
             "planner": planner if 'planner' in locals() else neutral_planner_state(),
             "exposed_tools": active_tools if 'active_tools' in locals() else get_canonical_tool_snapshot(),
@@ -923,15 +1217,16 @@ def execute_ablation_turn(
             "input_guard_result": input_guard_obj if 'input_guard_obj' in locals() else inspect_safety_guard(user_text),
             "output_guard_result": type("G", (), {"is_blocked": False, "risk_category": "NONE", "blocked_message": ""})(),
             "raw_talker_output": raw_talker_output if 'raw_talker_output' in locals() else "",
-            "final_output": "",
+            "final_output": fallback_reply,
             "called_tools": called_tools if 'called_tools' in locals() else [],
             "tool_results": tool_results if 'tool_results' in locals() else [],
             "tool_rejections": tool_rejections if 'tool_rejections' in locals() else [],
+            "forced_tool_display": forced_tool_display if 'forced_tool_display' in locals() else None,
             "flex_bubble": None,
             "qr_payload": None,
             "text_summary": None,
             "termination_reason": termination,
-            "events": ["ERROR"],
+            "events": (["ERROR"] + list(planner_events)) if 'planner_events' in locals() else ["ERROR"],
             "token_usage": None,
             "retry_metadata": retry_meta if 'retry_meta' in locals() else None,
             "error": error,

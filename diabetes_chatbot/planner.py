@@ -22,6 +22,7 @@ class SlotStatus(str, Enum):
 
 class RetrievalDomain(str, Enum):
     DIET_NUTRITION = "DIET_NUTRITION"
+    DIET_NUTRITION_KNOWLEDGE = "DIET_NUTRITION_KNOWLEDGE"
     DRUG_SAFETY = "DRUG_SAFETY"
     GENERAL_EDUCATION = "GENERAL_EDUCATION"
     NONE = "NONE"
@@ -38,6 +39,8 @@ class ClinicalSlots:
     hypo_history_status: SlotStatus = SlotStatus.MISSING
     concerns_or_side_effects: str = ""
     concerns_status: SlotStatus = SlotStatus.MISSING
+    diet_lifestyle: str = ""
+    diet_lifestyle_status: SlotStatus = SlotStatus.MISSING
 
 @dataclass
 class PlannerAssessment:
@@ -133,17 +136,19 @@ PLANNER_SYSTEM_PROMPT = """你是一位專精於糖尿病衛教與新陳代謝�
 
 【第一維度：核心意圖與檢索領域隔離 (retrieval_domain)】：
 請由常識理解判斷對話的醫學本體範疇，防止跨領域檢索污染：
-- DIET_NUTRITION: 病患提及任何生活飲食、三餐、食材、點心、零食、飲品、吃喝聚餐（例如王子麵、車輪餅、流水席、珍奶、白飯等任何食物）。此時檢索強制鎖定生活飲食指引，絕不可跨域檢索藥品圖譜。
+- DIET_NUTRITION: 病患純分享、閒聊日常飲食生活、提及吃過的美食、三餐吃什麼（例如「我中午吃了芭樂好好吃」「今天吃了麵線糊」）。僅同理關懷，無須查手冊。
+- DIET_NUTRITION_KNOWLEDGE: 病患詢問糖尿病飲食知識、原則、禁忌、風險、升糖影響或份量（判定意圖詞：會不會、要注意什麼、能不能吃、可以吃嗎、可以吃多少、適合吃什麼、什麼水果、禁忌，例如「芭樂一次吃一整顆會不會讓血糖飆高」「糖尿病平常飲食要注意什麼」）。此時強制檢索官方手冊飲食原則與營養表。
 - DRUG_SAFETY: 病患詢問特定西藥（如庫魯化、SGLT2、胰島素）、藥物副作用、異常不適或黑框警訊。
 - GENERAL_EDUCATION: 詢問糖尿病基本定義、空腹血糖標準數值等非生活、非用藥之通用衛教。
 - NONE: 一般打招呼寒暄、純生活閒聊無醫學資訊需求。
 
-【第二維度：TADE 5 大就醫槽位盤點 (看診備忘)】：
+【第二維度：TADE 6 大就醫槽位盤點 (看診備忘)】：
 1. visit_reason (本次回診訴求)：本次回診病患親口確認想處理的核心問題（例如看診拿藥、血糖波動、特定不適）。
 2. medications (目前用藥與順從性)：具體藥名；若病患自述有吃藥但未說藥名或忘記/會帶藥袋，狀態為 PARTIAL。
 3. glucose_metrics (近期血糖數據)：自述數值；若自述沒在量，狀態為 PARTIAL。
 4. hypo_history (低血糖病史)：冒冷汗、心悸、手抖、無低血糖等。
 5. concerns_or_side_effects (副作用與疑慮主訴)：胃脹、腹脹、肚子脹、腹瀉、想減藥、不想吃藥、水腫、嚴重不適等。
+6. diet_lifestyle (生活飲食習慣與疑慮)：自述三餐份量、主食澱粉、特定水果與點心攝取習慣（僅客觀提煉病患親口自述的食物項目與份量）。若未提及為 MISSING。
 【重要過濾原則】：日常生活的良性生理感覺（如吃飽想睡、飽足感、肚子餓、口渴）屬於正常生活代謝，絕對不可當作就醫主訴 (concerns)！只有明確病理不適才可列入。
 狀態規範：KNOWN (已掌握), PARTIAL (部分掌握/待現場看藥袋), MISSING (未提及)。
 
@@ -162,6 +167,8 @@ PLANNER_SYSTEM_PROMPT = """你是一位專精於糖尿病衛教與新陳代謝�
 【第四維度：給護理師的臨床導引就醫備忘錄 (talker_guidance，三件套一問一答)】：
 - 停藥危機引導（僅限病患明確表達不想吃藥、不敢吃、想停藥、不吃了等不依從停藥意圖）：
   指示護理師：「病患表達停藥意圖，屬用藥安全危機。請先同理長輩不適，並嚴正溫和提醒『在醫師評估前藥千萬不能自己停掉否則血糖衝高危險』；承諾將此服藥不適與調藥訴求列為回診第一條，並親切引導若身邊有藥袋可拍照傳過來供確認藥名。本輪最多只問這一個問題！」
+- 輕中度低血糖急救引導（病患提及血糖低於 70 mg/dL，如 65，或自述頭暈、冒冷汗、心悸、手抖等疑似低血糖且意識清醒）：
+  指示護理師：「長輩出現血糖低於 70 mg/dL 偏低與低血糖不適，屬急救安全第一優先！請先溫暖同理長輩頭暈難受，客觀說明數值確實偏低（通常醫學標準為 70 mg/dL 以下），並務必明確指導『15-15 吃糖急救法則』：請趕快先吃 15 克的含糖食物（例如 3 到 4 顆方糖、半杯果汁或含糖飲料），坐著或躺著休息 15 分鐘後再量一次血糖；最後單一聚焦詢問長輩平時是否有按時吃降血糖藥（若身邊有藥袋也可以隨時拍照傳來供確認）。嚴禁一次問多題！」
 - 藥理成因與副作用諮詢（病患詢問為什麼吃藥會肚子脹、藥理作用或副作用成因）：
   指示護理師：「病患正在詢問特定降血糖藥物成因機轉或副作用原理。請依據衛福部仿單與官方指引，條理分明、結構完整地向病患解釋藥理作用與常見初期腸胃適應期反應，保留醫學事實細節以保障知情權；並於說明文末親切加註：若上述醫學說明有太深奧或看不懂的地方，隨時告訴我，我可以用更生活化的比喻向您解釋喔！」
 - 當病患提出看診整理需求，但 is_agenda_confirmed 為 false 時（Agenda-Setting 階段）：
@@ -187,12 +194,13 @@ PLANNER_SYSTEM_PROMPT = """你是一位專精於糖尿病衛教與新陳代謝�
 請一律以嚴格 JSON 格式輸出，不得包含額外說明文字或 markdown 程式碼標記以外的廢話：
 {
   "detected_intent": "DIET_LIFESTYLE|MEDICATION_SAFETY|CLINICAL_VISIT|GENERAL_HEALTH",
-  "retrieval_domain": "DIET_NUTRITION|DRUG_SAFETY|GENERAL_EDUCATION|NONE",
+  "retrieval_domain": "DIET_NUTRITION|DIET_NUTRITION_KNOWLEDGE|DRUG_SAFETY|GENERAL_EDUCATION|NONE",
   "visit_reason": {"content": "...", "status": "KNOWN|PARTIAL|MISSING"},
   "medications": {"content": "...", "status": "KNOWN|PARTIAL|MISSING"},
   "glucose_metrics": {"content": "...", "status": "KNOWN|PARTIAL|MISSING"},
   "hypo_history": {"content": "...", "status": "KNOWN|PARTIAL|MISSING"},
   "concerns_or_side_effects": {"content": "...", "status": "KNOWN|PARTIAL|MISSING"},
+  "diet_lifestyle": {"content": "...", "status": "KNOWN|PARTIAL|MISSING"},
   "is_visit_mode": true/false,
   "is_explicit_request": true/false,
   "is_agenda_confirmed": true/false,
@@ -209,7 +217,8 @@ def evaluate_clinical_planner_llm(
     patient_record: Optional[dict] = None,
     client: Optional[OpenAI] = None,
     model: str = "mimo-v2.5",
-    timeout: float = 2.0
+    timeout: float = 2.0,
+    temperature: float = 0.1
 ) -> PlannerAssessment:
     if client is None:
         return evaluate_clinical_planner(messages, patient_record=patient_record)
@@ -239,7 +248,7 @@ def evaluate_clinical_planner_llm(
             ],
             extra_body=extra_body,
             max_tokens=700,
-            temperature=0.1,
+            temperature=temperature,
             timeout=timeout,
         )
         raw_text = resp.choices[0].message.content.strip()
@@ -260,12 +269,14 @@ def evaluate_clinical_planner_llm(
         gm_c, gm_s = _parse_slot("glucose_metrics")
         hh_c, hh_s = _parse_slot("hypo_history")
         c_c, c_s = _parse_slot("concerns_or_side_effects")
+        dl_c, dl_s = _parse_slot("diet_lifestyle")
         slots = ClinicalSlots(
             visit_reason=vr_c, visit_reason_status=vr_s,
             medications=med_c, medications_status=med_s,
             glucose_metrics=gm_c, glucose_metrics_status=gm_s,
             hypo_history=hh_c, hypo_history_status=hh_s,
-            concerns_or_side_effects=c_c, concerns_status=c_s
+            concerns_or_side_effects=c_c, concerns_status=c_s,
+            diet_lifestyle=dl_c, diet_lifestyle_status=dl_s
         )
         domain_raw = data.get("retrieval_domain", "NONE")
         try:
@@ -465,6 +476,28 @@ def evaluate_clinical_planner(
         slots.concerns_status = SlotStatus.KNOWN
     else:
         slots.concerns_status = SlotStatus.MISSING
+
+    # 飲食生活槽位提煉（Rule 備援）
+    diet_items = []
+    fruit_matches = [f for f in ["芭樂", "西瓜", "香蕉", "芒果", "葡萄", "鳳梨", "橘子", "柳丁", "荔枝", "龍眼", "水梨", "蘋果"] if f in all_user_text]
+    if fruit_matches:
+        fruit_name = "、".join(fruit_matches)
+        if "一次" in all_user_text or "一整顆" in all_user_text or "一大" in all_user_text or "一大片" in all_user_text:
+            diet_items.append(f"自述攝取較多份量{fruit_name}習慣（單次醣量偏高）")
+        else:
+            diet_items.append(f"日常有食用{fruit_name}等水果習慣")
+    elif "水果" in all_user_text:
+        diet_items.append("日常有食用較多份量水果習慣")
+    if any(k in all_user_text for k in ["菜包", "肉包", "包子", "糙米漿", "米漿"]):
+        diet_items.append("早餐食用包子搭配糙米漿（高澱粉醣類組合）")
+    if diet_items:
+        slots.diet_lifestyle = "；".join(diet_items)
+        slots.diet_lifestyle_status = SlotStatus.KNOWN
+    elif record.get("diet_lifestyle"):
+        slots.diet_lifestyle = record.get("diet_lifestyle")
+        slots.diet_lifestyle_status = SlotStatus.KNOWN
+    else:
+        slots.diet_lifestyle_status = SlotStatus.MISSING
     is_agenda_confirmed = False
     if is_visit_mode:
         has_explicit_agenda_in_text = any(k in all_user_text for k in [
@@ -547,6 +580,30 @@ def evaluate_clinical_planner(
                 talker_guidance = talker_guidance.rstrip("。") + f"。{_NONCOMPLIANCE_WARNING}。"
             else:
                 talker_guidance = f"【溫和提醒】：{_NONCOMPLIANCE_WARNING}。"
+
+    # 低血糖急救第一優先判定（血糖 < 70 mg/dL 或低血糖症狀）
+    is_hypo_urgent = False
+    if glucose_match:
+        try:
+            val_int = int(glucose_match.group(1))
+            if 40 <= val_int < 70:
+                is_hypo_urgent = True
+        except Exception:
+            pass
+    if any(k in all_user_text for k in ["血糖65", "血糖 65", "65度", "低血糖"]) and any(k in all_user_text for k in ["頭暈", "手抖", "冒冷汗", "心悸", "不舒服"]):
+        is_hypo_urgent = True
+
+    if is_hypo_urgent:
+        highest_priority_gap = "hypo_emergency"
+        talker_guidance = (
+            "【臨床溝通導引】：長輩血糖偏低（低於 70 mg/dL），屬急救安全第一優先！"
+            "請先溫暖同理並關心長輩身體不適，說明數值偏低，這時候安全第一，請務必第一時間完整採取『15-15 法則』清楚條列三個步驟："
+            "1. 趕快吃 15 克的快速含糖食物（例如含 3 到 4 顆方糖的溫開水、半杯約 125cc 的果汁或含糖飲料）；"
+            "2. 休息 15 分鐘：吃完後坐著或躺著休息，不要勉強走動；"
+            "3. 15 分鐘後再量一次血糖，確認回升到 70 mg/dL 以上。"
+            "結尾叮嚀『照顧好自己最重要！』並單一聚焦詢問平時是否有在吃降血糖藥物或打胰島素。嚴禁省略吃糖步驟！"
+        )
+
     target_query = (last_user_text or all_user_text).strip()
     drug_safety_keywords = [
         "藥", "庫魯化", "美迪康", "胰島素", "佳糖維", "得爾糖", "二甲雙胍", "metformin",
@@ -559,12 +616,20 @@ def evaluate_clinical_planner(
         "麵包", "地瓜", "燕麥", "蘿蔔", "零食", "飲料", "澱粉", "醣", "糖類", "熱量", "卡路里"
     ]
     is_diet_nutrition = any(k in target_query.lower() for k in diet_keywords) and not is_drug_safety
+    diet_knowledge_keywords = [
+        "會不會", "要注意什麼", "注意什麼", "能不能吃", "可以吃嗎", "可以吃多少", "適合吃什麼", "什麼水果", "禁忌",
+        "升血糖", "飆高", "血糖飆", "份量", "能吃嗎", "可以吃", "能不能", "多少量", "怎麼吃", "如何吃"
+    ]
+    is_diet_knowledge = is_diet_nutrition and any(k in target_query.lower() for k in diet_knowledge_keywords)
     general_edu_keywords = ["保養", "眼睛", "足部", "腳", "運動", "標準值", "糖化血色素", "檢驗", "指標",
         "成因", "形成", "原理", "是什麼", "定義", "怎麼來的", "為什麼", "為何", "病因", "機轉"]
     is_general_edu = any(k in target_query.lower() for k in general_edu_keywords)
     if is_drug_safety:
         retrieval_domain = RetrievalDomain.DRUG_SAFETY
         detected_intent = "DRUG_SAFETY_INQUIRY"
+    elif is_diet_knowledge:
+        retrieval_domain = RetrievalDomain.DIET_NUTRITION_KNOWLEDGE
+        detected_intent = "DIET_NUTRITION_KNOWLEDGE_INQUIRY"
     elif is_diet_nutrition:
         retrieval_domain = RetrievalDomain.DIET_NUTRITION
         detected_intent = "DIET_NUTRITION_INQUIRY"

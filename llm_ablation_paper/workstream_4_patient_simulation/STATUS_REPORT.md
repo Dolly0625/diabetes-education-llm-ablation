@@ -6,7 +6,7 @@
 
 `APPROVED`（WS4-B 正式就緒強化；WS4-A 維持已通過）
 
-WS4-A 核心產物維持已通過。WS4-B roleplay runner 已於 `ws1-formal-readiness` 分支完成正式就緒強化（Gemini-only provider 配對、fake dry-run 改走逐輪正式路徑、retry 分類、可注入 timeout、`research_patient_id` 解耦、Input Guard canary、`WS4_REQUIRE_SOURCE_CSV`），經 WS1 驗收並合併至 `main`（核准 feature commit `a7f4b72`）。**正式 12×4 批次仍為 `BLOCKED`**，不得寫成 READY 或 APPROVED；剩餘 blockers：(1) P0-1 核心 production 髒檔尚未審核；(2) 正式 commit、Talker/Planner prompt SHA、tool schema SHA、opaque mapping 與 timeout 尚未凍結；(3) WS2、WS3、WS5 尚未完成。
+WS4-A 核心產物維持已通過。WS4-B roleplay runner 已於 `ws1-formal-readiness` 分支完成正式就緒強化（Gemini-only provider 配對、fake dry-run 改走逐輪正式路徑、retry 分類、可注入 timeout、`research_patient_id` 解耦、Input Guard canary、`WS4_REQUIRE_SOURCE_CSV`），經 WS1 驗收並合併至 `main`（核准 feature commit `a7f4b72`）。**正式 12×4 批次仍為 `BLOCKED`**，不得寫成 READY 或 APPROVED；剩餘 blockers：(1) P0-1 核心 production 髒檔尚未審核；(2) 正式 commit、Talker/Planner prompt SHA 與 tool schema SHA 已記入 freeze candidate（待 final freeze）；opaque mapping 尚未產生；timeout 120 秒為 freeze candidate 正式值，待 final tag 生效；(3) WS2、WS3、WS5 尚未完成。
 
 ## 2. 本輪修正與產物
 
@@ -118,13 +118,13 @@ python3 llm_ablation_paper/workstream_4_patient_simulation/scripts/run_patient_s
 - ~~`_is_transient_error` 未涵蓋正式 API 例外~~ → 已改為類別判斷（`openai.APITimeoutError/APIConnectionError/RateLimitError/InternalServerError` 與 status `{408,409,429,500,502,503,504}`），4xx 與 schema 錯誤永不重試。
 - ~~fake 與正式路徑拓撲不同~~ → 已統一為逐輪 subprocess；fake dry-run 端到端覆蓋正式路徑。
 - ~~Harness `patient_id` 被寫成 `user_id`~~ → 已解耦 `research_patient_id`（`SP-001`）與狀態隔離 `user_id`，blinded export 明確帶研究 ID 且不含 `ws4_*`。
-- ~~30 秒 timeout 偏緊~~ → 已改為可注入 `subprocess_timeout_seconds`（預設 30s 向後相容、非正數 fail-closed）；正式值待真實單病患 pilot 後由 WS1 決定，尚未凍結。
+- ~~30 秒 timeout 偏緊~~ → 已改為可注入 `subprocess_timeout_seconds`（預設 30s 向後相容、非正數 fail-closed）；freeze candidate 正式值為 120 秒，待 final tag 生效。
 - ~~`WS4_REQUIRE_SOURCE_CSV` 待決定~~ → 已實作；未設定時缺 CSV 允許 skip，設為 `1` 時 fail closed。
 
 仍待處理（**正式實驗 blocker，維持 BLOCKED**）：
 
 - P0-1：核心 production 髒檔（`ablation_core.py`、`guard.py`、`state.py`、`planner.py`、`tools.py`、`handlers.py`）尚未逐項審核、未納入 frozen candidate，故 `ab30eff` 仍不代表可執行行為。
-- 正式 commit、Talker/Planner prompt SHA、tool schema SHA、opaque condition mapping 與 timeout 正式值尚未凍結。
+- 正式 commit、Talker/Planner prompt SHA 與 tool schema SHA 已記入 freeze candidate（待 final freeze 與 final tag）；opaque condition mapping 尚未產生；timeout 正式值為 freeze candidate 120 秒，待 final tag 生效。
 - WS2、WS3、WS5 尚未完成；正式 raw transcripts 尚未產生。
 
 ## 10. WS1／WS4 正式就緒強化（2026-09-10，分支 `ws1-formal-readiness`）
