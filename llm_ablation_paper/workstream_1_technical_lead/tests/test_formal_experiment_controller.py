@@ -1,0 +1,521 @@
+"""WS1 受控正式實驗控制器 (Formal Experiment Controller) 離線測試套件.
+
+嚴格遵守研究協議與分層消融防線：
+1. 完全離線，0 外部 API 呼叫，不消耗任何付費 Token。
+2. 完整覆蓋六大 Preflight 門禁、Batch 48 條計數驗證、Mapping 原子生成與 Blind Export 洩漏掃描。
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from llm_ablation_paper.workstream_1_technical_lead.scripts.run_formal_experiment import (
+    CONFIRM_FORMAL_12X4_RUN_STRING,
+    DEFAULT_PILOT_PATIENT_ID,
+    build_parser,
+    check_12_profiles_validator,
+    check_clean_working_tree,
+    check_distinct_output_roots,
+    check_frozen_config_and_envelope,
+    check_pilot_completed_cleanly,
+    generate_frozen_mapping,
+    main,
+    run_batch,
+    run_blind_export,
+    run_pilot,
+    scan_blinded_payload_for_leakage,
+)
+
+
+# =====================================================================
+# 輔助函式：建立測試用假 Pilot Summary
+# =====================================================================
+def _create_mock_pilot_summary(
+    target_path: Path,
+    *,
+    conditions: tuple[str, ...] = ("A", "B", "C", "D"),
+    include_error: bool = False,
+    error_condition: str = "B",
+) -> Path:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    runs = []
+    for c in conditions:
+        is_err = include_error and (c == error_condition)
+        runs.append({
+            "run_id": f"WS4-PILOT-SP-001-{c}",
+            "condition": c,
+            "user_id": "SP-001",
+            "turn_count": 3,
+            "termination_reason": "ERROR" if is_err else "PATIENT_SATISFIED",
+            "error": "Simulated error" if is_err else None,
+        })
+    summary = {
+        "execution_mode": "formal_pilot",
+        "formal_experiment_started": False,
+        "twelve_by_four_started": False,
+        "pilot_patient_id": "SP-001",
+        "runs": runs,
+    }
+    target_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target_path
+
+
+# =====================================================================
+# 輔助函式：建立測試用假 Trajectory 目錄
+# =====================================================================
+def _create_mock_run_dir(
+    base_dir: Path,
+    run_id: str,
+    *,
+    condition: str = "A",
+    patient_id: str = "SP-001",
+    is_error: bool = False,
+    max_turns: int = 2,
+    num_turns: int = 2,
+) -> Path:
+    run_dir = base_dir / run_id
+    state_dir = run_dir / "isolated_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    config_data = {
+        "run_id": run_id,
+        "condition": condition,
+        "patient_id": patient_id,
+        "max_turns": max_turns,
+    }
+    (state_dir / "config.json").write_text(json.dumps(config_data), encoding="utf-8")
+
+    lines = []
+    for idx in range(num_turns):
+        turn_obj = {
+            "turn_index": idx,
+            "research_patient_id": patient_id,
+            "user_message": f"第 {idx + 1} 句提問",
+            "assistant_response": f"第 {idx + 1} 句衛教回答",
+            "exposed_tools": [],
+            "called_tools": [],
+            "planner_result_or_neutral": {"engine": "neutral"},
+            "output_guard_result": {"is_blocked": False},
+        }
+        if idx == num_turns - 1:
+            turn_obj["termination_reason"] = "ERROR" if is_error else "MAX_TURNS"
+        lines.append(json.dumps(turn_obj, ensure_ascii=False))
+
+    (state_dir / "trajectories.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    roleplay_data = {
+        "run_id": run_id,
+        "condition": condition,
+        "patient_id": patient_id,
+        "termination_reason": "ERROR" if is_error else "MAX_TURNS",
+        "error_metadata": "Simulated error" if is_error else None,
+    }
+    (run_dir / "roleplay_result.json").write_text(json.dumps(roleplay_data), encoding="utf-8")
+    return run_dir
+
+
+# =====================================================================
+# 1. 批次確認字串門禁測試
+# =====================================================================
+def test_batch_confirm_gate_rejects_missing_or_wrong_string(tmp_path: Path):
+    """驗證缺少或錯誤的確認字串會立即被 Fail-Closed 拒絕。"""
+    # 錯誤的字串
+    with pytest.raises(ValueError, match="Invalid confirmation token"):
+        run_batch(
+            confirm_token="INVALID_TOKEN",
+            output_root=tmp_path / "batch",
+            pilot_summary_path=tmp_path / "pilot" / "formal_pilot_summary.json",
+        )
+
+    # 空字串
+    with pytest.raises(ValueError, match="Invalid confirmation token"):
+        run_batch(
+            confirm_token="",
+            output_root=tmp_path / "batch",
+            pilot_summary_path=tmp_path / "pilot" / "formal_pilot_summary.json",
+        )
+
+    # CLI 參數缺少確認字串時報錯
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["batch"])
+
+
+# =====================================================================
+# 2. Preflight 門禁：Git 工作區乾淨度檢查
+# =====================================================================
+def test_batch_preflight_checks_dirty_git(tmp_path: Path):
+    """驗證 Git 工作區存在未提交修改時，門禁立即拒絕。"""
+    # 模擬 git status 輸出有改動
+    with patch("subprocess.check_output", return_value=b" M some_file.py\n"):
+        with pytest.raises(RuntimeError, match="Working tree is dirty"):
+            check_clean_working_tree(repo_root=tmp_path)
+
+    # 模擬 git status 乾淨
+    with patch("subprocess.check_output", return_value=b""):
+        check_clean_working_tree(repo_root=tmp_path)
+
+
+# =====================================================================
+# 3. Preflight 門禁：指紋與執行包絡檢驗
+# =====================================================================
+def test_batch_preflight_checks_fingerprints_and_envelope():
+    """驗證指紋不符時門禁立即拋錯拒絕。"""
+    # 原始環境下指紋與 envelope 必須完全通過
+    check_frozen_config_and_envelope()
+
+    # 模擬指紋被更動
+    with patch(
+        "llm_ablation_paper.workstream_1_technical_lead.scripts.run_formal_experiment.talker_base_prompt_sha256",
+        return_value="tampered_fingerprint_sha256",
+    ):
+        with pytest.raises(ValueError, match="Fingerprint mismatch: talker_base_prompt_sha256"):
+            check_frozen_config_and_envelope()
+
+
+# =====================================================================
+# 4. Preflight 門禁：12 Profiles 驗證器失敗檢查
+# =====================================================================
+def test_batch_preflight_checks_validator_failure():
+    """驗證 WS4 12 profiles 驗證器回傳非 0 時門禁立即拋錯拒絕。"""
+    # 原始環境下驗證器必須通過
+    check_12_profiles_validator()
+
+    # 模擬驗證器失敗
+    with patch(
+        "llm_ablation_paper.workstream_4_patient_simulation.scripts.validate_profiles.main",
+        return_value=1,
+    ):
+        with pytest.raises(RuntimeError, match="12 profiles validator failed with exit code 1"):
+            check_12_profiles_validator()
+
+
+# =====================================================================
+# 5. Preflight 門禁：Pilot 未完成或含 ERROR 檢查
+# =====================================================================
+def test_batch_preflight_checks_pilot_incomplete_or_error(tmp_path: Path):
+    """驗證 pilot summary 不存在、缺少條件或含 ERROR 時門禁立即拒絕。"""
+    pilot_summary = tmp_path / "pilot" / "formal_pilot_summary.json"
+
+    # 1. 檔案不存在
+    with pytest.raises(FileNotFoundError, match="Pilot summary file not found"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 2. 缺少條件 (例如只跑了 A, B, C)
+    _create_mock_pilot_summary(pilot_summary, conditions=("A", "B", "C"))
+    with pytest.raises(RuntimeError, match="Pilot runs missing required conditions"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 3. 包含 ERROR
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        include_error=True,
+        error_condition="C",
+    )
+    with pytest.raises(RuntimeError, match="failed with ERROR"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 4. 完整 4 組且無 ERROR
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        include_error=False,
+    )
+    check_pilot_completed_cleanly(pilot_summary)
+
+
+# =====================================================================
+# 6. Preflight 門禁：Batch 與 Pilot 輸出目錄隔離檢查
+# =====================================================================
+def test_batch_preflight_checks_output_root_collision_with_pilot(tmp_path: Path):
+    """驗證 Batch 輸出目錄與 Pilot 輸出目錄相同時拋錯隔離。"""
+    same_dir = tmp_path / "same_output"
+    with pytest.raises(ValueError, match="must be distinct from Pilot output root"):
+        check_distinct_output_roots(same_dir, same_dir)
+
+    diff_dir = tmp_path / "diff_output"
+    check_distinct_output_roots(same_dir, diff_dir)
+
+
+# =====================================================================
+# 7. 衝突防護：未指定 resume 時已存在目錄衝突檢查
+# =====================================================================
+def test_batch_output_root_conflict_without_resume(tmp_path: Path):
+    """驗證在未指定 --resume 時，若已存在該 run 之目錄則禁止覆寫。"""
+    pilot_sum = _create_mock_pilot_summary(tmp_path / "pilot" / "formal_pilot_summary.json")
+    batch_dir = tmp_path / "batch"
+    existing_run_dir = batch_dir / "WS4-BATCH-SP-001-A"
+    existing_run_dir.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(FileExistsError, match="Target run directory already exists"):
+        run_batch(
+            confirm_token=CONFIRM_FORMAL_12X4_RUN_STRING,
+            output_root=batch_dir,
+            pilot_summary_path=pilot_sum,
+            resume=False,
+            skip_git_check=True,
+        )
+
+
+# =====================================================================
+# 8. Resume 身分驗證與接續執行
+# =====================================================================
+def test_batch_resume_identity_validation(tmp_path: Path):
+    """驗證在指定 --resume 時，允許安全接續已存在的目錄而不拋衝突例外。"""
+    pilot_sum = _create_mock_pilot_summary(tmp_path / "pilot" / "formal_pilot_summary.json")
+    batch_dir = tmp_path / "batch"
+    existing_run_dir = batch_dir / "WS4-BATCH-SP-001-A"
+    existing_run_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_run_condition = MagicMock(return_value={
+        "run_id": "WS4-BATCH-SP-001-A",
+        "patient_id": "SP-001",
+        "condition": "A",
+        "user_id": "SP-001",
+        "records": [{}],
+        "termination_reason": "PATIENT_SATISFIED",
+        "error_metadata": None,
+    })
+
+    with patch(
+        "llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation.RoleplayRunner.run_condition",
+        mock_run_condition,
+    ):
+        summary = run_batch(
+            confirm_token=CONFIRM_FORMAL_12X4_RUN_STRING,
+            output_root=batch_dir,
+            pilot_summary_path=pilot_sum,
+            resume=True,
+            skip_git_check=True,
+            runner_kwargs={"patient_agent": MagicMock(model="gemini-2.5", temperature=0.0)},
+        )
+    assert summary["execution_mode"] == "formal_12x4_batch"
+    assert summary["total_trajectories"] == 48
+
+
+# =====================================================================
+# 9. 離線 12x4 = 48 條軌跡計數與摘要完整性
+# =====================================================================
+def test_batch_offline_48_trajectories_count(tmp_path: Path):
+    """驗證 Controller 內部執行 12 profiles x 4 conditions = 48 條軌跡。"""
+    pilot_sum = _create_mock_pilot_summary(tmp_path / "pilot" / "formal_pilot_summary.json")
+    batch_dir = tmp_path / "batch"
+
+    call_records = []
+
+    def fake_run_condition(profile, condition, resume, fake_talker_responses, run_suffix):
+        pid = profile["patient_id"] if isinstance(profile, dict) else profile.patient_id
+        call_records.append((pid, condition, run_suffix))
+        return {
+            "run_id": f"WS4-{run_suffix}-{pid}-{condition}",
+            "patient_id": pid,
+            "condition": condition,
+            "user_id": pid,
+            "records": [{"turn": 1}],
+            "termination_reason": "MAX_TURNS",
+            "error_metadata": None,
+        }
+
+    with patch(
+        "llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation.RoleplayRunner.run_condition",
+        side_effect=fake_run_condition,
+    ):
+        summary = run_batch(
+            confirm_token=CONFIRM_FORMAL_12X4_RUN_STRING,
+            output_root=batch_dir,
+            pilot_summary_path=pilot_sum,
+            resume=False,
+            skip_git_check=True,
+            runner_kwargs={"patient_agent": MagicMock(model="gemini-2.5", temperature=0.0)},
+        )
+
+    # 驗證精確執行 48 次
+    assert len(call_records) == 48
+    assert summary["total_trajectories"] == 48
+    assert summary["expected_trajectories"] == 48
+    assert summary["completed_trajectories"] == 48
+    assert summary["error_trajectories"] == 0
+
+    # 驗證所有 12 profiles 與 4 conditions 完整覆蓋
+    patient_ids = {r[0] for r in call_records}
+    conditions = {r[1] for r in call_records}
+    suffixes = {r[2] for r in call_records}
+    assert len(patient_ids) == 12
+    assert conditions == {"A", "B", "C", "D"}
+    assert suffixes == {"BATCH"}
+
+    # 驗證產生的 summary json 檔案
+    summary_file = batch_dir / "formal_batch_summary.json"
+    assert summary_file.exists()
+    saved_data = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert len(saved_data["runs"]) == 48
+
+
+def test_batch_missing_api_key_fails_closed(tmp_path: Path):
+    """驗證未注入假 Agent 且無 API Key 時，正式批次立即 fail-closed 拋出 RuntimeError。"""
+    pilot_sum = _create_mock_pilot_summary(tmp_path / "pilot" / "formal_pilot_summary.json")
+    batch_dir = tmp_path / "batch"
+
+    with patch.dict("os.environ", {}, clear=True):
+        with pytest.raises(RuntimeError, match="正式模型連線缺少 GEMINI_API_KEY"):
+            run_batch(
+                confirm_token=CONFIRM_FORMAL_12X4_RUN_STRING,
+                output_root=batch_dir,
+                pilot_summary_path=pilot_sum,
+                resume=False,
+                skip_git_check=True,
+            )
+
+
+# =====================================================================
+# 10. Mapping 生成器：密碼學隨機性、單向性與禁止覆寫
+# =====================================================================
+def test_mapping_generator_cryptographic_uniqueness_and_no_overwrite(tmp_path: Path):
+    """驗證 mapping 生成符合 schema、隨機性且預設禁止覆寫。"""
+    map_file = tmp_path / "secret_mapping.json"
+
+    # 1. 初次生成成功
+    m1 = generate_frozen_mapping(output_file=map_file, overwrite=False)
+    assert set(m1.keys()) == {"A", "B", "C", "D"}
+    for v in m1.values():
+        assert v.startswith("COND-")
+        assert len(v) == 13
+        int(v.split("-")[1], 16)  # 驗證為有效十六進位
+    assert len(set(m1.values())) == 4  # 4 個混淆值互不相同
+
+    # 2. 檔案已存在且無 overwrite 時拋出 FileExistsError
+    with pytest.raises(FileExistsError, match="already exists"):
+        generate_frozen_mapping(output_file=map_file, overwrite=False)
+
+    # 3. 允許 overwrite 時成功覆寫
+    m2 = generate_frozen_mapping(output_file=map_file, overwrite=True)
+    assert set(m2.keys()) == {"A", "B", "C", "D"}
+
+    # 4. 驗證隨機性（兩次生成的值應不同）
+    m3 = generate_frozen_mapping(output_file=tmp_path / "m3.json", overwrite=False)
+    assert list(m1.values()) != list(m3.values())
+
+
+# =====================================================================
+# 11. Blind Export 排除 Canary, Pilot, ERROR 並要求 Completed
+# =====================================================================
+def test_blind_export_require_completed_and_filter_pilot_canary_error(tmp_path: Path):
+    """驗證 Blind Export 子命令嚴格排除 canary/pilot/error，只匯出合法 completed runs。"""
+    raw_dir = tmp_path / "raw_runs"
+    out_dir = tmp_path / "blinded_transcripts"
+    map_file = tmp_path / "mapping.json"
+    mapping = generate_frozen_mapping(output_file=map_file)
+
+    # 建立 4 種不同情境的 run
+    # 1. 正式已完成的 run (應匯出)
+    _create_mock_run_dir(raw_dir, "WS4-BATCH-SP-001-A", condition="A", patient_id="SP-001")
+    # 2. Canary run (應略過)
+    _create_mock_run_dir(raw_dir, "WS4-CANARY-SP-001-A", condition="A", patient_id="SP-001")
+    # 3. Pilot run (應略過)
+    _create_mock_run_dir(raw_dir, "WS4-PILOT-SP-001-A", condition="A", patient_id="SP-001")
+    # 4. 執行錯誤的 run (應略過)
+    _create_mock_run_dir(raw_dir, "WS4-BATCH-SP-002-A", condition="A", patient_id="SP-002", is_error=True)
+
+    summary = run_blind_export(
+        raw_dir=raw_dir,
+        mapping_file=map_file,
+        output_dir=out_dir,
+        require_completed=True,
+    )
+
+    assert summary["exported_count"] == 1
+    assert summary["skipped_canary"] == 1
+    assert summary["skipped_pilot"] == 1
+    assert summary["skipped_error"] == 1
+
+    exported_files = list(out_dir.glob("*.json"))
+    assert len(exported_files) == 1
+
+    # 檢驗匯出的 blinded json
+    blinded_content = json.loads(exported_files[0].read_text(encoding="utf-8"))
+    assert blinded_content["condition_secret"] == mapping["A"]
+    assert "condition" not in blinded_content
+    assert not blinded_content["run_id"].startswith("WS4-BATCH")
+
+
+# =====================================================================
+# 12. Blind Export 洩漏掃描驗證 (Leakage Scan Reject)
+# =====================================================================
+def test_blind_export_leakage_scan_rejects_leak():
+    """驗證洩漏掃描器若在 payload 中發現 mapping 明文、未脫敏 condition 或內部標籤立即拋錯。"""
+    mapping = {"A": "111111111111", "B": "222222222222", "C": "333333333333", "D": "444444444444"}
+
+    # 1. 正常脫敏 payload 通過
+    clean_payload = json.dumps({"run_id": "BLIND-001", "condition_secret": "111111111111", "turns": []})
+    scan_blinded_payload_for_leakage(clean_payload, mapping)
+
+    # 2. 出現 mapping 鍵值配對洩漏
+    leaked_mapping_payload = json.dumps({"run_id": "BLIND-001", "A": "111111111111"})
+    with pytest.raises(ValueError, match="Leakage detected: mapping pair"):
+        scan_blinded_payload_for_leakage(leaked_mapping_payload, mapping)
+
+    # 3. 出現未脫敏 condition 欄位
+    leaked_condition_payload = json.dumps({"run_id": "BLIND-001", "condition": "A"})
+    with pytest.raises(ValueError, match="Leakage detected: unblinded condition label"):
+        scan_blinded_payload_for_leakage(leaked_condition_payload, mapping)
+
+    # 4. 出現內部消融開關
+    for forbidden_flag in ("enable_planner", "dynamic_tool_gate", "enable_output_guard"):
+        leaked_flag_payload = json.dumps({"run_id": "BLIND-001", forbidden_flag: True})
+        with pytest.raises(ValueError, match="Leakage detected: internal ablation flag"):
+            scan_blinded_payload_for_leakage(leaked_flag_payload, mapping)
+
+
+# =====================================================================
+# 13. Pilot 子命令離線整合測試
+# =====================================================================
+def test_pilot_subcommand_offline(tmp_path: Path):
+    """驗證 Pilot 子命令在注入 fake runner 下能完成 1 profile x 4 conditions。"""
+    pilot_dir = tmp_path / "pilot"
+    called = []
+
+    def fake_pilot_condition(profile, condition, resume, fake_talker_responses, run_suffix):
+        pid = profile["patient_id"] if isinstance(profile, dict) else profile.patient_id
+        called.append((pid, condition, run_suffix))
+        return {
+            "run_id": f"WS4-PILOT-{pid}-{condition}",
+            "condition": condition,
+            "user_id": pid,
+            "records": [{"turn": 1}],
+            "termination_reason": "PATIENT_SATISFIED",
+            "error_metadata": None,
+        }
+
+    with patch(
+        "llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation.RoleplayRunner.run_condition",
+        side_effect=fake_pilot_condition,
+    ):
+        summary = run_pilot(
+            patient_id=DEFAULT_PILOT_PATIENT_ID,
+            output_root=pilot_dir,
+            runner_kwargs={"patient_agent": MagicMock(model="gemini-2.5", temperature=0.0)},
+        )
+
+    assert summary["execution_mode"] == "formal_pilot"
+    assert summary["pilot_patient_id"] == DEFAULT_PILOT_PATIENT_ID
+    assert len(summary["runs"]) == 4
+    assert len(called) == 4
+    assert {c[1] for c in called} == {"A", "B", "C", "D"}
+    assert (pilot_dir / "formal_pilot_summary.json").exists()
+
+
+# =====================================================================
+# 14. CLI Entrypoint 整合測試
+# =====================================================================
+def test_cli_entrypoint(tmp_path: Path):
+    """驗證 CLI 進入點各子命令的基本調用。"""
+    # 測試 generate-mapping
+    map_out = tmp_path / "cli_mapping.json"
+    exit_code = main(["generate-mapping", "--output-file", str(map_out)])
+    assert exit_code == 0
+    assert map_out.exists()
