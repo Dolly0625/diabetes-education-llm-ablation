@@ -5,8 +5,8 @@
   "backup_branch": "backup/original-features-20260911",
   "backup_commit": "f5c8890caca3ed8a60153f0a8c7014fadcc35c18",
   "core_commit": "7cd20e7c9aac86b590c8c5c255ac1ab09dd2546d",
-  "tests_commit": "c9917f351d02de5116914739fa22b3f1f98830d4",
-  "status": "REVIEW",
+  "tests_commit": "4f577f47e55e28b8ec18c626a1ad8f0d907069dd",
+  "status": "READY_FOR_FINAL_REVIEW",
   "final_frozen": false,
   "experiment_ready": false,
   "formal_experiment_state": "BLOCKED",
@@ -29,5 +29,45 @@
     "secrets.randbelow share codes",
     "register_share_token"
   ],
-  "notes": "Candidate only. Fingerprints computed in this worktree before final freeze. Do not label final frozen or experiment READY."
+  "notes": "Candidate only. Fingerprints computed in this worktree before final freeze. Do not label final frozen or experiment READY.",
+  "formal_runtime_config_canonical_sha256": "7768a47509fb5c04a797c220ea0f33bc78486e9812e42f9d05cd226ba5504e13",
+  "formal_runtime_config": {
+    "talker_model": "gemini-3.5-flash-lite",
+    "talker_temperature": 0.3,
+    "planner_model": "gemini-3.5-flash-lite",
+    "planner_temperature": 0.1,
+    "planner_request_timeout_seconds": 30.0,
+    "patient_agent_model": "gemini-2.5-flash-lite",
+    "patient_agent_temperature": 0.3,
+    "max_turns": 6,
+    "seed": 42,
+    "subprocess_timeout_seconds": 120.0,
+    "input_guard": "ON",
+    "enable_forced_retrieval": false,
+    "enable_fixed_warning_append": false,
+    "enable_question_budget_postprocessing": false,
+    "conditions": {
+      "A": {
+        "enable_planner": false,
+        "enable_dynamic_tool_gate": false,
+        "enable_output_guard": false
+      },
+      "B": {
+        "enable_planner": true,
+        "enable_dynamic_tool_gate": false,
+        "enable_output_guard": false
+      },
+      "C": {
+        "enable_planner": true,
+        "enable_dynamic_tool_gate": true,
+        "enable_output_guard": false
+      },
+      "D": {
+        "enable_planner": true,
+        "enable_dynamic_tool_gate": true,
+        "enable_output_guard": true
+      }
+    }
+  },
+  "runtime_code_commit": "3fb93e1b0474b365ee2b4372477eb27d8e9400f2"
 }

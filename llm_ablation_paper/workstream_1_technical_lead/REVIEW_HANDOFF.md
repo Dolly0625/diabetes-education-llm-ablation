@@ -1,13 +1,16 @@
 # Workstream 1 接手與第三次驗收清單
 
-## P0-1 Stage 2 狀態（2026-09-11）
+## P0-1 Freeze Candidate 狀態（2026-09-11）
 
-- 狀態：`REVIEW`（freeze candidate 待審，尚未 final freeze；不得宣稱正式實驗 READY）。
+- 狀態：`READY_FOR_FINAL_REVIEW`（尚未 final freeze；不得宣稱正式實驗 READY）。
 - 原功能備份：`backup/original-features-20260911`（完整保存原 working tree 29 項修改）。
 - Freeze candidate：`ws1-freeze-candidate`，自 `origin/main@435c91f` 建立，僅納入核心實驗功能；排除 Demo／醫護網頁／分享服務與隨機調閱碼。
+- Runtime fix commit：`3fb93e1`（凍結正式 config：Talker `gemini-3.5-flash-lite`/0.3、Planner 0.1、Patient Agent `gemini-2.5-flash-lite`/0.3、max turns 6、seed 42、Planner request timeout 30s、subprocess timeout 120s；第二次 Talker 改用凍結 temperature；同步 planner persist，無 daemon thread／無額外 persist LLM 呼叫；單病患 formal pilot 入口）。
+- Tests commit：`4f577f4`（formal config／temperature／persist／pilot fail-closed／manifest 精確比對）。
 - Talker 指紋：`talker_base_prompt_sha256` 僅涵蓋 `NURSE_SYSTEM_PROMPT`；`talker_prompt_template_bundle_sha256` 另涵蓋 `build_nurse_system_prompt` 的注入模板來源，因此 base SHA 不等於完整模板 SHA。`patient_context` 為輸入資料，不納入任何指紋。
-- 指紋固定值記錄於 `FREEZE_CANDIDATE_MANIFEST.json`，並由 `tests/test_freeze_candidate.py` 精確比對（非僅長度檢查）。
-- 正式 12×4：`BLOCKED`（待 candidate 審核與 final freeze）。
+- 指紋與正式 config 固定值記錄於 `FREEZE_CANDIDATE_MANIFEST.json`，並由 `tests/test_freeze_candidate.py` 與 `tests/test_formal_freeze_readiness.py` 精確比對（非僅長度檢查）。
+- `RESEARCH_PROTOCOL.md` 已回填 prompt／tool schema／commit lineage／planner timeout／subprocess timeout；opaque mapping 尚未產生（由技術主持於盲測匯出前私下產生，WS5 不得接觸）。
+- 正式 12×4：`BLOCKED`（待 final freeze 與 WS2／WS3／WS5 完成）。
 
 ## 目前判定
 

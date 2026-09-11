@@ -4,13 +4,13 @@
 
 | 工作流 | 負責人 | 狀態 | 當前交付 | 下一步 | Blocker |
 |---|---|---|---|---|---|
-| 1 技術主持 | 待指派 | REVIEW | Harness、A–D config 與 formal-readiness 已通過；P0-1 Stage 2 freeze candidate（`ws1-freeze-candidate`）已備：核心實驗功能、share-free、prompt／tool fingerprint 已計算，待審 | 完成 candidate 審核與 final freeze（prompt／tool schema／commit／timeout／opaque mapping） | 正式指紋尚未 final freeze；WS2/WS3/WS5 尚未完成 |
+| 1 技術主持 | 待指派 | REVIEW | Harness、A–D config 與 formal-readiness 已通過；`ws1-freeze-candidate` 已達 `READY_FOR_FINAL_REVIEW`：凍結正式 config（模型／temperature／timeouts／seed）、sync planner persist、單病患 formal pilot 入口，待技術主持人 final review | 完成 final review 並以 Git tag 標記 freeze commit（prompt／tool schema／commit／timeout 指紋已寫入 protocol 與 manifest） | 尚未 final freeze；WS2/WS3/WS5 尚未完成；opaque mapping 未產生（依程序於盲測匯出前私下產生） |
 | 2 A／B | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 A/B config 與事件驗收 | 依 `member_prompts/member_2_ablation_ab.md` 開工 | 無 |
 | 3 C／D | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 C/D logging 與 fault injection | 依 `member_prompts/member_3_ablation_cd.md` 開工 | 無 |
 | 4 模擬病患 | 待指派 | APPROVED | WS4-A profiles/schema/驗證已通過；WS4-B runner、checkpoint/resume/retry、逐輪正式路徑 fake dry-run 與 Input Guard canary 已完成並經 WS1 驗收合併（WS4 目錄 139 passed） | 待整體實驗指紋凍結後由 WS1 執行正式 12×4 批次 | P0-1 核心 production 髒檔未審核；正式指紋尚未凍結；WS2/WS3/WS5 尚未完成 |
 | 5 Judge／分析 | 待指派 | NOT_STARTED | Judge rubric、schema、canary、統計程式與結果樣板 | 依 `member_prompts/member_5_judge_analysis.md` 開工 | 正式 transcripts 尚未產生 |
 
-> 本輪 WS1／WS4 技術判定：`APPROVED`（formal-readiness 修復已驗收並合併）。P0-1 Stage 2：freeze candidate `REVIEW`（待審，不得宣稱 final frozen）。正式 12×4 實驗狀態：`BLOCKED`（1. candidate 尚未 final freeze；2. 正式 prompt／tool schema／commit／timeout／opaque mapping 指紋尚未凍結；3. WS2、WS3、WS5 尚未完成）。
+> 本輪 WS1／WS4 技術判定：`APPROVED`（formal-readiness 修復已驗收並合併）。P0-1 freeze candidate：`READY_FOR_FINAL_REVIEW`（凍結正式 config、sync persist、pilot 入口皆已備；尚未 final freeze）。正式 12×4 實驗狀態：`BLOCKED`（1. 尚未 final freeze；2. WS2、WS3、WS5 尚未完成；3. opaque mapping 尚未產生）。
 
 ## 里程碑
 
@@ -35,6 +35,7 @@
 | 2026-09-10 | 建立 `ws1-formal-readiness` 分支完成 WS1／WS4 正式就緒強化；判定 `READY_FOR_REVIEW` | 修正 provider 金鑰／endpoint 配對（Gemini-only）、統一 fake 與正式逐輪路徑、retry/timeout/research_patient_id/canary/CSV fail-closed，並重新產生 checked-in artifact；正式實驗維持 BLOCKED（P0-1） | Sisyphus |
 | 2026-09-10 | 合併 `ws1-formal-readiness`（`a7f4b72`）至 `main`；WS1／WS4 formal-readiness 判定 `APPROVED` | 驗收實測 WS1 59 passed／WS4 139 passed／backward 5 passed／validator PASS；canary `COMMON_INPUT_BLOCK`；無越界修改；正式 12×4 維持 `BLOCKED` | 技術主持 |
 | 2026-09-11 | 建立 `backup/original-features-20260911` 完整備份原功能（29 項），並自 `main@435c91f` 建立 `ws1-freeze-candidate`（僅核心實驗功能、排除 Demo／醫護／分享、share-free）；判定 `REVIEW` | 依 P0-1 Stage 2：先保護原功能再建可重現 freeze candidate；正式 12×4 維持 `BLOCKED` | 技術主持 |
+| 2026-09-11 | `ws1-freeze-candidate` 完成 final-freeze 就緒修正：凍結正式 config（模型／temperature／timeouts／seed）、第二次 Talker 改用凍結 temperature、同步 planner persist、單病患 formal pilot 入口；判定 `READY_FOR_FINAL_REVIEW` | 修正三項 runtime mismatch 與 Planner timeout；protocol／manifest 指紋回填；正式 12×4 維持 `BLOCKED` | 技術主持 |
 
 ## Workstream 1 交付清單（2026-09-07）
 

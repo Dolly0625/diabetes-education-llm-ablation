@@ -1,6 +1,6 @@
 # 研究協議 v0.1
 
-狀態：模型與主要執行參數已於 2026-09-08 由技術主持人凍結；prompt、工具 schema 與正式程式 commit 指紋仍待凍結。
+狀態：模型與主要執行參數已於 2026-09-08 由技術主持人凍結。Prompt、工具 schema 與程式指紋已於 2026-09-11 記入 freeze candidate（`ws1-freeze-candidate`，狀態 `READY_FOR_FINAL_REVIEW`），尚未 final freeze；正式 12×4 維持 `BLOCKED`，待技術主持人核准後以 Git tag 標記 freeze commit。
 
 ## 研究問題
 
@@ -45,16 +45,19 @@ Input Guard 固定為四組共同基礎設施，不屬於 A–D 消融。依目�
 - LLM Judge 模型：`gemini-3.7-flash`；temperature `0.0`
 - 每條軌跡最大輪數：`6`
 - 病患 profile 選取與執行順序 seed：`42`；不得把 seed 視為第三方模型完全決定性的保證
+- Planner LLM request timeout：`30` 秒（四組 Planner 模組共用；僅 B/C/D 實際使用）
+- 每輪 subprocess timeout：`120` 秒
 - 每組病患設定：完全相同
-- Talker system prompt 版本：`TBD`
-- Planner prompt 版本：`TBD`
-- 工具 schema 版本：`TBD`
+- Talker system prompt 版本：`talker_base_prompt_sha256=2c2a3850a8885a2598403971f2faec6d4dcbea414a120c4711dff9540073ce55`；`talker_prompt_template_bundle_sha256=9a6b133ac53437e8a567d3c336fe43a99c57faeb82152c21ada6fe4799723f2b`（後者涵蓋 base prompt 與 `build_nurse_system_prompt` 注入模板；`patient_context` 為輸入資料，不納入指紋）
+- Planner prompt 版本：`planner_system_prompt_sha256=53d6b0f2ebb864116f0d914295b549a9d6d1236825f01cc9925e2185c842a409`
+- 工具 schema 版本：`canonical_tool_schema_sha256=e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e`
 - forced retrieval：主要實驗固定 `OFF`
 - 固定停藥警語追加：主要實驗固定 `OFF`
 - question-budget post-processing：主要實驗固定 `OFF`
 - Input Guard：四組每一輪固定 `ON`，觸發案例獨立報告
 - 狀態隔離策略：每條軌跡獨立 process、temp state directory 與唯一 run ID
-- 程式版本／commit：`TBD`
+- 程式版本／commit：freeze candidate lineage `origin/main@435c91f` → `ws1-freeze-candidate`（runtime commit 見 manifest `runtime_code_commit`）；最終 freeze 由技術主持核准後以 Git tag 指向 freeze commit
+- Opaque condition mapping：本階段不產生。正式盲測匯出前由技術主持人單獨產生並私下保存；WS5 不得接觸 A–D mapping
 
 ## 評估設計
 
