@@ -49,9 +49,9 @@ def get_active_tools(
     if assessment.can_unlock_summary_tool:
         active_tools.append(TOOL_GENERATE_VISIT_SUMMARY)
 
-    # 檢索工具暴露：只要非純飲食生活領域，在藥品安全或衛教場景均維持並存暴露，嚴防藥物安全盲區
+    # 檢索工具暴露：純飲食生活分享 (DIET_NUTRITION) 物理收起；飲食提問 (DIET_NUTRITION_KNOWLEDGE)、藥品安全 (DRUG_SAFETY) 與一般衛教 (GENERAL_EDUCATION) 均暴露
     if assessment.retrieval_domain != RetrievalDomain.DIET_NUTRITION:
-        if assessment.retrieval_domain in [RetrievalDomain.DRUG_SAFETY, RetrievalDomain.GENERAL_EDUCATION]:
+        if assessment.retrieval_domain in [RetrievalDomain.DRUG_SAFETY, RetrievalDomain.GENERAL_EDUCATION, RetrievalDomain.DIET_NUTRITION_KNOWLEDGE]:
             active_tools.append(TOOL_SEARCH_HANDBOOK)
         elif not assessment.is_visit_mode:
             active_tools.append(TOOL_SEARCH_HANDBOOK)

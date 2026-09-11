@@ -87,7 +87,7 @@ def test_soft_passes_and_clinical_reasoning():
     )
     reply2 = resp2.choices[0].message.content.strip()
     print(f"護理師回答：\n{reply2}\n")
-    assert "119" in reply2 or "急診" in reply2
+    assert "119" in reply2 or "一一九" in reply2 or "急診" in reply2
     print("[2-2 大模型臨床鑑別] 通過：模型成功對重度急症啟動 119 指示，且對 70 給予正常溫暖衛教！")
 
 

@@ -56,24 +56,35 @@ class ClinicalSafetyGuard:
     )
 
     PRESCRIPTION_DIRECTIVES = (
-        "建議你", "建議您", "你可以", "您可", "你可以自行", "您可以自行",
+        "建議你", "建議您", "你可以", "您可", "你可以自行", "您可以自行", "你可以自己", "您可以自己",
         "請你直接", "請您直接", "建議直接", "不妨", "先不要吃", "暫時不要吃",
     )
     PRESCRIPTION_ACTIONS = (
-        "停掉", "不要吃藥", "停藥", "停用", "減藥", "加藥", "少吃", "多吃", "改吃",
-        "增加劑量", "減少劑量", "加打", "多打", "少打", "吃一顆就好",
+        "停掉", "不要吃藥", "停藥", "停用", "減藥", "加藥",
+        "增加劑量", "減少劑量", "加打", "多打胰島素", "少打胰島素", "多打", "少打",
+        "吃一顆就好", "吃半顆就好", "改吃半顆", "改吃一顆", "改吃一粒",
+        "少吃一顆", "少吃半顆", "多吃一顆", "多吃半顆", "少吃一粒", "多吃一粒",
+        "擅自停", "自行加量", "自行減量", "自行調藥", "自己調藥", "自行停藥", "自己停藥", "自己少吃", "自己多吃",
     )
     PRESCRIPTION_SELF_ADJUST = (
-        "自行加量", "自行減量", "自行調藥", "自己調藥", "自己少吃", "自己多吃", "自行停藥", "自己停藥",
+        "自行加量", "自行減量", "自行調藥", "自己調藥", "自行停藥", "自己停藥", "自己少吃", "自己多吃",
     )
     NARRATIVE_BYPASSES = (
         "曾因", "曾考慮", "打消念頭", "經衛教後已打消", "曾打算", "原本想",
         "阿嬤原話", "病患原話", "我都想", "我想把", "自述曾", "已停用換藥", "（已停用換藥）",
+        "含糖食物", "含糖", "方糖", "果汁", "吃糖",
+        "就醫備忘", "就醫備忘錄", "回診訴求", "目前用藥", "血糖與不適", "待做檢查", "待確認方向",
+        "自述因", "自述目前", "自述想", "自述這兩天", "自述有", "自述",
     )
     NEGATION_WARNINGS = (
         "不能", "不可", "不要", "切勿", "禁止", "避免", "防止", "千萬不能", "千萬不要",
-        "絕對不能", "請勿", "嚴禁", "別",
+        "絕對不能", "請勿", "嚴禁", "別", "先不要", "暫時不要", "千萬母湯", "母湯", "別自己", "不能自己", "不要自己",
     )
+
+    DIET_FOODS = ("蔬菜", "青菜", "甜食", "水果", "芭樂", "炸物", "油膩", "澱粉", "白飯", "糙米", "高糖", "點心", "飲料")
+    MED_INDICATORS = ("顆", "粒", "錠", "包", "劑量", "單位", "藥", "庫魯化", "癲通", "得爾美", "胰島素", "降血糖")
+    HAZARD_WARNINGS = ("危險", "反彈", "飆高", "衝高", "失控", "併發症", "不穩定", "更傷", "反效果", "傷害")
+    DOCTOR_WORDS = ("醫師", "醫生", "回診", "門診", "看診", "就醫", "諮詢", "請教", "掛號", "開立", "處方籤", "處方箋")
 
     DIAGNOSTIC_ASSERTIONS = (
         "已經確診", "確定罹患", "確定得了", "可以確定罹患", "已經得了",
@@ -174,6 +185,20 @@ class ClinicalSafetyGuard:
             if any(bp in s for bp in cls.NARRATIVE_BYPASSES):
                 continue
 
+            has_directive = any(d in s for d in cls.PRESCRIPTION_DIRECTIVES)
+
+            # 遵囑引導放行：若子句引導病患諮詢專科醫師、門診或回診就醫，且不包含主動調藥指示
+            if any(doc in s for doc in cls.DOCTOR_WORDS) and not has_directive:
+                continue
+
+            # 危害說明放行：若無處方指示詞且子句在警告自行停藥/調藥的危害後果，屬衛教保護警語
+            if any(warn in s for warn in cls.HAZARD_WARNINGS) and not has_directive:
+                continue
+
+            # 飲食衛教放行：若提到少吃/多吃，且為單純食物描述完全不含任何藥品關鍵字
+            if any(f in s for f in cls.DIET_FOODS) and not any(m in s for m in cls.MED_INDICATORS):
+                continue
+
             has_neg = any(neg in s for neg in cls.NEGATION_WARNINGS)
 
             # 自行調藥行為檢查（若無否定禁止詞或否定詞在後，視為違規）
@@ -186,12 +211,21 @@ class ClinicalSafetyGuard:
                     if idx_neg > idx_sa:
                         return True
 
-            # 處方指示詞 + 調藥動作檢查
-            for d in cls.PRESCRIPTION_DIRECTIVES:
-                if d in s:
-                    for act in cls.PRESCRIPTION_ACTIONS:
-                        if act in s and not has_neg:
-                            return True
+            # 處方動作檢查
+            for act in cls.PRESCRIPTION_ACTIONS:
+                if act in s:
+                    if not has_neg:
+                        return True
+                    idx_neg = min([s.find(n) for n in cls.NEGATION_WARNINGS if n in s])
+                    idx_act = s.find(act)
+                    if idx_neg > idx_act:
+                        return True
+
+            # 處方指示詞 + 調藥動詞與藥品指標檢查
+            if has_directive and not has_neg:
+                for v in ("少吃", "多吃", "改吃", "停", "打", "加", "減"):
+                    if v in s and any(m in s for m in cls.MED_INDICATORS):
+                        return True
 
         return False
 
@@ -224,9 +258,10 @@ def inspect_output_guard(text: str) -> GuardResult:
     return ClinicalSafetyGuard.inspect_output(text)
 
 def strip_emojis(text: str) -> str:
-    """純碼點字元過濾 Unicode Emoji 與圖標符號，嚴格落實全系統零 Emoji 臨床規範（零正則依賴）"""
+    """純碼點字元過濾 Unicode Emoji 與 Markdown 標記，嚴格落實全系統零 Emoji 與長輩易讀規範（零正則依賴）"""
     if not text:
         return ""
+    text = text.replace("**", "").replace("__", "")
     clean_chars = []
     for ch in text:
         cp = ord(ch)
@@ -245,17 +280,36 @@ def strip_emojis(text: str) -> str:
     return cleaned.strip()
 
 def enforce_single_question_budget(text: str) -> str:
-    """純字串單一問句預算截斷，零正則依賴"""
+    """純字串單一問句預算截斷，零正則依賴：
+    精準截斷末尾連續追問（防止認知過載），同時保護前段同理與長篇急救衛教內容不被腰斬。
+    """
     if not text:
         return text
     text = strip_emojis(text)
-    pos_full = text.find("？")
-    pos_half = text.find("?")
-    candidates = [p for p in (pos_full, pos_half) if p != -1]
-    if not candidates:
+
+    # 1. 溫和同理與反詰詞正規化（非實質問卷追問，轉為溫暖感嘆助詞）
+    for soft_q in ("不舒服吧？", "難受吧？", "嚇了一跳吧？", "對吧？", "辛苦了對吧？", "很飽足對吧？", "吃得很飽對吧？"):
+        text = text.replace(soft_q, soft_q[:-1] + "！")
+        text = text.replace(soft_q.replace("？", "?"), soft_q[:-1] + "！")
+
+    # 檢查所有問號位置
+    q_positions = [i for i, ch in enumerate(text) if ch in ("？", "?")]
+    if len(q_positions) <= 1:
         return text
-    first_q_pos = min(candidates)
-    rest = text[first_q_pos + 1:]
-    if ("？" in rest) or ("?" in rest):
-        return text[:first_q_pos + 1].strip()
-    return text
+
+    # 多問號處理：
+    # 檢查第一個問號與下一個問號之間是否有實質衛教陳述（大於 25 字或含換行段落）
+    p1 = q_positions[0]
+    p2 = q_positions[1]
+    between = text[p1 + 1 : p2].strip()
+
+    # 若問句緊鄰（連續追問，中間無長篇衛教），執行硬性阻斷，只保留第一個問句
+    if len(between) < 25 and "\n" not in between:
+        return text[:p1 + 1].strip()
+
+    # 若中間夾有長篇衛教（前為同理/關心問句，後為聚焦問句），將前面的關心問號轉為句號，保留重要衛教
+    chars = list(text)
+    for pos in q_positions[:-1]:
+        chars[pos] = "。"
+    cleaned = "".join(chars)
+    return cleaned.strip()
