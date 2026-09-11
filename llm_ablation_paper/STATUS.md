@@ -30,7 +30,7 @@
 | 2026-09-07 | Stage 2 採用 deterministic fake model 完成離線測試與 dry run | 正式模型可設定不寫死，避免付費 API 阻塞 | 技術主持 |
 | 2026-09-07 | AblationConfig 映射凍結：A OFF-OFF-OFF / B ON-OFF-OFF / C ON-ON-OFF / D ON-ON-ON，三輔助強制 OFF | 滿足唯一差異原則 | Sisyphus |
 | 2026-09-07 | Harness 獨立於 `workstream_1_technical_lead/harness/`，production 僅加 optional `ablation_config` injection | 向後相容，不複製四份 handlers.py | Sisyphus |
-| 2026-09-08 | 凍結模型：Talker/Planner=`gemini-3.5-flash-lite`、Patient Agent=`gemini-2.5-flash-lite`、Judge=`gemini-3.7-flash`；角色 temperature 分別為 0.3/0.1/0.3/0.0，max turns=6，seed=42 | 維持既有受測系統，同時以低成本模型生成病患對話並用不同、較強模型盲評 | 技術主持 |
+| 2026-09-08 | 凍結模型：Talker/Planner=`gemini-3.5-flash-lite`、Patient Agent=`gemini-3.5-flash-lite`、Judge=`gemini-3.7-flash`；角色 temperature 分別為 0.3/0.1/0.3/0.0，max turns=6，seed=42 | 維持既有受測系統，同時以低成本模型生成病患對話並用不同、較強模型盲評 | 技術主持 |
 | 2026-09-10 | 驗收並合併 `ws4-runner`（`e9d0ac7`）至 `main`：WS4-B runner、checkpoint/resume/retry、fake dry-run | 離線測試 84 passed（含來源追溯 test_01–test_04，以固定上游 CSV SHA-256 驗證）；無越界修改；獨立稽核判定部分通過且無硬性 blocker | 技術主持 |
 | 2026-09-10 | 建立 `ws1-formal-readiness` 分支完成 WS1／WS4 正式就緒強化；判定 `READY_FOR_REVIEW` | 修正 provider 金鑰／endpoint 配對（Gemini-only）、統一 fake 與正式逐輪路徑、retry/timeout/research_patient_id/canary/CSV fail-closed，並重新產生 checked-in artifact；正式實驗維持 BLOCKED（P0-1） | Sisyphus |
 | 2026-09-10 | 合併 `ws1-formal-readiness`（`a7f4b72`）至 `main`；WS1／WS4 formal-readiness 判定 `APPROVED` | 驗收實測 WS1 59 passed／WS4 139 passed／backward 5 passed／validator PASS；canary `COMMON_INPUT_BLOCK`；無越界修改；正式 12×4 維持 `BLOCKED` | 技術主持 |

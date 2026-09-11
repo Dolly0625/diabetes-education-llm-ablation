@@ -68,7 +68,7 @@
 
 Judge 只能看到 opaque condition ID，不能知道 A、B、C、D 真實身分。Judge 的分數不等於醫師評審或臨床安全率。
 
-已凍結模型設定：Talker/Planner 使用 `gemini-3.5-flash-lite`（temperature 分別為 0.3／0.1），Patient Agent 使用 `gemini-2.5-flash-lite`（0.3），Judge 使用 `gemini-3.7-flash`（0.0）。每條軌跡最多 6 輪，seed 為 42；不得由各組自行替換。
+已凍結模型設定：Talker/Planner 使用 `gemini-3.5-flash-lite`（temperature 分別為 0.3／0.1），Patient Agent 使用 `gemini-3.5-flash-lite`（0.3），Judge 使用 `gemini-3.7-flash`（0.0）。每條軌跡最多 6 輪，seed 為 42；不得由各組自行替換。
 
 ## 5. 目前進度
 

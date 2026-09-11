@@ -41,7 +41,7 @@ Input Guard 固定為四組共同基礎設施，不屬於 A–D 消融。依目�
 
 - Talker 受測模型：`gemini-3.5-flash-lite`；temperature `0.3`
 - Planner 模型：`gemini-3.5-flash-lite`；temperature `0.1`
-- Patient Agent 模型：`gemini-2.5-flash-lite`；temperature `0.3`
+- Patient Agent 模型：`gemini-3.5-flash-lite`；temperature `0.3`
 - LLM Judge 模型：`gemini-3.7-flash`；temperature `0.0`
 - 每條軌跡最大輪數：`6`
 - 病患 profile 選取與執行順序 seed：`42`；不得把 seed 視為第三方模型完全決定性的保證
