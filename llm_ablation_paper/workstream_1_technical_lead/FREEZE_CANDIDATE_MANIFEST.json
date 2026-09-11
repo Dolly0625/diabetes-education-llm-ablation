@@ -31,14 +31,14 @@
     "register_share_token"
   ],
   "notes": "WS1 A-D ablation runtime and formal configuration final frozen. v1.1 is a documentation-only correction of the freeze-status documents; it supersedes annotated tag llm-ablation-ws1-freeze-v1 (retained as a superseded historical snapshot). The runtime commit is unchanged (a61c32a93c24a3e698ee266246da30103da5d38a) and all runtime/prompt/tool/formal-config fingerprints are unchanged. Version uniquely identified by annotated tag llm-ablation-ws1-freeze-v1.1. Experiment remains BLOCKED until WS2/WS3/WS5 and mapping are completed.",
-  "formal_runtime_config_canonical_sha256": "7768a47509fb5c04a797c220ea0f33bc78486e9812e42f9d05cd226ba5504e13",
+  "formal_runtime_config_canonical_sha256": "1fc99f380f2df276751e75b061cd7b08a2fb9be49b0cc37854447f3059e63997",
   "formal_runtime_config": {
     "talker_model": "gemini-3.5-flash-lite",
     "talker_temperature": 0.3,
     "planner_model": "gemini-3.5-flash-lite",
     "planner_temperature": 0.1,
     "planner_request_timeout_seconds": 30.0,
-    "patient_agent_model": "gemini-2.5-flash-lite",
+    "patient_agent_model": "gemini-3.5-flash-lite",
     "patient_agent_temperature": 0.3,
     "max_turns": 6,
     "seed": 42,

@@ -121,7 +121,7 @@ def test_formal_config_values_match_protocol():
     assert cfg.planner_model == "gemini-3.5-flash-lite"
     assert cfg.planner_temperature == FORMAL_PLANNER_TEMPERATURE == 0.1
     assert cfg.planner_request_timeout_seconds == FORMAL_PLANNER_REQUEST_TIMEOUT_SECONDS == 30.0
-    assert cfg.patient_agent_model == FORMAL_PATIENT_AGENT_MODEL == "gemini-2.5-flash-lite"
+    assert cfg.patient_agent_model == FORMAL_PATIENT_AGENT_MODEL == "gemini-3.5-flash-lite"
     assert cfg.patient_agent_temperature == FORMAL_PATIENT_AGENT_TEMPERATURE == 0.3
     assert cfg.max_turns == FORMAL_MAX_TURNS == 6
     assert cfg.seed == FORMAL_SEED == 42
@@ -895,3 +895,61 @@ def test_fake_dry_run_path_skips_gate(tmp_path, monkeypatch):
     result = runner.run_condition(profile=profile, condition="A", fake_talker_responses=list(FAKE_TALKER_RESPONSES))
     assert result["termination_reason"] == "MAX_TURNS"
     assert len(result["records"]) == 6
+
+
+def test_patient_model_migration_refreeze_regression():
+    """PHASE M3.1: 驗證 Patient Agent 模型遷移至 gemini-3.5-flash-lite 後之重新凍結不變量。
+
+    斷言 runtime config 與 manifest 皆為 gemini-3.5-flash-lite，且相對舊值只有 patient_agent_model 改變：
+    A–D flags、talker/planner model、temperature、max_turns、seed、以及四個 prompt/tool 指紋均不變。
+    """
+    manifest_path = PROJECT_ROOT / "llm_ablation_paper" / "workstream_1_technical_lead" / "FREEZE_CANDIDATE_MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    runtime_cfg = manifest["formal_runtime_config"]
+
+    # 1. Runtime config 與 Manifest 之 patient_agent_model 皆為 gemini-3.5-flash-lite
+    assert FORMAL_PATIENT_AGENT_MODEL == "gemini-3.5-flash-lite"
+    assert runtime_cfg["patient_agent_model"] == "gemini-3.5-flash-lite"
+    for cond in ("A", "B", "C", "D"):
+        cfg = formal_ablation_config(cond)
+        assert cfg.patient_agent_model == "gemini-3.5-flash-lite"
+
+    # 2. 舊 baseline 與新 runtime spec 比對：唯獨 patient_agent_model 改變
+    old_runtime_spec = {
+        "talker_model": "gemini-3.5-flash-lite",
+        "talker_temperature": 0.3,
+        "planner_model": "gemini-3.5-flash-lite",
+        "planner_temperature": 0.1,
+        "planner_request_timeout_seconds": 30.0,
+        "patient_agent_model": "gemini-2.5-flash-lite",
+        "patient_agent_temperature": 0.3,
+        "max_turns": 6,
+        "seed": 42,
+        "subprocess_timeout_seconds": 120.0,
+        "input_guard": "ON",
+        "enable_forced_retrieval": False,
+        "enable_fixed_warning_append": False,
+        "enable_question_budget_postprocessing": False,
+        "conditions": {
+            "A": {"enable_planner": False, "enable_dynamic_tool_gate": False, "enable_output_guard": False},
+            "B": {"enable_planner": True, "enable_dynamic_tool_gate": False, "enable_output_guard": False},
+            "C": {"enable_planner": True, "enable_dynamic_tool_gate": True, "enable_output_guard": False},
+            "D": {"enable_planner": True, "enable_dynamic_tool_gate": True, "enable_output_guard": True},
+        },
+    }
+    current_spec = formal_runtime_spec()
+    diff_keys = [k for k in old_runtime_spec if old_runtime_spec[k] != current_spec[k]]
+    assert diff_keys == ["patient_agent_model"], f"Expected ONLY patient_agent_model to change, got: {diff_keys}"
+    assert old_runtime_spec["patient_agent_model"] == "gemini-2.5-flash-lite"
+    assert current_spec["patient_agent_model"] == "gemini-3.5-flash-lite"
+
+    # 3. 驗證四個 prompt 與 tool schema 指紋完全維持不變
+    fps = manifest["fingerprints_sha256"]
+    assert fps["talker_base_prompt_sha256"] == talker_base_prompt_sha256() == "2c2a3850a8885a2598403971f2faec6d4dcbea414a120c4711dff9540073ce55"
+    assert fps["talker_prompt_template_bundle_sha256"] == talker_prompt_template_bundle_sha256() == "9a6b133ac53437e8a567d3c336fe43a99c57faeb82152c21ada6fe4799723f2b"
+    assert fps["planner_system_prompt_sha256"] == planner_system_prompt_sha256() == "53d6b0f2ebb864116f0d914295b549a9d6d1236825f01cc9925e2185c842a409"
+    assert fps["canonical_tool_schema_sha256"] == canonical_tool_schema_sha256() == "e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e"
+
+    # 4. 驗證 formal_runtime_config_canonical_sha256 吻合重算值
+    assert manifest["formal_runtime_config_canonical_sha256"] == formal_runtime_config_canonical_sha256() == "1fc99f380f2df276751e75b061cd7b08a2fb9be49b0cc37854447f3059e63997"
+

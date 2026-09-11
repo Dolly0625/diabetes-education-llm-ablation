@@ -128,7 +128,7 @@ def test_formal_ablation_config_frozen_invariants():
     1. 除 condition 標籤外，唯一實驗開關差異只有 enable_planner。
     2. Talker 模型（gemini-3.5-flash-lite）、溫度（0.3）。
     3. Planner 模型（兩者均為凍結值 gemini-3.5-flash-lite）、溫度（0.1）、timeout（30.0 秒）。
-    4. Patient Agent 模型（gemini-2.5-flash-lite）、溫度（0.3）。
+    4. Patient Agent 模型（gemini-3.5-flash-lite）、溫度（0.3）。
     5. max_turns（6）、seed（42）與其他輔助開關均嚴格相同且固定為 OFF。
     """
     formal_a = formal_ablation_config("A")
@@ -151,7 +151,7 @@ def test_formal_ablation_config_frozen_invariants():
     assert formal_a.planner_request_timeout_seconds == formal_b.planner_request_timeout_seconds == 30.0
 
     # 4. Patient Agent 模型與溫度
-    assert formal_a.patient_agent_model == formal_b.patient_agent_model == "gemini-2.5-flash-lite"
+    assert formal_a.patient_agent_model == formal_b.patient_agent_model == "gemini-3.5-flash-lite"
     assert formal_a.patient_agent_temperature == formal_b.patient_agent_temperature == 0.3
 
     # 5. 輪數、種子與輔助開關固定 OFF
