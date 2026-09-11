@@ -375,32 +375,118 @@ def extract_clinical_facts_from_text(text: str, file_path: Path | str = DEFAULT_
     return extracted
 
 
-def prune_conversation_history(messages: list[dict], max_history_messages: int = 8) -> list[dict]:
-    """
-    滑動上下文視窗 (Sliding Context Window) 修剪。
-    保持 System Prompt 永久置頂，只保留最新 N 條對話。
-    特別注意：若裁剪邊界剛好卡在 tool 與 assistant tool_calls 之間，安全向前對齊，杜絕 API 報錯。
-    """
-    if len(messages) <= max_history_messages + 1:
-        return messages
-        
-    system_msg = messages[0]
-    tail_candidates = messages[1:]
-    
-    # 取最新的 N 條
-    start_idx = max(0, len(tail_candidates) - max_history_messages)
-    
-    def _get_msg_role(m) -> str:
+def _sanitize_tool_history(messages: list[dict]) -> list[dict]:
+    """嚴格清洗對話歷史，杜絕孤立 tool 訊息或違反 API 規格的錯序結構。"""
+    if not messages:
+        return []
+
+    def _role(m) -> str:
         if isinstance(m, dict):
             return m.get("role", "")
         return getattr(m, "role", "") or ""
 
-    # 檢查切點安全：若切點剛好落在 role == 'tool'，必須往前推進到產生該 tool_calls 的 assistant
-    while start_idx > 0 and _get_msg_role(tail_candidates[start_idx]) == "tool":
-        start_idx -= 1
-        
+    def _tool_call_ids(m) -> set[str]:
+        tcs = m.get("tool_calls") if isinstance(m, dict) else getattr(m, "tool_calls", None)
+        if not tcs or not isinstance(tcs, list):
+            return set()
+        out = set()
+        for tc in tcs:
+            if isinstance(tc, dict):
+                tid = tc.get("id")
+            else:
+                tid = getattr(tc, "id", None)
+            if tid:
+                out.add(tid)
+        return out
+
+    def _get_tc_id(m) -> str:
+        if isinstance(m, dict):
+            return m.get("tool_call_id", "") or ""
+        return getattr(m, "tool_call_id", "") or ""
+
+    sanitized = []
+    active_tool_call_ids = set()
+
+    for msg in messages:
+        role = _role(msg)
+        if role == "assistant":
+            tc_ids = _tool_call_ids(msg)
+            if tc_ids:
+                active_tool_call_ids = tc_ids
+            else:
+                active_tool_call_ids = set()
+            sanitized.append(msg)
+        elif role == "tool":
+            tid = _get_tc_id(msg)
+            # 只有當前面存在具備對應 id 的 assistant tool_calls 時才保留，杜絕孤立 tool
+            if active_tool_call_ids and (not tid or tid in active_tool_call_ids):
+                sanitized.append(msg)
+            else:
+                # 孤立 tool，安全丟棄
+                continue
+        else:
+            # user 或 system 等訊息會重置活躍的 tool_call_ids
+            active_tool_call_ids = set()
+            sanitized.append(msg)
+
+    return sanitized
+
+
+def prune_conversation_history(messages: list[dict], max_history_messages: int = 8) -> list[dict]:
+    """
+    滑動上下文視窗 (Sliding Context Window) 修剪。
+    保持 System Prompt 永久置頂，只保留最新 N 條對話。
+    特別注意：將 user → assistant(tool_calls) → tool 視為一個不可分割的原子群組。
+    切點若剛好落在 tool 或 assistant 之間，安全往前調整（保留前置 assistant 與 user）或整組丟棄，嚴禁留下孤立的 tool 訊息。
+    """
+    if not messages:
+        return []
+    if len(messages) <= max_history_messages + 1:
+        return _sanitize_tool_history(messages)
+
+    system_msg = messages[0]
+    tail_candidates = messages[1:]
+    total_tail = len(tail_candidates)
+
+    def _role(m) -> str:
+        if isinstance(m, dict):
+            return m.get("role", "")
+        return getattr(m, "role", "") or ""
+
+    def _has_tool_calls(m) -> bool:
+        if isinstance(m, dict):
+            return bool(m.get("tool_calls"))
+        return bool(getattr(m, "tool_calls", None))
+
+    # 取最新的 N 條候選起點
+    start_idx = max(0, total_tail - max_history_messages)
+
+    # 檢查切點安全：若切點落在 tool 或 assistant 之間
+    if start_idx < total_tail and _role(tail_candidates[start_idx]) == "tool":
+        # 往前尋找發出此 tool 的 assistant(tool_calls)
+        idx = start_idx
+        while idx > 0 and _role(tail_candidates[idx]) == "tool":
+            idx -= 1
+        if idx >= 0 and _role(tail_candidates[idx]) == "assistant" and _has_tool_calls(tail_candidates[idx]):
+            # 找到前置 assistant；若前方緊鄰 user 訊息，往前將 user 也一併納入原子群組
+            if idx > 0 and _role(tail_candidates[idx - 1]) == "user":
+                start_idx = idx - 1
+            else:
+                start_idx = idx
+        else:
+            # 往前找不到對應的 assistant(tool_calls)，表示為孤立 tool，整組丟棄（往後推進跳過所有連續 tool）
+            idx = start_idx
+            while idx < total_tail and _role(tail_candidates[idx]) == "tool":
+                idx += 1
+            start_idx = idx
+
+    elif start_idx < total_tail and _role(tail_candidates[start_idx]) == "assistant" and _has_tool_calls(tail_candidates[start_idx]):
+        # 若切點剛好落在 assistant(tool_calls)，往前調整保留觸發該工具調用的 user 訊息，保證原子群組完整
+        if start_idx > 0 and _role(tail_candidates[start_idx - 1]) == "user":
+            start_idx -= 1
+
     pruned = [system_msg] + tail_candidates[start_idx:]
-    return pruned
+    return _sanitize_tool_history(pruned)
 
 
 def archive_session(session_id: str, messages: list[dict], patient_id: str = "demo_patient") -> Path:

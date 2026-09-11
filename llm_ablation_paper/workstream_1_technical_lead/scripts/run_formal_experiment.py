@@ -158,6 +158,85 @@ def check_12_profiles_validator() -> None:
 PILOT_VALID_COMPLETION_REASONS = frozenset({"PATIENT_GOAL_MET", "MAX_TURNS"})
 
 
+def inspect_run_for_nested_errors(run_dir: Path) -> tuple[bool, Optional[str]]:
+    """遞迴檢視 run_dir 下的 roleplay_result.json 與 trajectories.jsonl 內部每一輪。
+
+    若發現任一輪：
+      - record.harness_turn (或 record) 的 termination_reason == "ERROR"
+      - record.harness_turn (或 record) 的 error 非 None 且非空
+      - retry_meta.errors 含有非瞬態失敗 (如 second_call_error、400、BadRequest 等)
+    一律回傳 (True, error_detail)。
+    若無錯誤則回傳 (False, None)。
+    """
+    p_dir = Path(run_dir).resolve()
+    roleplay_file = p_dir / "roleplay_result.json"
+    if not roleplay_file.exists() and (p_dir.parent / "roleplay_result.json").exists():
+        roleplay_file = p_dir.parent / "roleplay_result.json"
+
+    # 1. 檢視 roleplay_result.json
+    if roleplay_file.exists():
+        try:
+            rp_data = json.loads(roleplay_file.read_text(encoding="utf-8"))
+            if rp_data.get("termination_reason") == "ERROR":
+                return True, f"roleplay_result termination_reason is ERROR (error_metadata: {rp_data.get('error_metadata')})"
+            if rp_data.get("error_metadata") is not None:
+                return True, f"roleplay_result contains error_metadata: {rp_data.get('error_metadata')}"
+
+            # 檢視每一輪 records
+            for rec in rp_data.get("records", []):
+                h_turn = rec.get("harness_turn") or {}
+                if h_turn.get("termination_reason") == "ERROR":
+                    return True, f"turn {rec.get('turn')} harness_turn termination_reason is ERROR"
+                if h_turn.get("error") is not None and str(h_turn.get("error")).strip():
+                    return True, f"turn {rec.get('turn')} harness_turn contains error: {h_turn.get('error')}"
+                if h_turn.get("error_metadata") is not None:
+                    return True, f"turn {rec.get('turn')} harness_turn contains error_metadata: {h_turn.get('error_metadata')}"
+
+                # 檢視 retry_metadata
+                for meta_key in ("retry_metadata", "patient_retry_metadata"):
+                    meta = rec.get(meta_key) or h_turn.get(meta_key) or {}
+                    if isinstance(meta, dict):
+                        for err in meta.get("errors", []):
+                            err_s = str(err).lower()
+                            if any(k in err_s for k in ["second_call_error", "badrequest", "invalid parameter", "validationerror", "400"]):
+                                return True, f"turn {rec.get('turn')} non-transient retry error: {err}"
+        except Exception as e:
+            if not isinstance(e, (json.JSONDecodeError, OSError)):
+                raise
+
+    # 2. 檢視 trajectories.jsonl
+    traj_candidates = [
+        p_dir / "trajectories.jsonl",
+        p_dir / "isolated_state" / "trajectories.jsonl",
+    ]
+    if p_dir.name == "isolated_state":
+        traj_candidates.append(p_dir.parent / "trajectories.jsonl")
+    for tp in traj_candidates:
+        if tp.exists():
+            try:
+                for line in tp.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    turn_obj = json.loads(line)
+                    if turn_obj.get("termination_reason") == "ERROR":
+                        return True, f"trajectory turn {turn_obj.get('turn_index')} termination_reason is ERROR"
+                    if turn_obj.get("error") is not None and str(turn_obj.get("error")).strip():
+                        return True, f"trajectory turn {turn_obj.get('turn_index')} contains error: {turn_obj.get('error')}"
+                    if turn_obj.get("error_metadata") is not None:
+                        return True, f"trajectory turn {turn_obj.get('turn_index')} contains error_metadata: {turn_obj.get('error_metadata')}"
+                    meta = turn_obj.get("retry_metadata") or {}
+                    if isinstance(meta, dict):
+                        for err in meta.get("errors", []):
+                            err_s = str(err).lower()
+                            if any(k in err_s for k in ["second_call_error", "badrequest", "invalid parameter", "validationerror", "400"]):
+                                return True, f"trajectory turn {turn_obj.get('turn_index')} non-transient retry error: {err}"
+            except Exception as e:
+                if not isinstance(e, (json.JSONDecodeError, OSError)):
+                    raise
+
+    return False, None
+
+
 def check_pilot_completed_cleanly(pilot_summary_path: Path) -> None:
     """驗證 pilot summary 存在且四組 A/B/C/D 完整且無 ERROR，終止理由必須為 PATIENT_GOAL_MET 或 MAX_TURNS。"""
     p = Path(pilot_summary_path).resolve()
@@ -172,10 +251,13 @@ def check_pilot_completed_cleanly(pilot_summary_path: Path) -> None:
 
     runs = data.get("runs", [])
     completed_conds = set()
+    pilot_root = p.parent
+
     for r in runs:
         cond = r.get("condition")
         reason = r.get("termination_reason")
         err = r.get("error")
+        run_id = r.get("run_id")
 
         if err is not None:
             raise RuntimeError(
@@ -186,6 +268,21 @@ def check_pilot_completed_cleanly(pilot_summary_path: Path) -> None:
                 f"Pilot run for condition {cond} terminated with invalid reason: {reason!r}. "
                 f"Must be one of {sorted(PILOT_VALID_COMPLETION_REASONS)} (COMMON_INPUT_BLOCK, ERROR, None, or unknown are rejected) (fail-closed)."
             )
+
+        # 深入檢驗 run 目錄下的內部輪次 (fail-closed)
+        candidate_dirs = [
+            pilot_root / run_id,
+            pilot_root / f"WS4-PILOT-{DEFAULT_PILOT_PATIENT_ID}-{cond}",
+        ]
+        for cdir in candidate_dirs:
+            if cdir.exists():
+                has_nested_err, err_detail = inspect_run_for_nested_errors(cdir)
+                if has_nested_err:
+                    raise RuntimeError(
+                        f"Pilot run for condition {cond} ({cdir.name}) contains nested ERROR: {err_detail}. "
+                        f"Formal batch cannot proceed (fail-closed)."
+                    )
+
         completed_conds.add(cond)
     required = {"A", "B", "C", "D"}
     if not required.issubset(completed_conds):
@@ -256,6 +353,14 @@ def run_pilot(
             run_suffix="PILOT",
         )
         results.append(res)
+
+    for item in results:
+        run_dir = pilot_root / item["run_id"]
+        has_err, err_detail = inspect_run_for_nested_errors(run_dir)
+        if has_err:
+            item["termination_reason"] = "ERROR"
+            if item.get("error_metadata") is None:
+                item["error_metadata"] = {"nested_error": err_detail}
 
     summary = {
         "execution_mode": "formal_pilot",
@@ -377,6 +482,14 @@ def run_batch(
             )
             results.append(res)
 
+    for item in results:
+        run_dir = batch_root / item["run_id"]
+        has_err, err_detail = inspect_run_for_nested_errors(run_dir)
+        if has_err:
+            item["termination_reason"] = "ERROR"
+            if item.get("error_metadata") is None:
+                item["error_metadata"] = {"nested_error": err_detail}
+
     summary = {
         "execution_mode": "formal_12x4_batch",
         "total_trajectories": len(results),
@@ -469,16 +582,11 @@ def run_blind_export(
             skipped_pilot += 1
             continue
 
-        # 排除 ERROR
-        roleplay_file = parent_run_dir / "roleplay_result.json"
-        if roleplay_file.exists():
-            try:
-                rp_data = json.loads(roleplay_file.read_text(encoding="utf-8"))
-                if rp_data.get("termination_reason") == "ERROR":
-                    skipped_error += 1
-                    continue
-            except Exception:
-                pass
+        # 排除 ERROR (含頂層與 nested ERROR)
+        has_err, err_detail = inspect_run_for_nested_errors(parent_run_dir)
+        if has_err:
+            skipped_error += 1
+            continue
 
         state_dir = run_dir if (run_dir / "trajectories.jsonl").exists() else (parent_run_dir / "isolated_state")
         blinded_obj = to_blinded_contract_trajectory(

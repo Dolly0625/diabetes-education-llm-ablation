@@ -3,6 +3,7 @@
 Encapsulates validated production logic with injectable ablation flags.
 """
 from __future__ import annotations
+import copy
 import json
 import re
 import time
@@ -254,6 +255,67 @@ def _extract_token_usage(resp: Any) -> Optional[dict[str, Any]]:
     }
 
 
+def _serialize_assistant_tool_message(
+    msg: Any,
+    raw_content: str,
+    fname0: str,
+    args0: dict,
+    tc_id0: str,
+) -> dict[str, Any]:
+    """完整序列化 assistant tool_call 訊息，完整保留 extra_content.google.thought_signature 等延伸欄位。"""
+    if isinstance(msg, dict):
+        return copy.deepcopy(msg)
+    if hasattr(msg, "model_dump"):
+        try:
+            dumped = msg.model_dump(exclude_none=True)
+            if isinstance(dumped, dict):
+                if dumped.get("role") != "assistant":
+                    dumped["role"] = "assistant"
+                if not dumped.get("tool_calls"):
+                    dumped["tool_calls"] = [{
+                        "id": tc_id0,
+                        "type": "function",
+                        "function": {
+                            "name": fname0,
+                            "arguments": json.dumps(args0, ensure_ascii=False) if isinstance(args0, dict) else str(args0)
+                        }
+                    }]
+                return dumped
+        except Exception:
+            pass
+    if hasattr(msg, "dict"):
+        try:
+            dumped = msg.dict(exclude_none=True)
+            if isinstance(dumped, dict):
+                if dumped.get("role") != "assistant":
+                    dumped["role"] = "assistant"
+                if not dumped.get("tool_calls"):
+                    dumped["tool_calls"] = [{
+                        "id": tc_id0,
+                        "type": "function",
+                        "function": {
+                            "name": fname0,
+                            "arguments": json.dumps(args0, ensure_ascii=False) if isinstance(args0, dict) else str(args0)
+                        }
+                    }]
+                return dumped
+        except Exception:
+            pass
+    # XML fallback 或無序列化方法時的手工回退結構
+    return {
+        "role": "assistant",
+        "content": raw_content or None,
+        "tool_calls": [{
+            "id": tc_id0,
+            "type": "function",
+            "function": {
+                "name": fname0,
+                "arguments": json.dumps(args0, ensure_ascii=False) if isinstance(args0, dict) else str(args0)
+            }
+        }]
+    }
+
+
 def execute_ablation_turn(
     *,
     user_text: str,
@@ -267,6 +329,7 @@ def execute_ablation_turn(
     max_tokens: int = 250,
     image_path: Optional[Path] = None,
     modality: str = "文字輸入",
+    turn_index: Optional[int] = None,
 ) -> dict[str, Any]:
     """Execute single turn via shared core.
 
@@ -280,6 +343,9 @@ def execute_ablation_turn(
     start = time.time()
     if planner_client is None:
         planner_client = talker_client
+
+    if turn_index is None:
+        turn_index = sum(1 for m in messages if (m.get("role") if isinstance(m, dict) else getattr(m, "role", "")) == "user")
 
     enable_output_guard = _abl_flag(ablation_config, "enable_output_guard", True)
     enable_budget = _abl_flag(ablation_config, "enable_question_budget_postprocessing", True)
@@ -637,11 +703,15 @@ def execute_ablation_turn(
         resp = _call_with_retry(_talker_call, max_tries=4, backoffs=[1, 2, 4, 8], metadata_out=retry_meta)
         token_usage = _extract_token_usage(resp)
         msg = resp.choices[0].message
-        raw_content = (getattr(msg, "content", None) or "").strip() if getattr(msg, "content", None) else ""
+        if isinstance(msg, dict):
+            raw_content = (msg.get("content") or "").strip()
+            tool_calls = msg.get("tool_calls")
+        else:
+            raw_content = (getattr(msg, "content", None) or "").strip() if getattr(msg, "content", None) else ""
+            tool_calls = getattr(msg, "tool_calls", None)
+
         # XML fallback detection
         is_xml_tool_call = "<tool_call>" in raw_content and "search_handbook" in raw_content
-
-        tool_calls = getattr(msg, "tool_calls", None)
 
         if tool_calls or is_xml_tool_call:
             # Normalize tool_calls list
@@ -668,16 +738,21 @@ def execute_ablation_turn(
             # Validate each call against exposed_tools
             valid_calls = []
             for tc in normalized_calls:
-                try:
-                    fname = tc.function.name if hasattr(tc.function, "name") else tc.get("function", {}).get("name", "")
-                except Exception:
-                    fname = "unknown"
-                args_raw = getattr(tc.function, "arguments", "{}") if hasattr(tc, "function") else "{}"
+                if isinstance(tc, dict):
+                    fname = tc.get("function", {}).get("name", "")
+                    args_raw = tc.get("function", {}).get("arguments", "{}")
+                    tc_id = tc.get("id", f"call_{len(valid_calls)}")
+                else:
+                    try:
+                        fname = tc.function.name if hasattr(getattr(tc, "function", None), "name") else ""
+                    except Exception:
+                        fname = "unknown"
+                    args_raw = getattr(getattr(tc, "function", None), "arguments", "{}")
+                    tc_id = getattr(tc, "id", f"call_{len(valid_calls)}")
                 try:
                     args = json.loads(args_raw) if isinstance(args_raw, str) else dict(args_raw)
                 except Exception:
                     args = {}
-                tc_id = getattr(tc, "id", f"call_{len(valid_calls)}")
                 if fname not in exposed_tool_set:
                     tool_rejections.append({"tool": fname, "reason": "not_in_exposed_tools", "id": tc_id})
                     continue
@@ -749,25 +824,11 @@ def execute_ablation_turn(
                 kw_clean = _sanitize_search_keyword(kw, user_text)
                 tool_output = search_handbook(kw_clean, user_raw_input=user_text, domain=planner.retrieval_domain.value)
                 tool_results.append({"tool": fname0, "content": tool_output[:1000]})
-                # Append assistant tool_call + tool result to messages for history correctness
-                # For API-like history, need to preserve tool_calls structure
-                try:
-                    messages.append(msg if isinstance(msg, dict) else {"role": "assistant", "content": raw_content or None, "tool_calls": [{"id": tc_id0, "function": {"name": fname0, "arguments": json.dumps(args0, ensure_ascii=False)}}]})
-                except Exception:
-                    messages.append({"role": "assistant", "content": None, "tool_calls": [{"id": tc_id0, "function": {"name": fname0, "arguments": json.dumps(args0, ensure_ascii=False)}}]})
-                messages.append({"role": "tool", "tool_call_id": tc_id0, "content": tool_output})
+                # 完整保留 assistant tool_call 訊息（包含 Google thought_signature）
+                assistant_tool_msg = _serialize_assistant_tool_message(msg, raw_content, fname0, args0, tc_id0)
+                messages.append(assistant_tool_msg)
 
-                # Second talker call with evidence
-                second_ctx = list(prune_conversation_history(messages, max_history_messages=8))
-                try:
-                    cur_rec = load_patient_record(patient_file)
-                    if cur_rec and isinstance(cur_rec, dict):
-                        hot_ctx = format_patient_context(patient_file)
-                        if hot_ctx and hot_ctx.strip() and second_ctx:
-                            second_ctx[0] = {"role": "system", "content": build_nurse_system_prompt(hot_ctx)}
-                except Exception:
-                    pass
-                # Build second_task like handlers
+                # 建立解說任務指引文字 (second_task)
                 if planner.retrieval_domain == RetrievalDomain.DRUG_SAFETY:
                     second_task = (
                         "【官方實證藥物衛教解說任務｜實證詳實首發，按需白話轉譯】\n"
@@ -785,9 +846,30 @@ def execute_ablation_turn(
                         "於說明文末親切提醒長輩：若有看不懂或太複雜的地方，隨時可以告訴我，我會用更白話的方式向您解釋喔！\n"
                         "出處呈現：請在解說中自然載明官方手冊出處（例如口語提及『依據衛生福利部國民健康署手冊建議』，或於文末附上一行『（資料來源：衛生福利部國民健康署衛教手冊）』），彰顯實證依據；請以生活化口語說明，避免輸出 raw URL 網址。"
                     )
-                second_ctx.append({"role": "system", "content": second_task})
+
+                # 依協議規範：將 second_task 完整文字併入 tool response 的 content 欄位，嚴禁追加 trailing system 訊息
+                combined_tool_content = f"{tool_output}\n\n{second_task}"
+                messages.append({
+                    "role": "tool",
+                    "name": fname0,
+                    "tool_call_id": tc_id0,
+                    "content": combined_tool_content,
+                })
+
+                # Second talker call with evidence
+                second_ctx = list(prune_conversation_history(messages, max_history_messages=8))
+                try:
+                    cur_rec = load_patient_record(patient_file)
+                    if cur_rec and isinstance(cur_rec, dict):
+                        hot_ctx = format_patient_context(patient_file)
+                        if hot_ctx and hot_ctx.strip() and second_ctx:
+                            second_ctx[0] = {"role": "system", "content": build_nurse_system_prompt(hot_ctx)}
+                except Exception:
+                    pass
 
                 second_text = ""
+                second_call_failed = False
+                second_call_exc = None
                 try:
                     def _second_call():
                         return talker_client.chat.completions.create(
@@ -815,11 +897,50 @@ def execute_ablation_turn(
                     second_text = re.sub(r"<tool_call>.*?</tool_call>", "", second_text, flags=re.DOTALL).strip()
                     second_text = _strip_evidence_links_leak(second_text)
                 except Exception as second_e:
+                    second_call_failed = True
+                    second_call_exc = second_e
                     import sys, traceback
-                    print(f"[AblationCore search_handbook] 第二次 Talker 呼叫失敗，安全降級回落: {second_e}", file=sys.stderr)
+                    print(f"[AblationCore search_handbook] 第二次 Talker 呼叫失敗: {second_e}", file=sys.stderr)
                     traceback.print_exc(file=sys.stderr)
                     if 'retry_meta' in locals() and retry_meta is not None:
                         retry_meta.setdefault("errors", []).append(f"second_call_error: {str(second_e)}")
+
+                if second_call_failed and ablation_config is not None:
+                    # 消融實驗模式 (ablation_config is not None)：嚴格 Fail-Closed，回傳 ERROR 與結構化 error_metadata
+                    termination = "ERROR"
+                    error = f"Second talker call failed: {str(second_call_exc)}"
+                    error_meta_dict = {
+                        "stage": "second_talker_call",
+                        "turn": turn_index,
+                        "errors": [str(second_call_exc)],
+                    }
+                    if retry_meta is not None:
+                        retry_meta["error_metadata"] = error_meta_dict
+                    latency_ms = int((time.time() - start) * 1000)
+                    _persist_planner_state()
+                    return {
+                        "planner": planner,
+                        "exposed_tools": active_tools,
+                        "exposed_tool_names": exposed_tool_names,
+                        "input_guard_result": input_guard_obj,
+                        "output_guard_result": type("G", (), {"is_blocked": False, "risk_category": "NONE", "blocked_message": ""})(),
+                        "raw_talker_output": raw_talker_output if raw_talker_output else raw_content,
+                        "final_output": f"第二次 Talker 呼叫失敗: {str(second_call_exc)}",
+                        "called_tools": called_tools,
+                        "tool_results": tool_results,
+                        "tool_rejections": tool_rejections,
+                        "forced_tool_display": forced_tool_display,
+                        "flex_bubble": None,
+                        "qr_payload": None,
+                        "text_summary": None,
+                        "termination_reason": "ERROR",
+                        "events": list(planner_events) + ["SECOND_TALKER_CALL_FAILED"],
+                        "token_usage": token_usage,
+                        "retry_metadata": retry_meta,
+                        "error_metadata": error_meta_dict,
+                        "error": error,
+                        "latency_ms": latency_ms,
+                    }
 
                 if not second_text:
                     if raw_content and raw_content.strip() and not raw_content.strip().startswith("{") and "tool_calls" not in raw_content:
@@ -1035,12 +1156,15 @@ def execute_ablation_turn(
                     glucose_range=args0.get("glucose_range"),
                     diet_lifestyle=args0.get("diet_lifestyle"),
                 )
-                # Append tool conversation
-                try:
-                    messages.append(msg if isinstance(msg, dict) else {"role": "assistant", "content": raw_content or None, "tool_calls": [{"id": tc_id0, "function": {"name": fname0, "arguments": json.dumps(args0, ensure_ascii=False)}}]})
-                except Exception:
-                    messages.append({"role": "assistant", "content": None, "tool_calls": [{"id": tc_id0, "function": {"name": fname0, "arguments": json.dumps(args0, ensure_ascii=False)}}]})
-                messages.append({"role": "tool", "tool_call_id": tc_id0, "content": text_summary})
+                # 完整保留 assistant tool_call 訊息（包含 Google thought_signature）
+                assistant_tool_msg = _serialize_assistant_tool_message(msg, raw_content, fname0, args0, tc_id0)
+                messages.append(assistant_tool_msg)
+                messages.append({
+                    "role": "tool",
+                    "name": fname0,
+                    "tool_call_id": tc_id0,
+                    "content": text_summary,
+                })
                 raw_talker_output = raw_content
                 # Build final hint like handlers
                 vr = args0.get("visit_reason", "定期回診追蹤")
