@@ -38,19 +38,22 @@ def _create_mock_pilot_summary(
     target_path: Path,
     *,
     conditions: tuple[str, ...] = ("A", "B", "C", "D"),
+    termination_reason: str = "PATIENT_GOAL_MET",
     include_error: bool = False,
     error_condition: str = "B",
+    custom_reasons: dict[str, str] | None = None,
 ) -> Path:
     target_path.parent.mkdir(parents=True, exist_ok=True)
     runs = []
     for c in conditions:
         is_err = include_error and (c == error_condition)
+        reason = (custom_reasons or {}).get(c, "ERROR" if is_err else termination_reason)
         runs.append({
             "run_id": f"WS4-PILOT-SP-001-{c}",
             "condition": c,
             "user_id": "SP-001",
             "turn_count": 3,
-            "termination_reason": "ERROR" if is_err else "PATIENT_SATISFIED",
+            "termination_reason": reason,
             "error": "Simulated error" if is_err else None,
         })
     summary = {
@@ -195,10 +198,10 @@ def test_batch_preflight_checks_validator_failure():
 
 
 # =====================================================================
-# 5. Preflight 門禁：Pilot 未完成或含 ERROR 檢查
+# 5. Preflight 門禁：Pilot 未完成、非白名單終止原因或含 ERROR 檢查
 # =====================================================================
 def test_batch_preflight_checks_pilot_incomplete_or_error(tmp_path: Path):
-    """驗證 pilot summary 不存在、缺少條件或含 ERROR 時門禁立即拒絕。"""
+    """驗證 pilot summary 不存在、缺少條件、含非 null error 或終止原因非 PATIENT_GOAL_MET/MAX_TURNS 時立即拒絕。"""
     pilot_summary = tmp_path / "pilot" / "formal_pilot_summary.json"
 
     # 1. 檔案不存在
@@ -210,20 +213,66 @@ def test_batch_preflight_checks_pilot_incomplete_or_error(tmp_path: Path):
     with pytest.raises(RuntimeError, match="Pilot runs missing required conditions"):
         check_pilot_completed_cleanly(pilot_summary)
 
-    # 3. 包含 ERROR
+    # 3. 包含 error metadata 非 null
     _create_mock_pilot_summary(
         pilot_summary,
         conditions=("A", "B", "C", "D"),
         include_error=True,
         error_condition="C",
     )
-    with pytest.raises(RuntimeError, match="failed with ERROR"):
+    with pytest.raises(RuntimeError, match="failed with non-null error metadata"):
         check_pilot_completed_cleanly(pilot_summary)
 
-    # 4. 完整 4 組且無 ERROR
+    # 4. 終止原因為 COMMON_INPUT_BLOCK（禁止視為主 pilot 通過）
     _create_mock_pilot_summary(
         pilot_summary,
         conditions=("A", "B", "C", "D"),
+        custom_reasons={"A": "COMMON_INPUT_BLOCK"},
+    )
+    with pytest.raises(RuntimeError, match="terminated with invalid reason: 'COMMON_INPUT_BLOCK'"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 5. 終止原因為 None
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        custom_reasons={"B": None},
+    )
+    with pytest.raises(RuntimeError, match="terminated with invalid reason: None"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 6. 終止原因為未知字串（例如舊的 PATIENT_SATISFIED）
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        custom_reasons={"C": "PATIENT_SATISFIED"},
+    )
+    with pytest.raises(RuntimeError, match="terminated with invalid reason: 'PATIENT_SATISFIED'"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 7. 終止原因為 ERROR
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        custom_reasons={"D": "ERROR"},
+    )
+    with pytest.raises(RuntimeError, match="terminated with invalid reason: 'ERROR'"):
+        check_pilot_completed_cleanly(pilot_summary)
+
+    # 8. 完整 4 組皆為 PATIENT_GOAL_MET 且無 ERROR -> 成功
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        termination_reason="PATIENT_GOAL_MET",
+        include_error=False,
+    )
+    check_pilot_completed_cleanly(pilot_summary)
+
+    # 9. 完整 4 組皆為 MAX_TURNS 且無 ERROR -> 成功
+    _create_mock_pilot_summary(
+        pilot_summary,
+        conditions=("A", "B", "C", "D"),
+        termination_reason="MAX_TURNS",
         include_error=False,
     )
     check_pilot_completed_cleanly(pilot_summary)
@@ -265,6 +314,9 @@ def test_batch_output_root_conflict_without_resume(tmp_path: Path):
 # =====================================================================
 # 8. Resume 身分驗證與接續執行
 # =====================================================================
+# =====================================================================
+# 8. Resume 身分驗證與接續執行
+# =====================================================================
 def test_batch_resume_identity_validation(tmp_path: Path):
     """驗證在指定 --resume 時，允許安全接續已存在的目錄而不拋衝突例外。"""
     pilot_sum = _create_mock_pilot_summary(tmp_path / "pilot" / "formal_pilot_summary.json")
@@ -278,7 +330,7 @@ def test_batch_resume_identity_validation(tmp_path: Path):
         "condition": "A",
         "user_id": "SP-001",
         "records": [{}],
-        "termination_reason": "PATIENT_SATISFIED",
+        "termination_reason": "PATIENT_GOAL_MET",
         "error_metadata": None,
     })
 
@@ -373,14 +425,14 @@ def test_batch_missing_api_key_fails_closed(tmp_path: Path):
 
 
 # =====================================================================
-# 10. Mapping 生成器：密碼學隨機性、單向性與禁止覆寫
+# 10. Mapping 生成器：密碼學隨機性、單向性與永不可覆寫
 # =====================================================================
 def test_mapping_generator_cryptographic_uniqueness_and_no_overwrite(tmp_path: Path):
-    """驗證 mapping 生成符合 schema、隨機性且預設禁止覆寫。"""
+    """驗證 mapping 生成符合 schema、隨機性且永不可覆寫（且原檔 byte-for-byte 完全不變）。"""
     map_file = tmp_path / "secret_mapping.json"
 
     # 1. 初次生成成功
-    m1 = generate_frozen_mapping(output_file=map_file, overwrite=False)
+    m1 = generate_frozen_mapping(output_file=map_file)
     assert set(m1.keys()) == {"A", "B", "C", "D"}
     for v in m1.values():
         assert v.startswith("COND-")
@@ -388,24 +440,29 @@ def test_mapping_generator_cryptographic_uniqueness_and_no_overwrite(tmp_path: P
         int(v.split("-")[1], 16)  # 驗證為有效十六進位
     assert len(set(m1.values())) == 4  # 4 個混淆值互不相同
 
-    # 2. 檔案已存在且無 overwrite 時拋出 FileExistsError
-    with pytest.raises(FileExistsError, match="already exists"):
-        generate_frozen_mapping(output_file=map_file, overwrite=False)
+    orig_bytes = map_file.read_bytes()
 
-    # 3. 允許 overwrite 時成功覆寫
-    m2 = generate_frozen_mapping(output_file=map_file, overwrite=True)
-    assert set(m2.keys()) == {"A", "B", "C", "D"}
+    # 2. 檔案已存在時永不可覆寫，拋出 FileExistsError
+    with pytest.raises(FileExistsError, match="already exists.+overwrite is strictly prohibited"):
+        generate_frozen_mapping(output_file=map_file)
 
-    # 4. 驗證隨機性（兩次生成的值應不同）
-    m3 = generate_frozen_mapping(output_file=tmp_path / "m3.json", overwrite=False)
+    # 3. 驗證原檔案內容 byte-for-byte 完全未被更動或截斷
+    assert map_file.read_bytes() == orig_bytes
+
+    # 4. 驗證隨機性（不同輸出檔生成的值應不同）
+    m3 = generate_frozen_mapping(output_file=tmp_path / "m3.json")
     assert list(m1.values()) != list(m3.values())
 
+    # 5. 驗證 CLI 已無 --overwrite 旗標，若傳入則報錯
+    with pytest.raises(SystemExit):
+        main(["generate-mapping", "--output-file", str(tmp_path / "cli.json"), "--overwrite"])
+
 
 # =====================================================================
-# 11. Blind Export 排除 Canary, Pilot, ERROR 並要求 Completed
+# 11. Blind Export 排除 Canary, Pilot, ERROR 並拒絕未完成軌跡
 # =====================================================================
 def test_blind_export_require_completed_and_filter_pilot_canary_error(tmp_path: Path):
-    """驗證 Blind Export 子命令嚴格排除 canary/pilot/error，只匯出合法 completed runs。"""
+    """驗證 Blind Export 嚴格排除 canary/pilot/error，永遠 require_completed 且拒絕未完成軌跡。"""
     raw_dir = tmp_path / "raw_runs"
     out_dir = tmp_path / "blinded_transcripts"
     map_file = tmp_path / "mapping.json"
@@ -425,7 +482,6 @@ def test_blind_export_require_completed_and_filter_pilot_canary_error(tmp_path: 
         raw_dir=raw_dir,
         mapping_file=map_file,
         output_dir=out_dir,
-        require_completed=True,
     )
 
     assert summary["exported_count"] == 1
@@ -441,6 +497,45 @@ def test_blind_export_require_completed_and_filter_pilot_canary_error(tmp_path: 
     assert blinded_content["condition_secret"] == mapping["A"]
     assert "condition" not in blinded_content
     assert not blinded_content["run_id"].startswith("WS4-BATCH")
+
+    # 驗證未完成軌跡呼叫 run_blind_export 立即被拒絕
+    incomplete_dir = tmp_path / "incomplete_raw"
+    _create_mock_run_dir(
+        incomplete_dir,
+        "WS4-BATCH-SP-003-A",
+        condition="A",
+        patient_id="SP-003",
+        max_turns=10,  # 設定 max_turns 為 10，但只跑了 1 輪
+        num_turns=1,
+    )
+    # 修改其 trajectory 讓 termination_reason 為 None
+    inc_state = incomplete_dir / "WS4-BATCH-SP-003-A" / "isolated_state"
+    inc_lines = [json.dumps({
+        "turn_index": 0,
+        "research_patient_id": "SP-003",
+        "user_message": "血糖問題",
+        "assistant_response": "回覆",
+        "exposed_tools": [],
+        "called_tools": [],
+        "planner_result_or_neutral": {"engine": "neutral"},
+        "output_guard_result": {"is_blocked": False},
+        # 不填寫 termination_reason
+    })]
+    (inc_state / "trajectories.jsonl").write_text("\n".join(inc_lines) + "\n", encoding="utf-8")
+    (incomplete_dir / "WS4-BATCH-SP-003-A" / "roleplay_result.json").write_text(
+        json.dumps({"termination_reason": None}), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="incomplete"):
+        run_blind_export(
+            raw_dir=incomplete_dir,
+            mapping_file=map_file,
+            output_dir=tmp_path / "blind_incomplete",
+        )
+
+    # 驗證 CLI 已無 --allow-incomplete 旗標，若傳入則報錯
+    with pytest.raises(SystemExit):
+        main(["blind-export", "--raw-dir", str(raw_dir), "--mapping-file", str(map_file), "--allow-incomplete"])
 
 
 # =====================================================================
@@ -487,7 +582,7 @@ def test_pilot_subcommand_offline(tmp_path: Path):
             "condition": condition,
             "user_id": pid,
             "records": [{"turn": 1}],
-            "termination_reason": "PATIENT_SATISFIED",
+            "termination_reason": "PATIENT_GOAL_MET",
             "error_metadata": None,
         }
 

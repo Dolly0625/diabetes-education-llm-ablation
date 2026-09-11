@@ -67,13 +67,12 @@ DEFAULT_MAPPING_FILE = DEFAULT_ARTIFACTS_ROOT / "frozen_config" / "frozen_condit
 def generate_frozen_mapping(
     *,
     output_file: Path | str = DEFAULT_MAPPING_FILE,
-    overwrite: bool = False,
 ) -> dict[str, str]:
-    """生成密碼學安全隨機之 A-D 混淆映射表，並以原子方式保存。已存在時不可覆寫。"""
+    """生成密碼學安全隨機之 A-D 混淆映射表，並以原子方式保存。已存在時永不可覆寫（fail-closed）。"""
     out_path = Path(output_file).resolve()
-    if out_path.exists() and not overwrite:
+    if out_path.exists():
         raise FileExistsError(
-            f"Frozen mapping file already exists at {out_path}; overwrite is prohibited (fail-closed)."
+            f"Frozen mapping file already exists at {out_path}; overwrite is strictly prohibited (fail-closed)."
         )
 
     mapping = generate_random_condition_mapping()
@@ -156,8 +155,11 @@ def check_12_profiles_validator() -> None:
         raise RuntimeError(f"12 profiles validator failed with exit code {code} (fail-closed)")
 
 
+PILOT_VALID_COMPLETION_REASONS = frozenset({"PATIENT_GOAL_MET", "MAX_TURNS"})
+
+
 def check_pilot_completed_cleanly(pilot_summary_path: Path) -> None:
-    """驗證 pilot summary 存在且四組 A/B/C/D 完整且無 ERROR。"""
+    """驗證 pilot summary 存在且四組 A/B/C/D 完整且無 ERROR，終止理由必須為 PATIENT_GOAL_MET 或 MAX_TURNS。"""
     p = Path(pilot_summary_path).resolve()
     if not p.exists():
         raise FileNotFoundError(
@@ -174,9 +176,15 @@ def check_pilot_completed_cleanly(pilot_summary_path: Path) -> None:
         cond = r.get("condition")
         reason = r.get("termination_reason")
         err = r.get("error")
-        if reason == "ERROR" or err is not None:
+
+        if err is not None:
             raise RuntimeError(
-                f"Pilot run for condition {cond} failed with ERROR: {reason} / {err}. Formal batch cannot proceed."
+                f"Pilot run for condition {cond} failed with non-null error metadata: {err!r}. Formal batch cannot proceed."
+            )
+        if reason not in PILOT_VALID_COMPLETION_REASONS:
+            raise RuntimeError(
+                f"Pilot run for condition {cond} terminated with invalid reason: {reason!r}. "
+                f"Must be one of {sorted(PILOT_VALID_COMPLETION_REASONS)} (COMMON_INPUT_BLOCK, ERROR, None, or unknown are rejected) (fail-closed)."
             )
         completed_conds.add(cond)
     required = {"A", "B", "C", "D"}
@@ -425,7 +433,12 @@ def run_blind_export(
     output_dir: Path | str = DEFAULT_BLINDED_ROOT,
     require_completed: bool = True,
 ) -> dict[str, Any]:
-    """使用私有 mapping 生成 WS5 盲評用的 blinded transcripts。"""
+    """使用私有 mapping 生成 WS5 盲評用的 blinded transcripts。永遠 require_completed=True，拒絕未完成軌跡。"""
+    if not require_completed:
+        raise ValueError(
+            "Formal blind-export strictly requires completed trajectories; "
+            "incomplete export is prohibited (fail-closed)."
+        )
     raw_path = Path(raw_dir).resolve()
     map_path = Path(mapping_file).resolve()
     out_path = Path(output_dir).resolve()
@@ -472,7 +485,7 @@ def run_blind_export(
             run_id=run_id,
             state_dir=state_dir,
             condition_mapping=mapping,
-            require_completed=require_completed,
+            require_completed=True,
         )
 
         payload_str = json.dumps(blinded_obj, ensure_ascii=False)
@@ -512,7 +525,6 @@ def build_parser() -> argparse.ArgumentParser:
     # 1. generate-mapping
     p_map = subparsers.add_parser("generate-mapping", help="Generate cryptographically random condition mapping")
     p_map.add_argument("--output-file", type=Path, default=DEFAULT_MAPPING_FILE, help="Target file for secret mapping")
-    p_map.add_argument("--overwrite", action="store_true", help="Allow overwrite existing mapping")
 
     # 2. pilot
     p_pilot = subparsers.add_parser("pilot", help="Run 1 patient (SP-001) x 4 conditions pilot")
@@ -542,7 +554,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--raw-dir", type=Path, required=True, help="Root directory containing raw trajectories")
     p_export.add_argument("--mapping-file", type=Path, required=True, help="Path to secret condition mapping JSON")
     p_export.add_argument("--output-dir", type=Path, default=DEFAULT_BLINDED_ROOT, help="Target directory for blinded JSONs")
-    p_export.add_argument("--allow-incomplete", action="store_true", help="Allow incomplete trajectories")
 
     return parser
 
@@ -554,7 +565,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.subcommand == "generate-mapping":
         mapping = generate_frozen_mapping(
             output_file=args.output_file,
-            overwrite=args.overwrite,
         )
         print(f"PASS: Secret mapping generated and saved to {args.output_file} (A-D opaque keys ready).")
         return 0
@@ -583,7 +593,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             raw_dir=args.raw_dir,
             mapping_file=args.mapping_file,
             output_dir=args.output_dir,
-            require_completed=not args.allow_incomplete,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
