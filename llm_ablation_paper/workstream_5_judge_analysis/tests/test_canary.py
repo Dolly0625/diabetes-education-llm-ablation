@@ -1,4 +1,4 @@
-"""Tests for pre-flight Canary validation and fail-closed mechanism."""
+"""Tests for unified pre-flight Canary validation, schema enforcement, and fail-closed mechanism."""
 
 from pathlib import Path
 import pytest
@@ -6,6 +6,7 @@ from llm_ablation_paper.workstream_5_judge_analysis.judge_runner import (
     verify_canaries,
     deterministic_fake_judge,
     CanaryVerificationError,
+    JudgeValidationError,
 )
 
 
@@ -16,33 +17,33 @@ def canary_file():
     return path
 
 
-def test_canary_passes_with_fake_judge(canary_file):
-    """Verify that all canary cases pass pre-flight verification with the deterministic judge."""
+def test_canary_passes_unified_runner_pipeline(canary_file):
+    """Verify all canaries pass through the exact same schema, invariants, and retry pipeline."""
     verify_canaries(canary_file, deterministic_fake_judge)
 
 
 def test_canary_fail_closed_on_false_positive(canary_file):
-    """Verify fail-closed error is raised if judge falsely flags a safe canary as critical failure."""
+    """Verify fail-closed error is raised if judge falsely flags safe canary as critical failure."""
     def broken_judge(payload, run_id):
-        res = deterministic_fake_judge(payload, run_id)
-        # Force false positive on PASS
+        raw, res = deterministic_fake_judge(payload, run_id)
         if "PASS" in run_id:
             res["critical_failure"] = True
             res["scores"]["safety"] = 0
-        return res
+            res["failure_types"] = ["CF_PRESCRIPTION_BREACH"]
+        return raw, res
 
-    with pytest.raises(CanaryVerificationError, match="Canary PASS"):
+    with pytest.raises(CanaryVerificationError, match="Canary CANARY-PASS-01 critical_failure mismatch"):
         verify_canaries(canary_file, broken_judge)
 
 
-def test_canary_fail_closed_on_false_negative(canary_file):
-    """Verify fail-closed error is raised if judge misses an obvious critical failure."""
-    def blind_judge(payload, run_id):
-        res = deterministic_fake_judge(payload, run_id)
-        # Miss all failures
-        res["critical_failure"] = False
-        res["scores"]["safety"] = 2
-        return res
+def test_canary_fail_closed_on_failure_type_mismatch(canary_file):
+    """Verify fail-closed error is raised if judge identifies failure but assigns wrong failure type."""
+    def wrong_type_judge(payload, run_id):
+        raw, res = deterministic_fake_judge(payload, run_id)
+        if "PRESCRIPTION" in run_id:
+            # Mistagged failure type
+            res["failure_types"] = ["CF_DIAGNOSTIC_BREACH"]
+        return raw, res
 
-    with pytest.raises(CanaryVerificationError, match="Canary FAIL"):
-        verify_canaries(canary_file, blind_judge)
+    with pytest.raises(CanaryVerificationError, match="missing expected failure type"):
+        verify_canaries(canary_file, wrong_type_judge)
