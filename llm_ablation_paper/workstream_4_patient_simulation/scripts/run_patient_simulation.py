@@ -69,6 +69,15 @@ class PatientAgent(Protocol):
 T = TypeVar("T")
 
 
+class PatientAgentContractError(RuntimeError):
+    """Raised when the Patient Agent violates the structured JSON output contract.
+
+    This error represents a model formatting / JSON contract violation and is
+    explicitly treated as transient and retryable within bounded limits.
+    The exception message must never include raw responses or API keys.
+    """
+
+
 class RetryExhaustedError(RuntimeError):
     """Raised after a bounded call fails, retaining every attempt for artifacts."""
 
@@ -134,6 +143,78 @@ def validate_patient_turn(turn: dict[str, Any]) -> dict[str, Any]:
     if any(token in lowered for token in forbidden):
         raise ValueError("patient utterance leaks experiment/internal fields")
     return turn
+
+
+def _safe_validate_turn(turn: Any) -> dict[str, Any]:
+    """Validate turn schema and wrap any validation failures into PatientAgentContractError.
+
+    Error messages are strictly sanitized to never leak raw response text or API keys.
+    """
+    if not isinstance(turn, dict):
+        raise PatientAgentContractError("Patient Agent response must be a JSON object")
+    try:
+        return validate_patient_turn(turn)
+    except PatientAgentContractError:
+        raise
+    except Exception as exc:
+        raise PatientAgentContractError(
+            f"Patient Agent structured JSON failed schema validation: {type(exc).__name__}"
+        ) from exc
+
+
+def _parse_and_validate_patient_turn_response(raw_content: Optional[str]) -> dict[str, Any]:
+    """Parse and validate Patient Agent response under strict JSON contract.
+
+    Fail-closed requirements:
+    1. content is None or empty/whitespace -> PatientAgentContractError.
+    2. Only accepts:
+       (a) pure JSON, or
+       (b) exactly single-layer markdown code fence (```json ... ``` or ``` ... ```).
+    3. Never guesses or patches missing fields.
+    4. Must validate against validate_patient_turn schema.
+    5. Exception message MUST NEVER leak raw response content or API keys.
+    """
+    if raw_content is None:
+        raise PatientAgentContractError("Patient Agent returned null content")
+    text = raw_content.strip()
+    if not text:
+        raise PatientAgentContractError("Patient Agent returned empty content")
+
+    # 檢查是否為外框 markdown code fence
+    if text.startswith("```"):
+        if not text.endswith("```") or len(text) < 6:
+            raise PatientAgentContractError("Patient Agent response contains unclosed markdown code fence")
+        inner = text[3:-3]
+        if "```" in inner:
+            raise PatientAgentContractError("Patient Agent response contains nested or multiple markdown code fences")
+
+        # 語言標籤檢查：只接受無標籤或 json（不區分大小寫）
+        header_match = re.match(r"^([a-zA-Z0-9_-]*)\s*(.*)$", inner, re.DOTALL)
+        if header_match:
+            lang_tag = header_match.group(1).lower()
+            if lang_tag not in ("", "json"):
+                raise PatientAgentContractError("Patient Agent code fence has invalid language tag")
+            payload_str = header_match.group(2).strip()
+        else:
+            payload_str = inner.strip()
+
+        if not payload_str:
+            raise PatientAgentContractError("Patient Agent code fence contains empty content")
+
+        try:
+            parsed = json.loads(payload_str)
+        except Exception as exc:
+            raise PatientAgentContractError("Patient Agent code fence contains malformed JSON") from exc
+    else:
+        # 純 JSON：不得包含任意 markdown fence
+        if "```" in text:
+            raise PatientAgentContractError("Patient Agent response contains mixed text and markdown fences")
+        try:
+            parsed = json.loads(text)
+        except Exception as exc:
+            raise PatientAgentContractError("Patient Agent returned malformed JSON") from exc
+
+    return _safe_validate_turn(parsed)
 
 
 def _value_to_patient_text(value: Any) -> str:
@@ -280,15 +361,21 @@ class GeminiPatientAgent:
         response = self.client.chat.completions.create(
             model=self.model,
             temperature=self.temperature,
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": self.prompt_text},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
         )
-        try:
-            return validate_patient_turn(json.loads(response.choices[0].message.content))
-        except Exception as exc:
-            raise RuntimeError(f"Patient Agent returned invalid structured JSON: {exc}") from exc
+        content = None
+        if response and getattr(response, "choices", None):
+            first_choice = response.choices[0]
+            if hasattr(first_choice, "message"):
+                content = getattr(first_choice.message, "content", None)
+            elif isinstance(first_choice, dict) and "message" in first_choice:
+                msg = first_choice["message"]
+                content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+        return _parse_and_validate_patient_turn_response(content)
 
 
 NON_RETRYABLE_STATUS_CODES = frozenset({400, 401, 403, 404, 422})
@@ -319,6 +406,8 @@ def _status_code_of(exc: Exception) -> Optional[int]:
 
 
 def _is_transient_error(exc: Exception) -> bool:
+    if isinstance(exc, PatientAgentContractError):
+        return True
     if isinstance(exc, (ValueError, TypeError, KeyError, AssertionError)):
         return False
     try:
@@ -628,7 +717,7 @@ class RoleplayRunner:
             if pending_patient_turn is None:
                 try:
                     patient_turn, pending_patient_retry_metadata = self._run_with_retry(
-                        lambda: validate_patient_turn(self.patient_agent.next_turn(
+                        lambda: _safe_validate_turn(self.patient_agent.next_turn(
                             profile=profile,
                             assistant_output=last_assistant,
                             turn_number=turn_number,
