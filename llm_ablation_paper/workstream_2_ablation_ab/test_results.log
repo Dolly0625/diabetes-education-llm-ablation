@@ -5,15 +5,16 @@ platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Library/Develope
 cachedir: .pytest_cache
 rootdir: /Users/dolly/team/ws2/diabetes-education-llm-ablation
 plugins: anyio-4.12.1, langsmith-0.4.37
-collecting ... collected 8 items
+collecting ... collected 9 items
 
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_config_diff_exact_single_variable PASSED [ 12%]
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_production_assists_and_guards_fixed_off PASSED [ 25%]
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_canonical_tools_identical_and_fully_exposed PASSED [ 37%]
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_a_planner_call_count_zero_and_neutral_state PASSED [ 50%]
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_b_executes_planner_and_injects_guidance PASSED [ 62%]
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_b_retrieval_domain_does_not_leak_forced_evidence PASSED [ 75%]
-llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_a_persists_facts_but_not_planner_assessment PASSED [ 87%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_config_diff_exact_single_variable PASSED [ 11%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_formal_ablation_config_frozen_invariants PASSED [ 22%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_production_assists_and_guards_fixed_off PASSED [ 33%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_canonical_tools_identical_and_fully_exposed PASSED [ 44%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_a_planner_call_count_zero_and_neutral_state PASSED [ 55%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_b_executes_planner_and_injects_guidance PASSED [ 66%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_b_retrieval_domain_does_not_leak_forced_evidence PASSED [ 77%]
+llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_condition_a_persists_facts_but_not_planner_assessment PASSED [ 88%]
 llm_ablation_paper/workstream_2_ablation_ab/tests/test_ab_configuration.py::test_ab_offline_fake_trajectory_contract_compliance PASSED [100%]
 
-============================== 8 passed in 1.00s ===============================
+============================== 9 passed in 1.00s ===============================

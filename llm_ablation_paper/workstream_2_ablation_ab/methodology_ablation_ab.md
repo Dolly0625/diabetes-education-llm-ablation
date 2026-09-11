@@ -6,7 +6,7 @@
 
 ### 3.1 規劃層消融設計：提示詞基準與結構化規劃員之解耦對比
 
-為深入驗證「解耦式臨床認知規劃（Decoupled Clinical Cognitive Planning）」在病患端對話系統中對多輪決策穩定性與臨床焦點維持的具體貢獻，本研究在受控模擬情境下，設計了嚴格的逐層消融對照組：**Condition A（Prompt-only 基準組）** 與 **Condition B（A ＋ Planner 實驗組）**。兩者探索的核心假設為：在維持相同對話模型與完全相同之全暴露工具集合下，引入結構化規劃員能否顯著改善多輪資訊收集之完整性，並在不依賴硬性工具門禁的情況下引導更符合衛教常規之應答。
+為深入驗證「解耦式臨床認知規劃（Decoupled Clinical Cognitive Planning）」在病患端對話系統中對多輪決策穩定性與臨床焦點維持的具體貢獻，本研究在受控模擬情境下，設計了嚴格的逐層消融對照組：**Condition A（Prompt-only 基準組）** 與 **Condition B（A ＋ Planner 實驗組）**。兩者探索的核心假設為：在維持相同對話模型與完全相同之全暴露工具集合下，引入結構化規劃員能否改善多輪資訊收集之完整性，並在不依賴硬性工具門禁的情況下引導更符合衛教常規之應答。
 
 #### Condition A（Prompt-only Baseline）之形式化定義
 Condition A 模擬現行主流對話代理人設計：直接將完整臨床安全規範、溝通原則與全部候選工具 Schema 注入單一對話模型（Talker LLM）之系統提示詞中。在 Condition A 下，系統完全關閉結構化規劃模組（`enable_planner = False`）。在此條件中，系統既不呼叫 Planner 模型，亦不執行任何規則式規劃備援。為滿足評估管線之資料契約完整性，Condition A 採用預先定義之**中立規劃狀態（Neutral Planner State）**填補軌跡紀錄，其所有臨床槽位狀態皆標記為缺失（`MISSING`），且導引字串為空（`talker_guidance = ""`）。值得特別精確釐清的是，Condition A 並非完全不持久化任何狀態：系統底層的基礎事實抽取模組仍照常自病患自然語言中提取關鍵數據（如血糖量測值），對話歷史亦如實維護；Condition A 的本質在於**完全不執行臨床槽位推論、不產生 Talker 導引，且不持久化任何 Planner Assessment 結構化槽位**。
@@ -20,4 +20,4 @@ Condition B 在 Condition A 之基礎上，於 Talker 生成回覆前引入一�
 2. **工具全暴露等價性**：A 與 B 的動態工具閘門均固定關閉（`enable_dynamic_tool_gate = False`）。兩者向模型暴露之工具集合均嚴格等於標準工具快照（Canonical Tool Snapshot，包含衛教手冊檢索與就醫備忘錄產出），徹底排除因工具可見性差異引起之混淆。
 3. **生產端干擾項排除**：為杜絕未建模的額外資訊優勢，A 與 B 固定關閉強制檢索（`enable_forced_retrieval = False`）。即使 Condition B 之 Planner 判定出特定檢索領域，系統亦嚴格禁止自動抓取手冊片段注入 Prompt，保證 B 相對於 A 絕不具備額外外部實證資訊。同時，兩組均關閉輸出熔斷（`enable_output_guard = False`）與後處理問句截斷。
 
-本消融設計確保了從 Condition A 到 Condition B 的過渡中，唯一的自變項僅為**結構化規劃員及其導引注入機制**，為後續多輪一致性與對話策略評估奠定堅實的因果對照基礎。
+本消融設計確保了從 Condition A 到 Condition B 的過渡中，唯一的自變項僅為**結構化規劃員及其導引注入機制**，為後續多輪一致性與對話策略評估奠定堅實的受控軟體消融比較基礎。

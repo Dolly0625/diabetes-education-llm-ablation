@@ -36,6 +36,7 @@ from llm_ablation_paper.workstream_1_technical_lead.harness.config import (
     CONFIG_A,
     CONFIG_B,
     config_diff,
+    formal_ablation_config,
 )
 from llm_ablation_paper.workstream_1_technical_lead.harness.isolation import (
     clear_session_cache,
@@ -120,6 +121,52 @@ def test_ab_config_diff_exact_single_variable():
     assert cfg_a.model == cfg_b.model
     assert cfg_a.temperature == cfg_b.temperature
     assert cfg_a.max_turns == cfg_b.max_turns
+
+
+def test_formal_ablation_config_frozen_invariants():
+    """驗證正式凍結組態 formal_ablation_config('A') 與 formal_ablation_config('B')：
+    1. 除 condition 標籤外，唯一實驗開關差異只有 enable_planner。
+    2. Talker 模型（gemini-3.5-flash-lite）、溫度（0.3）。
+    3. Planner 模型（兩者均為凍結值 gemini-3.5-flash-lite）、溫度（0.1）、timeout（30.0 秒）。
+    4. Patient Agent 模型（gemini-2.5-flash-lite）、溫度（0.3）。
+    5. max_turns（6）、seed（42）與其他輔助開關均嚴格相同且固定為 OFF。
+    """
+    formal_a = formal_ablation_config("A")
+    formal_b = formal_ablation_config("B")
+
+    # 1. 組態差異嚴格僅有 condition 與 enable_planner
+    diff = config_diff(formal_a, formal_b)
+    assert "enable_planner" in diff
+    assert diff["enable_planner"] == {"from": False, "to": True}
+    non_label_diffs = {k: v for k, v in diff.items() if k not in ("condition", "enable_planner")}
+    assert non_label_diffs == {}, f"Unexpected diffs in formal config: {non_label_diffs}"
+
+    # 2. Talker 模型與溫度完全相同
+    assert formal_a.model == formal_b.model == "gemini-3.5-flash-lite"
+    assert formal_a.temperature == formal_b.temperature == 0.3
+
+    # 3. Planner 模型（兩者均為凍結值）、溫度與 timeout 完全相同
+    assert formal_a.planner_model == formal_b.planner_model == "gemini-3.5-flash-lite"
+    assert formal_a.planner_temperature == formal_b.planner_temperature == 0.1
+    assert formal_a.planner_request_timeout_seconds == formal_b.planner_request_timeout_seconds == 30.0
+
+    # 4. Patient Agent 模型與溫度
+    assert formal_a.patient_agent_model == formal_b.patient_agent_model == "gemini-2.5-flash-lite"
+    assert formal_a.patient_agent_temperature == formal_b.patient_agent_temperature == 0.3
+
+    # 5. 輪數、種子與輔助開關固定 OFF
+    assert formal_a.max_turns == formal_b.max_turns == 6
+    assert formal_a.seed == formal_b.seed == 42
+    assert formal_a.enable_dynamic_tool_gate is False
+    assert formal_b.enable_dynamic_tool_gate is False
+    assert formal_a.enable_output_guard is False
+    assert formal_b.enable_output_guard is False
+    assert formal_a.enable_forced_retrieval is False
+    assert formal_b.enable_forced_retrieval is False
+    assert formal_a.enable_fixed_warning_append is False
+    assert formal_b.enable_fixed_warning_append is False
+    assert formal_a.enable_question_budget_postprocessing is False
+    assert formal_b.enable_question_budget_postprocessing is False
 
 
 def test_ab_production_assists_and_guards_fixed_off():

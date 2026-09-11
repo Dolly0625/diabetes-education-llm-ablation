@@ -36,7 +36,7 @@
 2. **`workstream_1_technical_lead.harness.runner`**：
    - `get_canonical_tool_snapshot()`：取得凍結之 2 個 Canonical 工具 Schema。
    - `neutral_planner_state()`：取得 Condition A 之標準中立規劃狀態。
-   - `to_contract_trajectory(run_id, condition, patient_id, turns, ...)`：將執行紀錄轉換為符合 `shared/EXPERIMENT_CONTRACT.md` 之軌跡結構。
+   - `to_contract_trajectory(run_id, state_dir, condition_mapping=None, allow_incomplete=True)`：讀取 `state_dir` 中的 `trajectories.jsonl` 與 `config.json`，轉換為符合 `shared/EXPERIMENT_CONTRACT.md` 之軌跡結構。
 3. **`workstream_1_technical_lead.harness.isolation`**：
    - `clear_session_cache()`：重設記憶體中之對話快取。
    - `get_patient_file_for_state(state_dir, user_id)`：取得指定隔離目錄之病患 JSON 檔案路徑。

@@ -9,7 +9,7 @@
 依據 `shared/RESEARCH_PROTOCOL.md` 與 `workstream_1_technical_lead/harness/config.py`，本研究探討的主要問題為：
 > **在病患端糖尿病衛教 LLM 助理中，加入結構化規劃員（Planner）是否改善多輪對話決策與臨床狀態一致性？**
 
-為確保因果推論之內部效度，A 與 B 之間嚴格維持**逐層唯一差異原則（Unique-diff principle）**：
+為確保受控軟體消融比較之內部效度設計，A 與 B 之間嚴格維持**逐層唯一差異原則（Unique-diff principle）**：
 
 | 組態欄位 | Condition A（基準組） | Condition B（實驗組） | 狀態說明 |
 |---|---|---|---|
@@ -22,8 +22,9 @@
 | `enable_question_budget_postprocessing` | `False` | `False` | 固定關閉，停用問句預算截斷與符號清洗 |
 | `model` (Talker) | `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | 受控固定（正式實驗凍結） |
 | `temperature` (Talker) | `0.3` | `0.3` | 受控固定 |
-| `planner_model` | `""`（不使用） | `gemini-3.5-flash-lite` | 受控固定（B 啟用） |
-| `planner_temperature` | `0.1`（不使用） | `0.1` | 受控固定 |
+| `planner_model` | `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | 受控固定（A 凍結相同模型值但因 enable_planner=False 不調用） |
+| `planner_temperature` | `0.1` | `0.1` | 受控固定（A 凍結相同數值但因 enable_planner=False 不調用） |
+| `planner_request_timeout_seconds` | `30.0` | `30.0` | 受控固定 |
 | `max_turns` | `6` | `6` | 受控固定 |
 | `seed` | `42` | `42` | 受控固定 |
 
