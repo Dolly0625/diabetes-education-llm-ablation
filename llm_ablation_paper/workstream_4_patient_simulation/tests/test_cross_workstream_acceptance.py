@@ -23,8 +23,8 @@ import copy
 import json
 import sys
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch
+import uuid
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -42,7 +42,11 @@ from llm_ablation_paper.workstream_1_technical_lead.harness.runner import (
 )
 from llm_ablation_paper.workstream_1_technical_lead.scripts.run_formal_experiment import (
     CONFIRM_FORMAL_12X4_RUN_STRING,
+    PILOT_VALID_COMPLETION_REASONS,
+    build_parser,
+    check_pilot_completed_cleanly,
     generate_frozen_mapping,
+    main as formal_experiment_main,
     run_batch,
     run_blind_export,
     scan_blinded_payload_for_leakage,
@@ -55,8 +59,14 @@ from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simu
     load_profiles,
     run_input_block_canary,
 )
-from llm_ablation_paper.workstream_5_judge_analysis.run_analysis import run_analysis_cli
-from llm_ablation_paper.workstream_5_judge_analysis.run_judge import run_judge_cli
+from llm_ablation_paper.workstream_5_judge_analysis.run_analysis import (
+    load_and_invert_condition_mapping,
+    run_analysis_cli,
+)
+from llm_ablation_paper.workstream_5_judge_analysis.run_judge import (
+    FORMAL_CONFIRM_TOKEN,
+    run_judge_cli,
+)
 
 
 # ==============================================================================
@@ -896,3 +906,393 @@ def test_stage2_judge_and_analysis_rejects_leaks_and_violations(tmp_path: Path):
     ])
     assert code != 0
     (judge_in / "leak.json").unlink()
+
+
+# ==============================================================================
+# Part 4: PHASE M2.2 Adversarial Cross-Workstream Acceptance Tests
+# ==============================================================================
+
+def test_adversarial_deblinding_direction_and_table_restoration(tmp_path: Path):
+    """M2.2-1: Verify that deblinding inversion correctly maps opaque condition secrets back to A-D.
+
+    Pipeline:
+    1. WS1 generate_frozen_mapping creates secret mapping {"A": "COND-...", ...}.
+    2. run_batch generates 48 raw trajectories (12 patients x 4 conditions).
+    3. run_blind_export uses the mapping to produce 48 blinded transcripts.
+    4. run_judge evaluates the 48 blinded transcripts.
+    5. WS5 run_analysis receives the EXACT SAME mapping file, validates canonical format,
+       inverts it (COND-... -> A-D), and produces unblinded summary and tables.
+    6. Assertions:
+       - summary.json summary_by_group keys are exactly {"A", "B", "C", "D"}.
+       - Each group has sample_size == 12.
+       - main_table.md and results.csv restore rows for A, B, C, D.
+       - Proves real->opaque export + opaque->A-D inversion are 100% aligned.
+    """
+    root = tmp_path / "deblind_adversarial_test"
+    root.mkdir(parents=True, exist_ok=True)
+
+    pilot_dir = root / "pilot"
+    pilot_dir.mkdir(parents=True, exist_ok=True)
+    pilot_summary_file = pilot_dir / "formal_pilot_summary.json"
+    pilot_runs = [{
+        "run_id": f"WS4-PILOT-SP-001-{c}",
+        "condition": c,
+        "user_id": "ws4_sp-001_a_pilot",
+        "turn_count": 6,
+        "termination_reason": "MAX_TURNS",
+        "error": None,
+    } for c in ("A", "B", "C", "D")]
+    pilot_summary_file.write_text(
+        json.dumps({"execution_mode": "formal_pilot", "runs": pilot_runs}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    raw_dir = root / "raw_transcripts"
+    blinded_dir = root / "blinded_transcripts"
+    judge_raw_dir = root / "judge_raw"
+    judge_results_file = judge_raw_dir / "judge_results.jsonl"
+    judge_ckpt_dir = judge_raw_dir / "checkpoints"
+    derived_dir = root / "derived_results"
+    figures_dir = root / "figures"
+    map_file = root / "frozen_condition_mapping.json"
+
+    # 1. WS1 generate_frozen_mapping
+    canonical_mapping = generate_frozen_mapping(output_file=map_file)
+    assert set(canonical_mapping.keys()) == {"A", "B", "C", "D"}
+
+    # 2. Fake run_batch
+    def _fake_run_condition(self, profile, condition, resume=False, fake_talker_responses=None, run_suffix="BATCH"):
+        pid = profile["patient_id"] if isinstance(profile, dict) else profile.patient_id
+        run_id = f"WS4-{run_suffix}-{pid}-{condition}"
+        run_dir = self.output_root / run_id
+        state_dir = run_dir / "isolated_state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        config_data = {
+            "run_id": run_id,
+            "condition": condition,
+            "patient_id": pid,
+            "max_turns": 6,
+            "seed": FORMAL_SEED,
+            "model": "fake-model",
+            "temperature": 0.0,
+        }
+        (state_dir / "config.json").write_text(json.dumps(config_data, ensure_ascii=False), encoding="utf-8")
+
+        turns = []
+        for i in range(6):
+            t = {
+                "turn_index": i,
+                "research_patient_id": pid,
+                "user_message": f"病患第 {i+1} 輪提問",
+                "assistant_response": f"衛教師第 {i+1} 輪針對條件 {condition} 之回應",
+                "called_tools": [],
+                "exposed_tools": [],
+            }
+            if i == 5:
+                t["termination_reason"] = "MAX_TURNS"
+            turns.append(t)
+        (state_dir / "trajectories.jsonl").write_text(
+            "\n".join(json.dumps(t, ensure_ascii=False) for t in turns) + "\n",
+            encoding="utf-8",
+        )
+
+        roleplay_data = {
+            "run_id": run_id,
+            "condition": condition,
+            "patient_id": pid,
+            "termination_reason": "MAX_TURNS",
+            "error_metadata": None,
+            "records": [{"turn": i + 1} for i in range(6)],
+        }
+        (run_dir / "roleplay_result.json").write_text(
+            json.dumps(roleplay_data, ensure_ascii=False), encoding="utf-8"
+        )
+
+        return {
+            "run_id": run_id,
+            "patient_id": pid,
+            "condition": condition,
+            "user_id": f"ws4_{pid.lower()}_{condition.lower()}_{run_suffix.lower()}",
+            "state_dir_id": "isolated_state",
+            "records": [{"turn": i + 1} for i in range(6)],
+            "termination_reason": "MAX_TURNS",
+            "error_metadata": None,
+        }
+
+    with patch.object(RoleplayRunner, "run_condition", _fake_run_condition):
+        run_batch(
+            confirm_token=CONFIRM_FORMAL_12X4_RUN_STRING,
+            output_root=raw_dir,
+            pilot_summary_path=pilot_summary_file,
+            skip_git_check=True,
+            runner_kwargs={"patient_agent": None},
+        )
+
+    # 3. WS1 blind-export
+    run_blind_export(
+        raw_dir=raw_dir,
+        mapping_file=map_file,
+        output_dir=blinded_dir,
+        require_completed=True,
+    )
+
+    # 4. WS5 run_judge (fake mode)
+    judge_code = run_judge_cli([
+        "--mode", "fake",
+        "--input-path", str(blinded_dir),
+        "--output-file", str(judge_results_file),
+        "--checkpoint-dir", str(judge_ckpt_dir),
+    ])
+    assert judge_code == 0
+
+    # 5. WS5 run_analysis WITH deblinding mapping
+    analysis_code = run_analysis_cli([
+        "--trajectories-path", str(blinded_dir),
+        "--judge-results-path", str(judge_results_file),
+        "--output-dir", str(derived_dir),
+        "--figures-dir", str(figures_dir),
+        "--mapping-file", str(map_file),
+        "--allow-incomplete",
+    ])
+    assert analysis_code == 0
+
+    # 6. Verify Deblinded Output Restores Canonical Conditions A-D
+    summary_file = derived_dir / "summary.json"
+    summary_data = json.loads(summary_file.read_text(encoding="utf-8"))
+    summary_by_group = summary_data.get("summary_by_group", {})
+
+    # Groups MUST be unblinded to A, B, C, D
+    assert set(summary_by_group.keys()) == {"A", "B", "C", "D"}
+    for cond in ("A", "B", "C", "D"):
+        assert summary_by_group[cond]["sample_size"] == 12
+
+    # Inversion verification
+    inverted = load_and_invert_condition_mapping(map_file)
+    for cond, secret in canonical_mapping.items():
+        assert inverted[secret] == cond
+
+    # CSV and Markdown tables must feature A, B, C, D
+    csv_text = (derived_dir / "results.csv").read_text(encoding="utf-8")
+    for cond in ("A", "B", "C", "D"):
+        assert f"\n{cond}," in csv_text or csv_text.startswith(f"{cond},")
+
+    md_text = (derived_dir / "main_table.md").read_text(encoding="utf-8")
+    for cond in ("A", "B", "C", "D"):
+        assert f"| {cond} |" in md_text
+
+
+def test_adversarial_mapping_no_overwrite_and_byte_integrity(tmp_path: Path):
+    """M2.2-2: Verify mapping cannot be overwritten and preserves byte-for-byte integrity on collision."""
+    map_file = tmp_path / "protected_mapping.json"
+
+    # First generation succeeds
+    m1 = generate_frozen_mapping(output_file=map_file)
+    assert set(m1.keys()) == {"A", "B", "C", "D"}
+    original_bytes = map_file.read_bytes()
+    assert len(original_bytes) > 0
+
+    # Second generation attempt via function MUST raise FileExistsError (Fail-Closed)
+    with pytest.raises(FileExistsError, match="overwrite is strictly prohibited"):
+        generate_frozen_mapping(output_file=map_file)
+
+    # Verify byte-for-byte integrity
+    assert map_file.read_bytes() == original_bytes
+
+    # Third generation attempt via CLI MUST also fail and preserve bytes
+    with pytest.raises(FileExistsError, match="overwrite is strictly prohibited"):
+        formal_experiment_main(["generate-mapping", "--output-file", str(map_file)])
+
+    assert map_file.read_bytes() == original_bytes
+
+    # Verify CLI parser does NOT expose --overwrite option
+    parser = build_parser()
+    subparsers_actions = [
+        action for action in parser._actions
+        if isinstance(action, type(parser._subparsers._actions[0]))
+    ]
+    gen_parser = parser._subparsers._actions[1].choices["generate-mapping"]
+    gen_options = {opt for action in gen_parser._actions for opt in action.option_strings}
+    assert "--overwrite" not in gen_options
+
+
+def test_adversarial_blind_export_rejects_incomplete_and_no_cli_flag(tmp_path: Path):
+    """M2.2-3: Verify blind-export fails closed on incomplete trajectories and lacks --allow-incomplete flag."""
+    inc_raw_dir = tmp_path / "incomplete_raw"
+    run_dir = inc_raw_dir / "WS4-BATCH-INC-001-A"
+    state_dir = run_dir / "isolated_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    (state_dir / "config.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-INC-001-A", "condition": "A", "patient_id": "SP-001", "max_turns": 6}),
+        encoding="utf-8",
+    )
+    # Only 2 turns out of 6, termination_reason is None
+    lines = [
+        json.dumps({"turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-001"}),
+        json.dumps({"turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-001", "termination_reason": None}),
+    ]
+    (state_dir / "trajectories.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (run_dir / "roleplay_result.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-INC-001-A", "condition": "A", "patient_id": "SP-001", "termination_reason": None}),
+        encoding="utf-8",
+    )
+
+    map_file = tmp_path / "temp_map.json"
+    generate_frozen_mapping(output_file=map_file)
+    blind_dir = tmp_path / "blinded_out"
+
+    # Incomplete trajectory must raise ValueError
+    with pytest.raises(ValueError, match="is incomplete"):
+        run_blind_export(
+            raw_dir=inc_raw_dir,
+            mapping_file=map_file,
+            output_dir=blind_dir,
+            require_completed=True,
+        )
+
+    # Calling with require_completed=False must also fail closed
+    with pytest.raises(ValueError, match="strictly requires completed trajectories"):
+        run_blind_export(
+            raw_dir=inc_raw_dir,
+            mapping_file=map_file,
+            output_dir=blind_dir,
+            require_completed=False,
+        )
+
+    # Verify CLI parser does NOT expose --allow-incomplete option
+    parser = build_parser()
+    export_parser = parser._subparsers._actions[1].choices["blind-export"]
+    export_options = {opt for action in export_parser._actions for opt in action.option_strings}
+    assert "--allow-incomplete" not in export_options
+
+
+def test_adversarial_pilot_termination_reasons_strictness(tmp_path: Path):
+    """M2.2-4: Verify check_pilot_completed_cleanly strictly enforces {PATIENT_GOAL_MET, MAX_TURNS} and error=None."""
+    def _create_summary(runs_data: list[dict[str, Any]]) -> Path:
+        p = tmp_path / f"pilot_{uuid.uuid4().hex[:6]}" / "formal_pilot_summary.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"execution_mode": "formal_pilot", "runs": runs_data}), encoding="utf-8")
+        return p
+
+    base_runs = [
+        {"condition": "A", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "B", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "D", "termination_reason": "MAX_TURNS", "error": None},
+    ]
+
+    # Valid Case 1: All MAX_TURNS
+    p_valid1 = _create_summary(base_runs)
+    check_pilot_completed_cleanly(p_valid1)
+
+    # Valid Case 2: All PATIENT_GOAL_MET
+    p_valid2 = _create_summary([
+        {**r, "termination_reason": "PATIENT_GOAL_MET"} for r in base_runs
+    ])
+    check_pilot_completed_cleanly(p_valid2)
+
+    # Valid Case 3: Mixed MAX_TURNS and PATIENT_GOAL_MET
+    mixed_runs = [
+        {"condition": "A", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "B", "termination_reason": "PATIENT_GOAL_MET", "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "D", "termination_reason": "PATIENT_GOAL_MET", "error": None},
+    ]
+    p_valid3 = _create_summary(mixed_runs)
+    check_pilot_completed_cleanly(p_valid3)
+
+    # Fail Case 1: COMMON_INPUT_BLOCK (Canary must not be accepted in pilot)
+    p_canary = _create_summary([
+        {"condition": "A", "termination_reason": "COMMON_INPUT_BLOCK", "error": None},
+        {"condition": "B", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "D", "termination_reason": "MAX_TURNS", "error": None},
+    ])
+    with pytest.raises(RuntimeError, match="invalid reason: 'COMMON_INPUT_BLOCK'"):
+        check_pilot_completed_cleanly(p_canary)
+
+    # Fail Case 2: ERROR termination reason
+    p_error_reason = _create_summary([
+        {"condition": "A", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "B", "termination_reason": "ERROR", "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "D", "termination_reason": "MAX_TURNS", "error": None},
+    ])
+    with pytest.raises(RuntimeError, match="invalid reason: 'ERROR'"):
+        check_pilot_completed_cleanly(p_error_reason)
+
+    # Fail Case 3: None termination reason
+    p_none_reason = _create_summary([
+        {"condition": "A", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "B", "termination_reason": None, "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "D", "termination_reason": "MAX_TURNS", "error": None},
+    ])
+    with pytest.raises(RuntimeError, match="invalid reason: None"):
+        check_pilot_completed_cleanly(p_none_reason)
+
+    # Fail Case 4: Non-null error metadata (even if reason is MAX_TURNS)
+    p_err_metadata = _create_summary([
+        {"condition": "A", "termination_reason": "MAX_TURNS", "error": "Transient TimeoutError"},
+        {"condition": "B", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "D", "termination_reason": "MAX_TURNS", "error": None},
+    ])
+    with pytest.raises(RuntimeError, match="non-null error metadata"):
+        check_pilot_completed_cleanly(p_err_metadata)
+
+    # Fail Case 5: Missing conditions
+    p_missing = _create_summary([
+        {"condition": "A", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "B", "termination_reason": "MAX_TURNS", "error": None},
+        {"condition": "C", "termination_reason": "MAX_TURNS", "error": None},
+    ])
+    with pytest.raises(RuntimeError, match="missing required conditions"):
+        check_pilot_completed_cleanly(p_missing)
+
+
+def test_adversarial_judge_live_missing_key_fails_closed_before_canary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    """M2.2-5: Verify run_judge.py live mode fails closed before canary or network calls when GEMINI_API_KEY is missing."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+
+    spy_canaries = MagicMock()
+    spy_live_adapter = MagicMock()
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_5_judge_analysis.run_judge.verify_canaries",
+        spy_canaries,
+    )
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_5_judge_analysis.run_judge.live_gemini_judge_adapter",
+        spy_live_adapter,
+    )
+
+    dummy_input = tmp_path / "dummy_blinded"
+    dummy_input.mkdir(parents=True, exist_ok=True)
+    (dummy_input / "dummy.json").write_text(json.dumps({
+        "run_id": "BLIND-001", "patient_id": "SP-001", "condition_secret": "COND-1111", "turns": []
+    }))
+
+    code = run_judge_cli([
+        "--mode", "live",
+        "--confirm-formal-judge", FORMAL_CONFIRM_TOKEN,
+        "--input-path", str(dummy_input),
+        "--output-file", str(tmp_path / "judge_results.jsonl"),
+        "--checkpoint-dir", str(tmp_path / "ckpts"),
+    ])
+
+    # 1. Exit code MUST indicate failure
+    assert code == 1
+
+    # 2. Canary verification MUST NOT be invoked
+    assert spy_canaries.call_count == 0
+
+    # 3. Live Gemini API adapter MUST NOT be invoked
+    assert spy_live_adapter.call_count == 0
+
+    # 4. Error message in stderr must explain missing key
+    captured = capsys.readouterr()
+    assert "GEMINI_API_KEY environment variable is not set" in captured.err
