@@ -4,19 +4,19 @@
 
 | 工作流 | 負責人 | 狀態 | 當前交付 | 下一步 | Blocker |
 |---|---|---|---|---|---|
-| 1 技術主持 | 待指派 | REVIEW | Harness、A–D config 與 formal-readiness 已通過；`ws1-freeze-candidate` 已達 `READY_FOR_FINAL_REVIEW`：凍結正式 config（模型／temperature／timeouts／seed）、sync planner persist、單病患 formal pilot 入口，待技術主持人 final review | 完成 final review 並以 Git tag 標記 freeze commit（prompt／tool schema／commit／timeout 指紋已寫入 protocol 與 manifest） | 尚未 final freeze；WS2/WS3/WS5 尚未完成；opaque mapping 未產生（依程序於盲測匯出前私下產生） |
+| 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、formal-readiness、execution envelope 閘門與指紋皆已由技術主持核准，並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze | 等待 WS2／WS3／WS5 完成與 opaque mapping 產生後，由 WS1 執行正式 12×4 批次 | WS2/WS3/WS5 尚未完成；opaque mapping 未產生（依程序於盲測匯出前私下產生） |
 | 2 A／B | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 A/B config 與事件驗收 | 依 `member_prompts/member_2_ablation_ab.md` 開工 | 無 |
 | 3 C／D | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 C/D logging 與 fault injection | 依 `member_prompts/member_3_ablation_cd.md` 開工 | 無 |
-| 4 模擬病患 | 待指派 | APPROVED | WS4-A profiles/schema/驗證已通過；WS4-B runner、checkpoint/resume/retry、逐輪正式路徑 fake dry-run 與 Input Guard canary 已完成並經 WS1 驗收合併（WS4 目錄 139 passed） | 待整體實驗指紋凍結後由 WS1 執行正式 12×4 批次 | P0-1 核心 production 髒檔未審核；正式指紋尚未凍結；WS2/WS3/WS5 尚未完成 |
+| 4 模擬病患 | 待指派 | APPROVED | WS4-A profiles/schema/驗證已通過；WS4-B runner、checkpoint/resume/retry、逐輪正式路徑 fake dry-run 與 Input Guard canary 已完成並經 WS1 驗收合併（WS4 目錄 139 passed） | 等待 WS2／WS3／WS5 與 mapping 完成後，由 WS1 執行正式 12×4 批次 | WS2/WS3/WS5 尚未完成；opaque mapping 尚未產生 |
 | 5 Judge／分析 | 待指派 | NOT_STARTED | Judge rubric、schema、canary、統計程式與結果樣板 | 依 `member_prompts/member_5_judge_analysis.md` 開工 | 正式 transcripts 尚未產生 |
 
-> 本輪 WS1／WS4 技術判定：`APPROVED`（formal-readiness 修復已驗收並合併）。P0-1 freeze candidate：`READY_FOR_FINAL_REVIEW`（凍結正式 config、sync persist、pilot 入口皆已備；尚未 final freeze）。正式 12×4 實驗狀態：`BLOCKED`（1. 尚未 final freeze；2. WS2、WS3、WS5 尚未完成；3. opaque mapping 尚未產生）。
+> 本輪 WS1／WS4 技術判定：`APPROVED`。M1 A–D 規格凍結判定：`APPROVED`（已由技術主持核准並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze）。正式 12×4 實驗狀態：`BLOCKED`（1. WS2、WS3、WS5 尚未完成；2. opaque mapping 尚未產生）。
 
 ## 里程碑
 
 | 里程碑 | 截止 | 狀態 | 驗收人 |
 |---|---|---|---|
-| M1 A–D 規格凍結 | Day 1 中午 | REVIEW | 技術主持人 |
+| M1 A–D 規格凍結 | Day 1 中午 | APPROVED | 技術主持人 |
 | M2 工程管線 dry run | Day 1 晚上 | APPROVED | 技術主持人 |
 | M3 raw transcripts 凍結 | Day 2 晚上 | NOT_STARTED | 技術主持人 |
 | M4 Judge 與統計凍結 | Day 3 中午 | NOT_STARTED | 技術主持人＋分析負責人 |
@@ -36,6 +36,7 @@
 | 2026-09-10 | 合併 `ws1-formal-readiness`（`a7f4b72`）至 `main`；WS1／WS4 formal-readiness 判定 `APPROVED` | 驗收實測 WS1 59 passed／WS4 139 passed／backward 5 passed／validator PASS；canary `COMMON_INPUT_BLOCK`；無越界修改；正式 12×4 維持 `BLOCKED` | 技術主持 |
 | 2026-09-11 | 建立 `backup/original-features-20260911` 完整備份原功能（29 項），並自 `main@435c91f` 建立 `ws1-freeze-candidate`（僅核心實驗功能、排除 Demo／醫護／分享、share-free）；判定 `REVIEW` | 依 P0-1 Stage 2：先保護原功能再建可重現 freeze candidate；正式 12×4 維持 `BLOCKED` | 技術主持 |
 | 2026-09-11 | `ws1-freeze-candidate` 完成 final-freeze 就緒修正：凍結正式 config（模型／temperature／timeouts／seed）、第二次 Talker 改用凍結 temperature、同步 planner persist、單病患 formal pilot 入口；判定 `READY_FOR_FINAL_REVIEW` | 修正三項 runtime mismatch 與 Planner timeout；protocol／manifest 指紋回填；正式 12×4 維持 `BLOCKED` | 技術主持 |
+| 2026-09-11 | 合併 `ws1-freeze-candidate` 並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze；WS1 與 M1 改為 `APPROVED` | 補齊 runner patient agent 與 timeout fail-closed 閘門，測試全數通過（43/116/139/5），指紋精確一致，工作區乾淨；正式 12×4 維持 `BLOCKED`（等待 WS2/WS3/WS5 與 mapping） | 技術主持 |
 
 ## Workstream 1 交付清單（2026-09-07）
 
@@ -63,5 +64,5 @@
 - 驗證：A planner False / BCD True；A/B 兩輪皆 full tools；C/D diet 首輪隱藏、藥物次輪僅 search；D 次輪 raw `少吃一顆庫魯化` 被 Output Guard 覆寫為 `【臨床安全提醒】`，C 不覆寫
 
 ### 尚未解決風險
-- `RESEARCH_PROTOCOL.md` 的模型、各角色 temperature、max turns 與 seed 已凍結；Talker/Planner prompt 版本、tool schema 版本與正式 commit 尚未凍結。
-- 在完整實驗指紋凍結前，各組可建立程式、測試與 fake-data dry-run，但禁止啟動正式 12×4 批次或宣稱模型實驗結果。
+- WS1 A–D 消融實驗環境、模型、角色 temperature、timeouts、seed、Prompt 版本、tool schema 版本、正式 commit 與 execution envelope 閘門皆已核准並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze。
+- 正式 12×4 批次維持 `BLOCKED`，待 WS2、WS3、WS5 完成與技術主持私下產生 opaque condition mapping 後方可執行。禁止提前啟動正式 12×4 批次或宣稱未經盲測之實驗結果。

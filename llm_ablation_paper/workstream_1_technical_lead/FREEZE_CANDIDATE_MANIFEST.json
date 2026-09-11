@@ -5,9 +5,9 @@
   "backup_branch": "backup/original-features-20260911",
   "backup_commit": "f5c8890caca3ed8a60153f0a8c7014fadcc35c18",
   "core_commit": "7cd20e7c9aac86b590c8c5c255ac1ab09dd2546d",
-  "tests_commit": "4f577f47e55e28b8ec18c626a1ad8f0d907069dd",
-  "status": "READY_FOR_FINAL_REVIEW",
-  "final_frozen": false,
+  "status": "FROZEN",
+  "final_frozen": true,
+  "final_freeze_tag": "llm-ablation-ws1-freeze-v1",
   "experiment_ready": false,
   "formal_experiment_state": "BLOCKED",
   "fingerprints_sha256": {
@@ -18,7 +18,7 @@
   },
   "talker_prompt_fingerprint_note": "Talker prompt is dynamic: talker_base_prompt_sha256 covers NURSE_SYSTEM_PROMPT only; talker_prompt_template_bundle_sha256 covers the base plus build_nurse_system_prompt builder source (the context-injection template), so the base SHA is not the full template SHA. patient_context is input data and is not included in any fingerprint.",
   "subprocess_timeout_seconds": 120.0,
-  "timeout_status": "FROZEN_CANDIDATE_PENDING_FINAL_TAG",
+  "timeout_status": "FINAL_FROZEN",
   "opaque_condition_mapping": "NOT_GENERATED",
   "blinded_export_fail_closed_without_mapping": true,
   "excluded_from_experiment_path": [
@@ -29,7 +29,7 @@
     "secrets.randbelow share codes",
     "register_share_token"
   ],
-  "notes": "Candidate only. Fingerprints computed in this worktree before final freeze. Do not label final frozen or experiment READY.",
+  "notes": "WS1 A-D ablation runtime and formal configuration final frozen. Version uniquely identified by annotated tag llm-ablation-ws1-freeze-v1. Experiment remains BLOCKED until WS2/WS3/WS5 and mapping are completed.",
   "formal_runtime_config_canonical_sha256": "7768a47509fb5c04a797c220ea0f33bc78486e9812e42f9d05cd226ba5504e13",
   "formal_runtime_config": {
     "talker_model": "gemini-3.5-flash-lite",
@@ -69,5 +69,5 @@
       }
     }
   },
-  "runtime_code_commit": "3fb93e1b0474b365ee2b4372477eb27d8e9400f2"
+  "runtime_code_commit": "a61c32a93c24a3e698ee266246da30103da5d38a"
 }

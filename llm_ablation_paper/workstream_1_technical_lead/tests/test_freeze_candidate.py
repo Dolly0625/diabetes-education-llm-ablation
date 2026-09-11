@@ -148,9 +148,11 @@ def test_fingerprints_match_manifest_exactly():
     assert fingerprints["talker_prompt_template_bundle_sha256"] == talker_prompt_template_bundle_sha256()
     assert fingerprints["planner_system_prompt_sha256"] == planner_system_prompt_sha256()
     assert fingerprints["canonical_tool_schema_sha256"] == canonical_tool_schema_sha256()
-    assert talker_prompt_template_bundle_sha256() != talker_base_prompt_sha256()
-    assert manifest["status"] == "READY_FOR_FINAL_REVIEW"
-    assert manifest["final_frozen"] is False
+    assert manifest["status"] == "FROZEN"
+    assert manifest["final_frozen"] is True
+    assert manifest["final_freeze_tag"] == "llm-ablation-ws1-freeze-v1"
+    assert manifest["runtime_code_commit"] == "a61c32a93c24a3e698ee266246da30103da5d38a"
+    assert manifest["timeout_status"] == "FINAL_FROZEN"
     assert manifest["experiment_ready"] is False
     assert manifest["formal_experiment_state"] == "BLOCKED"
 

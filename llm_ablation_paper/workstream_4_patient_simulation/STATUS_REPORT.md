@@ -6,7 +6,7 @@
 
 `APPROVED`（WS4-B 正式就緒強化；WS4-A 維持已通過）
 
-WS4-A 核心產物維持已通過。WS4-B roleplay runner 已於 `ws1-formal-readiness` 分支完成正式就緒強化（Gemini-only provider 配對、fake dry-run 改走逐輪正式路徑、retry 分類、可注入 timeout、`research_patient_id` 解耦、Input Guard canary、`WS4_REQUIRE_SOURCE_CSV`），經 WS1 驗收並合併至 `main`（核准 feature commit `a7f4b72`）。**正式 12×4 批次仍為 `BLOCKED`**，不得寫成 READY 或 APPROVED；剩餘 blockers：(1) P0-1 核心 production 髒檔尚未審核；(2) 正式 commit、Talker/Planner prompt SHA 與 tool schema SHA 已記入 freeze candidate（待 final freeze）；opaque mapping 尚未產生；timeout 120 秒為 freeze candidate 正式值，待 final tag 生效；(3) WS2、WS3、WS5 尚未完成。
+WS4-A 核心產物維持已通過。WS4-B roleplay runner 已於 `ws1-formal-readiness` 分支完成正式就緒強化（Gemini-only provider 配對、fake dry-run 改走逐輪正式路徑、retry 分類、可注入 timeout、`research_patient_id` 解耦、Input Guard canary、`WS4_REQUIRE_SOURCE_CSV`），並已補齊 execution envelope 閘門，經 WS1 驗收並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze。**正式 12×4 批次仍為 `BLOCKED`**，不得寫成 READY 或 APPROVED；剩餘 blockers：(1) WS2、WS3、WS5 尚未完成；(2) opaque condition mapping 尚未產生（依程序於盲測匯出前由技術主持私下產生）。
 
 ## 2. 本輪修正與產物
 

@@ -1,6 +1,6 @@
 # 研究協議 v0.1
 
-狀態：模型與主要執行參數已於 2026-09-08 由技術主持人凍結。Prompt、工具 schema 與程式指紋已於 2026-09-11 記入 freeze candidate（`ws1-freeze-candidate`，狀態 `READY_FOR_FINAL_REVIEW`），尚未 final freeze；正式 12×4 維持 `BLOCKED`，待技術主持人核准後以 Git tag 標記 freeze commit。
+狀態：WS1 runtime/config 已由技術主持核准並以 `llm-ablation-ws1-freeze-v1` final freeze。正式 12×4 維持 `BLOCKED`，剩餘原因：WS2、WS3、WS5 尚未完成；opaque mapping 尚未生成。
 
 ## 研究問題
 
@@ -56,7 +56,7 @@ Input Guard 固定為四組共同基礎設施，不屬於 A–D 消融。依目�
 - question-budget post-processing：主要實驗固定 `OFF`
 - Input Guard：四組每一輪固定 `ON`，觸發案例獨立報告
 - 狀態隔離策略：每條軌跡獨立 process、temp state directory 與唯一 run ID
-- 程式版本／commit：freeze candidate lineage `origin/main@435c91f` → `ws1-freeze-candidate`（runtime commit 見 manifest `runtime_code_commit`）；最終 freeze 由技術主持核准後以 Git tag 指向 freeze commit
+- 程式版本／commit：核准 runtime commit `a61c32a93c24a3e698ee266246da30103da5d38a`；最終版本以 annotated tag `llm-ablation-ws1-freeze-v1` 凍結
 - Opaque condition mapping：本階段不產生。正式盲測匯出前由技術主持人單獨產生並私下保存；WS5 不得接觸 A–D mapping
 
 ## 評估設計
