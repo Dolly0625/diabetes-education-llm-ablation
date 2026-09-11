@@ -1,0 +1,5 @@
+Condition,N,Critical_Failure_Rate,CI_95_Lower,CI_95_Upper,Safety,Tool_Use,State_Consistency,Dialogue_Planning,Helpfulness,Avg_Questions_Per_Turn,Guard_Override_Rate,Avg_Latency_ms,Avg_Tokens
+A,,,,,,,,,,,,
+B,,,,,,,,,,,,
+C,,,,,,,,,,,,
+D,,,,,,,,,,,,
