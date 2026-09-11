@@ -1,6 +1,6 @@
 # Workstream 4 跨工作流驗收規格書（Cross-Workstream Acceptance Specification）
 
-**版本**：v1.0 (STAGE 1: 規格定義與離線骨架驗證)  
+**版本**：v2.0 (STAGE 2: 跨工作流端到端 Fake 驗收完成)  
 **角色**：WS4（Patient Simulation / Data Provider，agy2）  
 **範圍**：明確規範 WS4、WS1（Batch Controller，agy1）與 WS5（LLM Judge / Analysis，agy3）三方介面契約，防止數據污染與盲態洩漏。
 
@@ -121,12 +121,14 @@ flowchart LR
 
 ---
 
-## 5. STAGE 2 待辦事項清單（Cross-Workstream Fake E2E）
+## 5. STAGE 2 驗收完成成果（Cross-Workstream Fake E2E Acceptance）
 
-待專案主持人（PM）通知 `main` 分支已合併 agy1（Batch Controller）與 agy3（Judge CLI）之程式後，WS4 將執行下列任務：
-- [ ] 執行 `git pull origin main` 更新至最新程式庫。
-- [ ] 將 `test_cross_workstream_acceptance.py` 中的 STAGE 2 placeholder 升級為端到端呼叫：
-  - 串接 agy1 的批次控制器 fake 模式，產生 48 條原始軌跡並輸出盲化軌跡。
-  - 串接 agy3 的評分 CLI fake 模式，讀取 48 條盲化軌跡並產生盲態分析報告。
-- [ ] 確認端到端 fake 驗收測試全數通過（不呼叫任何付費 API）。
-- [ ] 提交 PR 交付 PM 審核與合併。
+WS4 於 `workstream_4_patient_simulation/tests/test_cross_workstream_acceptance.py` 完整實裝並通過跨工作流端到端驗收測試：
+- [x] 執行 `git merge origin/main` 整合包含 agy1 controller 與 agy3 CLI 的最新代碼。
+- [x] 串接 agy1 的批次控制器（`run_batch` 離線/fake 模式），成功生成 48 條原始軌跡（12 profiles × 4 conditions），並驗證無 pilot/canary 混入。
+- [x] 串接 WS1 `run_blind_export`，以臨時秘密 Mapping 生成 48 條盲態軌跡；嚴格驗證零洩漏（無 condition A–D 明文、無 `enable_*` 旗標、無 mapping 配對洩漏、`run_id` 與 `state_dir_id` 均以 `BLIND-` 與 `STATE-BLIND-` 遮蔽）。
+- [x] 驗證 Judge 端 payload（`build_judge_payload`）物理剝除內部中間態（無 `state_dir_id`、`planner_state`、`raw_talker_output`、`guard_action`）。
+- [x] 串接 agy3 `run_judge.py --mode fake` 讀取 48 條盲態軌跡，順利通過 Canary 門禁並輸出 48 筆評分。
+- [x] 串接 agy3 `run_analysis.py` 輸出 `summary.json`、`main_table.md`、`main_table.tex`、`results.csv` 與 `failure_distribution.png`，並驗證 `missing != zero` 不變性（未暴露工具顯示為 `--`，分母完整保留）。
+- [x] 驗證 Fail-Closed 防禦：殘缺軌跡、Pilot 軌跡、Canary 軌跡或明文 A–D 條件均能被正確攔截與拒絕。
+- [x] 全套離線測試 148 passed，0 failed，0 skipped。無 API 呼叫，無正式 Mapping 接觸。

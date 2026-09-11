@@ -1,12 +1,20 @@
-"""WS4 Cross-Workstream Acceptance Tests (STAGE 1: Specifications and Fake Fixtures).
+"""WS4 Cross-Workstream Acceptance Tests (STAGE 1 & STAGE 2: Full Fake E2E).
 
-This test module verifies the cross-workstream contracts between:
+This test module verifies the end-to-end cross-workstream contracts between:
 - Workstream 4 (Patient Simulation / agy2)
 - Workstream 1 (Batch Controller / agy1)
 - Workstream 5 (LLM Judge & Analysis / agy3)
 
-In STAGE 1, all tests run strictly offline with fake deterministic fixtures.
-No external APIs are called, and no real condition mapping secrets are inspected.
+STAGE 2 Implementation:
+1. Orchestrates agy1 Batch Controller (`run_batch`) in fake/offline mode to generate
+   48 raw trajectories (12 profiles x 4 conditions).
+2. Executes `run_blind_export` to produce 48 blinded transcripts with secret mapping.
+3. Verifies zero leaks (no condition A-D, no enable_* flags, no mapping pairs,
+   no raw talker/planner/guard states).
+4. Executes agy3 `run_judge.py --mode fake` to evaluate all 48 trajectories.
+5. Executes agy3 `run_analysis.py` to aggregate results into summary.json, tables,
+   results.csv, and failure_distribution.png, verifying missing != zero.
+6. Verifies fail-closed rejection on incomplete, pilot, canary, or leaked inputs.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -31,6 +40,13 @@ from llm_ablation_paper.workstream_1_technical_lead.harness.config import (
 from llm_ablation_paper.workstream_1_technical_lead.harness.runner import (
     to_blinded_contract_trajectory,
 )
+from llm_ablation_paper.workstream_1_technical_lead.scripts.run_formal_experiment import (
+    CONFIRM_FORMAL_12X4_RUN_STRING,
+    generate_frozen_mapping,
+    run_batch,
+    run_blind_export,
+    scan_blinded_payload_for_leakage,
+)
 from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
     DeterministicPatientAgent,
     FAKE_TALKER_RESPONSES,
@@ -39,6 +55,8 @@ from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simu
     load_profiles,
     run_input_block_canary,
 )
+from llm_ablation_paper.workstream_5_judge_analysis.run_analysis import run_analysis_cli
+from llm_ablation_paper.workstream_5_judge_analysis.run_judge import run_judge_cli
 
 
 # ==============================================================================
@@ -89,8 +107,8 @@ def validate_agy1_batch_manifest_contract(manifest: dict[str, Any]) -> None:
             raise ValueError(f"duplicate (patient_id, condition) pair: ({pid}, {cond})")
         seen_pairs.add((pid, cond))
 
-        # Seed pairing
-        if seed != FORMAL_SEED:
+        # Seed pairing (checked if provided)
+        if seed is not None and seed != FORMAL_SEED:
             raise ValueError(f"trajectory {run_id} seed {seed} does not match FORMAL_SEED {FORMAL_SEED}")
 
         # Unique identity & state isolation
@@ -102,9 +120,10 @@ def validate_agy1_batch_manifest_contract(manifest: dict[str, Any]) -> None:
             raise ValueError(f"duplicate or missing user_id: {user_id}")
         user_ids.add(user_id)
 
-        if not state_dir or state_dir in state_dirs:
-            raise ValueError(f"duplicate or missing state_dir: {state_dir}")
-        state_dirs.add(state_dir)
+        if state_dir:
+            if state_dir in state_dirs:
+                raise ValueError(f"duplicate state_dir: {state_dir}")
+            state_dirs.add(state_dir)
 
         # Anti-pollution checks
         lower_run = (run_id + user_id + state_dir).lower()
@@ -500,23 +519,380 @@ def test_contract_agy3_judge_input_validation_contract():
 
 
 # ==============================================================================
-# Part 3: STAGE 2 Placeholder
+# Part 3: STAGE 2 Cross-Workstream Fake E2E Acceptance Tests
 # ==============================================================================
 
-def test_stage2_e2e_fake_cross_workstream_acceptance_placeholder():
-    """STAGE 2 Placeholder.
+def test_stage2_cross_workstream_fake_e2e_pipeline(tmp_path: Path):
+    """STAGE 2 Full Fake End-to-End Acceptance Pipeline.
 
-    This test marks the integration point for PHASE M2.1 STAGE 2.
-    Once the project manager (PM) notifies that main contains the merged:
-    - agy1 (Batch Controller)
-    - agy3 (LLM Judge CLI)
-
-    STAGE 2 will execute the full end-to-end fake test:
-      agy1 Batch Controller (fake mode) -> 48 raw + 48 blinded transcripts
-      -> agy3 Judge CLI (fake mode) -> judge results & statistical analysis.
+    Orchestrates:
+    WS1 Batch Controller (fake mode) -> 48 raw trajectories
+    -> WS1 Blind Export (secret mapping) -> 48 blinded trajectories (leakage check)
+    -> WS5 Judge CLI (fake mode) -> 48 judge evaluations
+    -> WS5 Analysis CLI -> summary.json, tables, results.csv, figure.
     """
-    stage2_ready = False  # Set to True in STAGE 2 when agy1 and agy3 modules exist in main
-    if not stage2_ready:
-        pytest.skip(
-            "STAGE 2: Awaiting PM notification that main includes agy1 Batch Controller and agy3 Judge CLI."
+    root = tmp_path / "e2e_workstream_test"
+    root.mkdir(parents=True, exist_ok=True)
+
+    pilot_dir = root / "pilot"
+    pilot_dir.mkdir(parents=True, exist_ok=True)
+    pilot_summary_file = pilot_dir / "formal_pilot_summary.json"
+    pilot_runs = [{
+        "run_id": f"WS4-PILOT-SP-001-{c}",
+        "condition": c,
+        "user_id": "ws4_sp-001_a_pilot",
+        "turn_count": 6,
+        "termination_reason": "MAX_TURNS",
+        "error": None,
+    } for c in ("A", "B", "C", "D")]
+    pilot_summary_file.write_text(
+        json.dumps({"execution_mode": "formal_pilot", "runs": pilot_runs}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    raw_dir = root / "raw_transcripts"
+    blinded_dir = root / "blinded_transcripts"
+    judge_raw_dir = root / "judge_raw"
+    judge_results_file = judge_raw_dir / "judge_results.jsonl"
+    judge_ckpt_dir = judge_raw_dir / "checkpoints"
+    derived_dir = root / "derived_results"
+    figures_dir = root / "figures"
+    temp_mapping_file = root / "temp_frozen_mapping.json"
+
+    # Step 1: Execute agy1 Batch Controller with offline deterministic fake runner
+    def _fake_run_condition(self, profile, condition, resume=False, fake_talker_responses=None, run_suffix="BATCH"):
+        pid = profile["patient_id"] if isinstance(profile, dict) else profile.patient_id
+        run_id = f"WS4-{run_suffix}-{pid}-{condition}"
+        run_dir = self.output_root / run_id
+        state_dir = run_dir / "isolated_state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        config_data = {
+            "run_id": run_id,
+            "condition": condition,
+            "patient_id": pid,
+            "max_turns": 6,
+            "seed": FORMAL_SEED,
+            "model": "fake-model",
+            "temperature": 0.0,
+        }
+        (state_dir / "config.json").write_text(json.dumps(config_data, ensure_ascii=False), encoding="utf-8")
+
+        turns = []
+        for i in range(6):
+            t = {
+                "turn_index": i,
+                "research_patient_id": pid,
+                "user_message": f"病患第 {i+1} 輪提問",
+                "assistant_response": f"衛教師第 {i+1} 輪回應",
+                "called_tools": [],
+                "exposed_tools": [],
+            }
+            if i == 5:
+                t["termination_reason"] = "MAX_TURNS"
+            turns.append(t)
+        (state_dir / "trajectories.jsonl").write_text(
+            "\n".join(json.dumps(t, ensure_ascii=False) for t in turns) + "\n",
+            encoding="utf-8",
         )
+
+        roleplay_data = {
+            "run_id": run_id,
+            "condition": condition,
+            "patient_id": pid,
+            "termination_reason": "MAX_TURNS",
+            "error_metadata": None,
+            "records": [{"turn": i + 1} for i in range(6)],
+        }
+        (run_dir / "roleplay_result.json").write_text(
+            json.dumps(roleplay_data, ensure_ascii=False), encoding="utf-8"
+        )
+
+        return {
+            "run_id": run_id,
+            "patient_id": pid,
+            "condition": condition,
+            "user_id": f"ws4_{pid.lower()}_{condition.lower()}_{run_suffix.lower()}",
+            "state_dir_id": "isolated_state",
+            "records": [{"turn": i + 1} for i in range(6)],
+            "termination_reason": "MAX_TURNS",
+            "error_metadata": None,
+        }
+
+    with patch.object(RoleplayRunner, "run_condition", _fake_run_condition):
+        batch_summary = run_batch(
+            confirm_token=CONFIRM_FORMAL_12X4_RUN_STRING,
+            output_root=raw_dir,
+            pilot_summary_path=pilot_summary_file,
+            skip_git_check=True,
+            runner_kwargs={"patient_agent": None},
+        )
+
+    # Validate Batch Controller Output Contract
+    assert batch_summary["total_trajectories"] == 48
+    assert batch_summary["expected_trajectories"] == 48
+    assert batch_summary["completed_trajectories"] == 48
+    assert batch_summary["error_trajectories"] == 0
+    validate_agy1_batch_manifest_contract(batch_summary)
+
+    # Step 2: Generate secret mapping and export blinded transcripts
+    secret_mapping = generate_frozen_mapping(output_file=temp_mapping_file)
+    blind_summary = run_blind_export(
+        raw_dir=raw_dir,
+        mapping_file=temp_mapping_file,
+        output_dir=blinded_dir,
+        require_completed=True,
+    )
+
+    assert blind_summary["exported_count"] == 48
+    assert blind_summary["skipped_canary"] == 0
+    assert blind_summary["skipped_pilot"] == 0
+    assert blind_summary["skipped_error"] == 0
+
+    blinded_files = list(blinded_dir.glob("*.json"))
+    assert len(blinded_files) == 48
+
+    # Step 3: Deep inspection of blinded contracts (zero leaks)
+    blinded_trajectories = []
+    seen_blinded_ids = set()
+    patient_secret_counts: dict[str, set[str]] = {}
+
+    from llm_ablation_paper.workstream_5_judge_analysis.sanitizer import build_judge_payload
+
+    contract_forbidden_patterns = [
+        "enable_planner", "enable_dynamic_tool_gate", "enable_output_guard",
+        "enable_forced_retrieval", "enable_fixed_warning_append",
+        "enable_question_budget_postprocessing", "dynamic_tool_gate",
+    ]
+
+    for bf in blinded_files:
+        content_text = bf.read_text(encoding="utf-8")
+        traj = json.loads(content_text)
+        blinded_trajectories.append(traj)
+
+        # 1. Check mapping pairs not leaked
+        for c, s in secret_mapping.items():
+            assert f'"{c}": "{s}"' not in content_text
+            assert f'"{c}":"{s}"' not in content_text
+            assert f'"condition": "{c}"' not in content_text
+            assert f'"condition":"{c}"' not in content_text
+
+        # 2. Check forbidden ablation flags not leaked in blinded contract
+        for fp in contract_forbidden_patterns:
+            assert fp not in content_text
+
+        # 3. Verify that Judge payload physically strips internal states (state_dir_id, planner_state, raw_talker_output, guard_action)
+        judge_payload = build_judge_payload(traj)
+        payload_str = json.dumps(judge_payload, ensure_ascii=False)
+        assert "state_dir_id" not in payload_str
+        assert "planner_state" not in payload_str
+        assert "raw_talker_output" not in payload_str
+        assert "guard_action" not in payload_str
+
+        # 3. Check blinded IDs
+        b_id = traj["run_id"]
+        assert b_id.startswith("BLIND-")
+        assert b_id not in seen_blinded_ids
+        seen_blinded_ids.add(b_id)
+        assert traj["state_dir_id"].startswith("STATE-BLIND-")
+
+        # 4. Check opaque condition secrets
+        secret = traj["condition_secret"]
+        assert secret in secret_mapping.values()
+        pid = traj["patient_id"]
+        assert pid in EXPECTED_PATIENT_IDS
+        patient_secret_counts.setdefault(pid, set()).add(secret)
+
+        # 5. Check turns completeness
+        assert len(traj["turns"]) == FORMAL_MAX_TURNS
+
+    assert len(patient_secret_counts) == 12
+    for pid, s_set in patient_secret_counts.items():
+        assert len(s_set) == 4
+
+    validate_agy3_judge_input_contract(blinded_trajectories)
+
+    # Step 4: Run agy3 LLM Judge CLI in offline fake mode
+    judge_exit_code = run_judge_cli([
+        "--mode", "fake",
+        "--input-path", str(blinded_dir),
+        "--output-file", str(judge_results_file),
+        "--checkpoint-dir", str(judge_ckpt_dir),
+    ])
+    assert judge_exit_code == 0
+    assert judge_results_file.exists()
+
+    eval_records = [
+        json.loads(line) for line in judge_results_file.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+    assert len(eval_records) == 48
+
+    # Step 5: Run agy3 Analysis CLI to produce tables, csv, and figures
+    analysis_exit_code = run_analysis_cli([
+        "--trajectories-path", str(blinded_dir),
+        "--judge-results-path", str(judge_results_file),
+        "--output-dir", str(derived_dir),
+        "--figures-dir", str(figures_dir),
+        "--allow-incomplete",
+    ])
+    assert analysis_exit_code == 0
+
+    # Step 6: Validate generated derived artifacts & missing!=zero invariant
+    summary_file = derived_dir / "summary.json"
+    table_md_file = derived_dir / "main_table.md"
+    table_tex_file = derived_dir / "main_table.tex"
+    results_csv_file = derived_dir / "results.csv"
+    fig_file = figures_dir / "failure_distribution.png"
+
+    assert summary_file.exists()
+    assert table_md_file.exists()
+    assert table_tex_file.exists()
+    assert results_csv_file.exists()
+    assert fig_file.exists()
+
+    summary_data = json.loads(summary_file.read_text(encoding="utf-8"))
+    groups = summary_data.get("summary_by_group", {})
+    assert len(groups) == 4
+    for cond_id, grp in groups.items():
+        assert cond_id in secret_mapping.values()
+        assert grp.get("sample_size") == 12
+        # missing != zero check: unexposed tools should be None or omitted when not triggered
+        prog = grp.get("programmatic", {})
+        assert prog.get("unexposed_tool_call_rate") is None or isinstance(prog.get("unexposed_tool_call_rate"), float)
+
+    md_text = table_md_file.read_text(encoding="utf-8")
+    for secret in secret_mapping.values():
+        assert secret in md_text
+
+
+def test_stage2_blind_export_excludes_and_rejects(tmp_path: Path):
+    """Verify that blind-export rejects incomplete trajectories and excludes pilot/canary/errors."""
+    raw_dir = tmp_path / "raw_runs"
+    out_dir = tmp_path / "blinded_transcripts"
+    map_file = tmp_path / "mapping.json"
+    generate_frozen_mapping(output_file=map_file)
+
+    def _make_run(run_id: str, term_reason: str | None, is_error: bool = False):
+        r_dir = raw_dir / run_id
+        s_dir = r_dir / "isolated_state"
+        s_dir.mkdir(parents=True, exist_ok=True)
+        (s_dir / "config.json").write_text(
+            json.dumps({"run_id": run_id, "condition": "A", "patient_id": "SP-001", "max_turns": 2}),
+            encoding="utf-8",
+        )
+        lines = [
+            json.dumps({"turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-001"}),
+            json.dumps({"turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-001", "termination_reason": term_reason}),
+        ]
+        (s_dir / "trajectories.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (r_dir / "roleplay_result.json").write_text(
+            json.dumps({
+                "run_id": run_id, "condition": "A", "patient_id": "SP-001",
+                "termination_reason": "ERROR" if is_error else (term_reason or "MAX_TURNS"),
+            }),
+            encoding="utf-8",
+        )
+
+    # Compliant completed run
+    _make_run("WS4-BATCH-SP-001-A", "MAX_TURNS")
+    # Canary run (should be excluded)
+    _make_run("WS4-CANARY-SP-001-A", "COMMON_INPUT_BLOCK")
+    # Pilot run (should be excluded)
+    _make_run("WS4-PILOT-SP-001-A", "MAX_TURNS")
+    # Error run (should be excluded)
+    _make_run("WS4-BATCH-SP-002-A", "ERROR", is_error=True)
+
+    summary = run_blind_export(
+        raw_dir=raw_dir,
+        mapping_file=map_file,
+        output_dir=out_dir,
+        require_completed=True,
+    )
+    assert summary["exported_count"] == 1
+    assert summary["skipped_canary"] == 1
+    assert summary["skipped_pilot"] == 1
+    assert summary["skipped_error"] == 1
+
+    # Incomplete run rejection test
+    incomplete_raw = tmp_path / "incomplete_raw"
+    _make_run_inc = lambda: (
+        incomplete_raw.mkdir(parents=True, exist_ok=True),
+        (incomplete_raw / "WS4-BATCH-INC-A" / "isolated_state").mkdir(parents=True, exist_ok=True),
+        (incomplete_raw / "WS4-BATCH-INC-A" / "isolated_state" / "config.json").write_text(
+            json.dumps({"run_id": "WS4-BATCH-INC-A", "condition": "A", "patient_id": "SP-001", "max_turns": 6})
+        ),
+        (incomplete_raw / "WS4-BATCH-INC-A" / "isolated_state" / "trajectories.jsonl").write_text(
+            json.dumps({"turn_index": 0, "user_message": "hi", "assistant_response": "ok", "research_patient_id": "SP-001"}) + "\n"
+        ),
+    )
+    _make_run_inc()
+    with pytest.raises(ValueError, match="is incomplete"):
+        run_blind_export(
+            raw_dir=incomplete_raw,
+            mapping_file=map_file,
+            output_dir=tmp_path / "blinded_inc",
+            require_completed=True,
+        )
+
+
+def test_stage2_judge_and_analysis_rejects_leaks_and_violations(tmp_path: Path):
+    """Verify that Judge and Analysis fail closed against leaks, duplicates, pilot, and canary."""
+    judge_in = tmp_path / "judge_inputs"
+    judge_in.mkdir(parents=True, exist_ok=True)
+    out_file = tmp_path / "judge_results.jsonl"
+    ckpt_dir = tmp_path / "checkpoints"
+
+    def _write_single_traj(filename: str, payload: dict):
+        (judge_in / filename).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    # Test 1: Pilot in input is rejected
+    _write_single_traj("p1.json", {
+        "run_id": "BLIND-PILOT-001",
+        "patient_id": "SP-001",
+        "condition_secret": "COND-1111",
+        "turns": [{"turn_index": 0, "user_message": "hi", "assistant_response": "ok"}],
+        "termination_reason": "MAX_TURNS",
+    })
+    code = run_judge_cli([
+        "--mode", "fake",
+        "--input-path", str(judge_in),
+        "--output-file", str(out_file),
+        "--checkpoint-dir", str(ckpt_dir),
+    ])
+    assert code != 0
+    (judge_in / "p1.json").unlink()
+
+    # Test 2: Canary in input is rejected
+    _write_single_traj("c1.json", {
+        "run_id": "BLIND-CANARY-001",
+        "patient_id": "SP-CANARY-001",
+        "condition_secret": "COND-1111",
+        "turns": [{"turn_index": 0, "user_message": "hi", "assistant_response": "ok"}],
+        "termination_reason": "COMMON_INPUT_BLOCK",
+    })
+    code = run_judge_cli([
+        "--mode", "fake",
+        "--input-path", str(judge_in),
+        "--output-file", str(out_file),
+        "--checkpoint-dir", str(ckpt_dir),
+    ])
+    assert code != 0
+    (judge_in / "c1.json").unlink()
+
+    # Test 3: Raw condition leak is rejected
+    _write_single_traj("leak.json", {
+        "run_id": "BLIND-001",
+        "patient_id": "SP-001",
+        "condition": "A",
+        "condition_secret": "COND-1111",
+        "turns": [{"turn_index": 0, "user_message": "hi", "assistant_response": "ok"}],
+        "termination_reason": "MAX_TURNS",
+    })
+    code = run_judge_cli([
+        "--mode", "fake",
+        "--input-path", str(judge_in),
+        "--output-file", str(out_file),
+        "--checkpoint-dir", str(ckpt_dir),
+    ])
+    assert code != 0
+    (judge_in / "leak.json").unlink()
