@@ -12,7 +12,7 @@
 
 現狀：WS4-A 已完成 `patient_agent_prompt.md`、12 profiles、schema、來源報告與 72 項測試。不得重生、替換或重寫這 12 個 profiles。你的唯一主任務是建立 runner，讓同一位模擬病患以固定隱藏事實分別面對 A/B/C/D。Runner 必須使用 WS1 現有介面，並具備逐輪 checkpoint、resume、有限指數退避重試、狀態隔離與明確終止原因。
 
-你不得直接修改 production 核心 pipeline。正式模型與 temperature 已凍結於 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；完整實驗指紋尚未凍結前，不得啟動 12×4 正式批次。
+你不得直接修改 production 核心 pipeline。正式模型與 temperature 已凍結於 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；WS1 runtime／config 已由 canonical tag `llm-ablation-ws1-freeze-v1.1` 凍結。你不得自行重跑或改動 profiles；正式 12×4 仍須等待 WS2／WS3／WS5 與 opaque mapping 完成，且只由 WS1 啟動。
 
 第一輪只回報：
 1. 你對正式模擬流程的理解。
@@ -21,5 +21,5 @@
 4. 將使用的 WS1 `run_trajectory_subprocess` 等既有介面。
 5. 預計交付檔案與 blocking issues。
 
-第一輪不要修改檔案。等待成員回覆「確認開工」後只製作 runner、離線測試與一個 profile×4 條件 fake dry-run。完整實驗指紋尚未凍結，禁止執行 12×4 正式批次。
+第一輪不要修改檔案。等待成員回覆「確認開工」後只製作 runner、離線測試與一個 profile×4 條件 fake dry-run。指紋已由 `llm-ablation-ws1-freeze-v1.1` 凍結，但你不得自行重跑或改動 profiles；正式 12×4 禁止自行執行，只由 WS1 在 WS2／WS3／WS5 與 opaque mapping 完成後啟動。
 ```

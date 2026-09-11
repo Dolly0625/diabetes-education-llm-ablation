@@ -24,5 +24,5 @@
 5. blocking issues。
 
 第一輪不要修改檔案。等待成員回覆「確認開工」後再執行，所有成果寫回 workstream_2_ablation_ab 或協議指定的 artifacts 位置。
-正式模型與 temperature 已凍結於 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；完整實驗指紋尚未凍結前，只允許離線 fake-data 測試，不得啟動正式實驗。
+正式模型與 temperature 已凍結於 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；WS1 runtime／config 已由 canonical tag `llm-ablation-ws1-freeze-v1.1` 凍結，你可依既有任務開工並做離線驗收，但不得自行啟動正式實驗（正式 12×4 只由 WS1 在依賴完成後執行）。
 ```

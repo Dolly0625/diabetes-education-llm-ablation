@@ -370,7 +370,8 @@ def test_manifest_formal_config_and_fingerprints_exact_match():
     assert formal["seed"] == FORMAL_SEED
     assert manifest["status"] == "FROZEN"
     assert manifest["final_frozen"] is True
-    assert manifest["final_freeze_tag"] == "llm-ablation-ws1-freeze-v1"
+    assert manifest["final_freeze_tag"] == "llm-ablation-ws1-freeze-v1.1"
+    assert manifest["supersedes_tag"] == "llm-ablation-ws1-freeze-v1"
     assert manifest["runtime_code_commit"] == "a61c32a93c24a3e698ee266246da30103da5d38a"
     assert manifest["timeout_status"] == "FINAL_FROZEN"
     assert manifest["experiment_ready"] is False

@@ -7,7 +7,8 @@
   "core_commit": "7cd20e7c9aac86b590c8c5c255ac1ab09dd2546d",
   "status": "FROZEN",
   "final_frozen": true,
-  "final_freeze_tag": "llm-ablation-ws1-freeze-v1",
+  "final_freeze_tag": "llm-ablation-ws1-freeze-v1.1",
+  "supersedes_tag": "llm-ablation-ws1-freeze-v1",
   "experiment_ready": false,
   "formal_experiment_state": "BLOCKED",
   "fingerprints_sha256": {
@@ -29,7 +30,7 @@
     "secrets.randbelow share codes",
     "register_share_token"
   ],
-  "notes": "WS1 A-D ablation runtime and formal configuration final frozen. Version uniquely identified by annotated tag llm-ablation-ws1-freeze-v1. Experiment remains BLOCKED until WS2/WS3/WS5 and mapping are completed.",
+  "notes": "WS1 A-D ablation runtime and formal configuration final frozen. v1.1 is a documentation-only correction of the freeze-status documents; it supersedes annotated tag llm-ablation-ws1-freeze-v1 (retained as a superseded historical snapshot). The runtime commit is unchanged (a61c32a93c24a3e698ee266246da30103da5d38a) and all runtime/prompt/tool/formal-config fingerprints are unchanged. Version uniquely identified by annotated tag llm-ablation-ws1-freeze-v1.1. Experiment remains BLOCKED until WS2/WS3/WS5 and mapping are completed.",
   "formal_runtime_config_canonical_sha256": "7768a47509fb5c04a797c220ea0f33bc78486e9812e42f9d05cd226ba5504e13",
   "formal_runtime_config": {
     "talker_model": "gemini-3.5-flash-lite",
