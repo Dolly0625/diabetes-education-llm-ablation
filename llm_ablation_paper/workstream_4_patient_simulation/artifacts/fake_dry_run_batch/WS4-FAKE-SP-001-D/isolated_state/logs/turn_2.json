@@ -12,14 +12,14 @@
     "is_blocked": false,
     "risk_category": "NONE"
   },
-  "latency_ms": 1,
+  "latency_ms": 22,
   "model": "fake-model",
   "output_guard_result": {
     "blocked_message": "",
     "is_blocked": false,
     "risk_category": "NONE"
   },
-  "patient_id": "ws4_sp-001_d_fake",
+  "patient_id": "SP-001",
   "planner_enabled": true,
   "planner_result_or_neutral": {
     "can_unlock_summary_tool": false,
@@ -47,6 +47,7 @@
     "talker_guidance": ""
   },
   "raw_talker_output": "我會把這些飲食狀況整理好，回診時也可以和醫師或衛教師討論。",
+  "research_patient_id": "SP-001",
   "retry_metadata": {
     "attempts": 1,
     "backoffs": [],
@@ -60,5 +61,6 @@
   "tool_rejections": [],
   "tool_results": [],
   "turn_index": 2,
+  "user_id": "ws4_sp-001_d_fake",
   "user_message": "晚上會喝含糖飲料但不好意思講"
 }

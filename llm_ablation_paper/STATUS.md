@@ -4,11 +4,13 @@
 
 | 工作流 | 負責人 | 狀態 | 當前交付 | 下一步 | Blocker |
 |---|---|---|---|---|---|
-| 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、狀態隔離、checkpoint/resume、盲測匯出、離線 dry-run 及正式模型設定已通過 | 凍結 prompt、工具 schema 與正式 commit 指紋；整合審核各 WS | 正式指紋尚未凍結 |
+| 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、狀態隔離、checkpoint/resume、盲測匯出、離線 dry-run 已通過；`ws1-formal-readiness` 正式就緒強化（Gemini-only provider、逐輪正式路徑 fake dry-run、retry 分類、可注入 timeout、research_patient_id、Input Guard canary、CSV fail-closed）已驗收並合併 | 完成 P0-1 核心 production 髒檔審核；凍結正式 commit／prompt／工具 schema／timeout／opaque mapping 指紋 | P0-1 核心 production 髒檔未審核；正式指紋尚未凍結；WS2/WS3/WS5 尚未完成 |
 | 2 A／B | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 A/B config 與事件驗收 | 依 `member_prompts/member_2_ablation_ab.md` 開工 | 無 |
 | 3 C／D | 待指派 | NOT_STARTED | 直接接入已核准 Harness，建立 C/D logging 與 fault injection | 依 `member_prompts/member_3_ablation_cd.md` 開工 | 無 |
-| 4 模擬病患 | 待指派 | APPROVED | WS4-A profiles/schema/驗證 + WS4-B runner、checkpoint/resume/retry 與 fake dry-run 已驗收（84 tests passed）並合併至 main | 無；待整體實驗指紋凍結後由 WS1 執行正式 12×4 批次 | 正式指紋尚未凍結 |
+| 4 模擬病患 | 待指派 | APPROVED | WS4-A profiles/schema/驗證已通過；WS4-B runner、checkpoint/resume/retry、逐輪正式路徑 fake dry-run 與 Input Guard canary 已完成並經 WS1 驗收合併（WS4 目錄 139 passed） | 待整體實驗指紋凍結後由 WS1 執行正式 12×4 批次 | P0-1 核心 production 髒檔未審核；正式指紋尚未凍結；WS2/WS3/WS5 尚未完成 |
 | 5 Judge／分析 | 待指派 | NOT_STARTED | Judge rubric、schema、canary、統計程式與結果樣板 | 依 `member_prompts/member_5_judge_analysis.md` 開工 | 正式 transcripts 尚未產生 |
+
+> 本輪 WS1／WS4 技術判定：`APPROVED`（formal-readiness 修復已驗收並合併）。正式 12×4 實驗狀態：`BLOCKED`（1. P0-1 production 核心修改尚未審核；2. 正式 commit／Talker/Planner prompt SHA／tool schema SHA／opaque mapping／timeout 尚未凍結；3. WS2、WS3、WS5 尚未完成）。
 
 ## 里程碑
 
@@ -30,6 +32,8 @@
 | 2026-09-07 | Harness 獨立於 `workstream_1_technical_lead/harness/`，production 僅加 optional `ablation_config` injection | 向後相容，不複製四份 handlers.py | Sisyphus |
 | 2026-09-08 | 凍結模型：Talker/Planner=`gemini-3.5-flash-lite`、Patient Agent=`gemini-2.5-flash-lite`、Judge=`gemini-3.7-flash`；角色 temperature 分別為 0.3/0.1/0.3/0.0，max turns=6，seed=42 | 維持既有受測系統，同時以低成本模型生成病患對話並用不同、較強模型盲評 | 技術主持 |
 | 2026-09-10 | 驗收並合併 `ws4-runner`（`e9d0ac7`）至 `main`：WS4-B runner、checkpoint/resume/retry、fake dry-run | 離線測試 84 passed（含來源追溯 test_01–test_04，以固定上游 CSV SHA-256 驗證）；無越界修改；獨立稽核判定部分通過且無硬性 blocker | 技術主持 |
+| 2026-09-10 | 建立 `ws1-formal-readiness` 分支完成 WS1／WS4 正式就緒強化；判定 `READY_FOR_REVIEW` | 修正 provider 金鑰／endpoint 配對（Gemini-only）、統一 fake 與正式逐輪路徑、retry/timeout/research_patient_id/canary/CSV fail-closed，並重新產生 checked-in artifact；正式實驗維持 BLOCKED（P0-1） | Sisyphus |
+| 2026-09-10 | 合併 `ws1-formal-readiness`（`a7f4b72`）至 `main`；WS1／WS4 formal-readiness 判定 `APPROVED` | 驗收實測 WS1 59 passed／WS4 139 passed／backward 5 passed／validator PASS；canary `COMMON_INPUT_BLOCK`；無越界修改；正式 12×4 維持 `BLOCKED` | 技術主持 |
 
 ## Workstream 1 交付清單（2026-09-07）
 

@@ -452,18 +452,26 @@ def test_illegal_flags_and_provenance_consistency():
 # 8. 正式模型連線必須 fail closed 與 subprocess 序列化檢查
 # ===========================================================================
 def test_provider_fails_closed_without_api_key(monkeypatch):
-    """缺少正式 API key 時，必須拋出清楚的 RuntimeError，fail closed。"""
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="缺少 OPENAI_API_KEY"):
+    """缺少 GEMINI_API_KEY 時必須 fail closed；OPENAI_API_KEY 不得被當成 Gemini key。"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-must-not-be-used")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         _build_client_from_provider_config({})
 
 
 def test_provider_fails_without_fallback_to_magicmock(monkeypatch):
-    """provider 建立失敗時必須拋錯，禁止改用 MagicMock。"""
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-valid-key-for-test")
+    """provider 建立失敗時必須拋錯，禁止改用 MagicMock；secrets 不得進 provider_config。"""
+    with pytest.raises(ValueError, match="must not contain secrets"):
+        _build_client_from_provider_config({"api_key": "sk-valid-key-for-test"})
+    with pytest.raises(ValueError, match="must not contain secrets"):
+        _build_client_from_provider_config({"auth_token": "sk-valid-key-for-test"})
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-valid-key-for-test")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     with patch("openai.OpenAI", side_effect=Exception("連線失敗異常")):
-        with pytest.raises(RuntimeError, match="建立正式 OpenAI 客戶端失敗"):
-            _build_client_from_provider_config({"api_key": "sk-valid-key-for-test"})
+        with pytest.raises(RuntimeError, match="建立正式 Gemini"):
+            _build_client_from_provider_config({"provider": "gemini"})
 
 
 def test_fake_responses_explicitly_supported_in_dry_run_and_subprocess():

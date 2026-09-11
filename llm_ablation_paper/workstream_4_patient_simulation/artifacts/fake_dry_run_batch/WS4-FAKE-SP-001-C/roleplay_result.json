@@ -33,7 +33,9 @@
       },
       "harness_turn": {
         "run_id": "WS4-FAKE-SP-001-C",
-        "patient_id": "ws4_sp-001_c_fake",
+        "patient_id": "SP-001",
+        "research_patient_id": "SP-001",
+        "user_id": "ws4_sp-001_c_fake",
         "condition": "C",
         "turn_index": 0,
         "user_message": "我想問一下，我平常吃飯比較隨便，不知道什麼能吃。想問日常飲食該怎麼吃才不會讓血糖忽高忽低",
@@ -93,8 +95,14 @@
         "model": "fake-model",
         "temperature": 0.0,
         "seed": null,
-        "latency_ms": 7
+        "latency_ms": 6
       },
+      "patient_retry_metadata": [
+        {
+          "attempt": 1,
+          "outcome": "success"
+        }
+      ],
       "retry_metadata": [
         {
           "attempt": 1,
@@ -115,7 +123,9 @@
       },
       "harness_turn": {
         "run_id": "WS4-FAKE-SP-001-C",
-        "patient_id": "ws4_sp-001_c_fake",
+        "patient_id": "SP-001",
+        "research_patient_id": "SP-001",
+        "user_id": "ws4_sp-001_c_fake",
         "condition": "C",
         "turn_index": 1,
         "user_message": "每餐約一碗半白飯",
@@ -175,8 +185,14 @@
         "model": "fake-model",
         "temperature": 0.0,
         "seed": null,
-        "latency_ms": 1
+        "latency_ms": 5
       },
+      "patient_retry_metadata": [
+        {
+          "attempt": 1,
+          "outcome": "success"
+        }
+      ],
       "retry_metadata": [
         {
           "attempt": 1,
@@ -197,7 +213,9 @@
       },
       "harness_turn": {
         "run_id": "WS4-FAKE-SP-001-C",
-        "patient_id": "ws4_sp-001_c_fake",
+        "patient_id": "SP-001",
+        "research_patient_id": "SP-001",
+        "user_id": "ws4_sp-001_c_fake",
         "condition": "C",
         "turn_index": 2,
         "user_message": "晚上會喝含糖飲料但不好意思講",
@@ -257,8 +275,14 @@
         "model": "fake-model",
         "temperature": 0.0,
         "seed": null,
-        "latency_ms": 1
+        "latency_ms": 5
       },
+      "patient_retry_metadata": [
+        {
+          "attempt": 1,
+          "outcome": "success"
+        }
+      ],
       "retry_metadata": [
         {
           "attempt": 1,
@@ -277,7 +301,9 @@
       },
       "harness_turn": {
         "run_id": "WS4-FAKE-SP-001-C",
-        "patient_id": "ws4_sp-001_c_fake",
+        "patient_id": "SP-001",
+        "research_patient_id": "SP-001",
+        "user_id": "ws4_sp-001_c_fake",
         "condition": "C",
         "turn_index": 3,
         "user_message": "我目前能想到的大概就是這些，還有什麼要問我嗎？",
@@ -337,8 +363,14 @@
         "model": "fake-model",
         "temperature": 0.0,
         "seed": null,
-        "latency_ms": 1
+        "latency_ms": 9
       },
+      "patient_retry_metadata": [
+        {
+          "attempt": 1,
+          "outcome": "success"
+        }
+      ],
       "retry_metadata": [
         {
           "attempt": 1,
@@ -357,7 +389,9 @@
       },
       "harness_turn": {
         "run_id": "WS4-FAKE-SP-001-C",
-        "patient_id": "ws4_sp-001_c_fake",
+        "patient_id": "SP-001",
+        "research_patient_id": "SP-001",
+        "user_id": "ws4_sp-001_c_fake",
         "condition": "C",
         "turn_index": 4,
         "user_message": "我目前能想到的大概就是這些，還有什麼要問我嗎？",
@@ -417,8 +451,14 @@
         "model": "fake-model",
         "temperature": 0.0,
         "seed": null,
-        "latency_ms": 1
+        "latency_ms": 7
       },
+      "patient_retry_metadata": [
+        {
+          "attempt": 1,
+          "outcome": "success"
+        }
+      ],
       "retry_metadata": [
         {
           "attempt": 1,
@@ -437,7 +477,9 @@
       },
       "harness_turn": {
         "run_id": "WS4-FAKE-SP-001-C",
-        "patient_id": "ws4_sp-001_c_fake",
+        "patient_id": "SP-001",
+        "research_patient_id": "SP-001",
+        "user_id": "ws4_sp-001_c_fake",
         "condition": "C",
         "turn_index": 5,
         "user_message": "我目前能想到的大概就是這些，還有什麼要問我嗎？",
@@ -497,8 +539,14 @@
         "model": "fake-model",
         "temperature": 0.0,
         "seed": null,
-        "latency_ms": 1
+        "latency_ms": 5
       },
+      "patient_retry_metadata": [
+        {
+          "attempt": 1,
+          "outcome": "success"
+        }
+      ],
       "retry_metadata": [
         {
           "attempt": 1,

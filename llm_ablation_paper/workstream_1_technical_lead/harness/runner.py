@@ -297,7 +297,7 @@ def ensure_state_dir_empty_with_resume(
         patient_id=patient_id,
     )
 
-def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: Optional[str] = None, message: Optional[str] = None, state_dir: Optional[Path] = None, model_client: Any = None, patient_id: Optional[str] = None, turn_index: int = 0, run_id: Optional[str] = None, resume: bool = False, patient_goal_checker: Optional[Callable] = None, **kwargs) -> dict:
+def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: Optional[str] = None, message: Optional[str] = None, state_dir: Optional[Path] = None, model_client: Any = None, patient_id: Optional[str] = None, turn_index: int = 0, run_id: Optional[str] = None, resume: bool = False, patient_goal_checker: Optional[Callable] = None, research_patient_id: Optional[str] = None, artifacts_dir: Optional[Path] = None, **kwargs) -> dict:
     # Parse positional args
     arg_names = ["config", "user_id", "message", "state_dir", "model_client", "patient_id", "turn_index", "run_id"]
     if args:
@@ -338,15 +338,22 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
         resume = bool(kwargs["resume"])
     if "patient_goal_checker" in kwargs:
         patient_goal_checker = kwargs["patient_goal_checker"]
+    if research_patient_id is None and "research_patient_id" in kwargs:
+        research_patient_id = kwargs["research_patient_id"]
+    if artifacts_dir is None and "artifacts_dir" in kwargs:
+        artifacts_dir = kwargs["artifacts_dir"]
 
     if config is None:
         raise ValueError("config is required")
     if message is None:
         message = ""
-    if user_id is None:
-        user_id = patient_id or "default_user"
+    # R2: state-isolation user id stays backward compatible (user_id or patient_id);
+    # research id is decoupled (research_patient_id or patient_id).
+    effective_user_id = user_id or patient_id or "default_user"
+    user_id = effective_user_id
+    research_id = research_patient_id or patient_id or effective_user_id
     if patient_id is None:
-        patient_id = user_id
+        patient_id = research_id
     if state_dir is None:
         state_dir = Path(tempfile.gettempdir()) / f"ablation_{config.run_id}"
     state_dir = Path(state_dir)
@@ -356,12 +363,12 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
 
     check_resume = True if turn_index > 0 else resume
     ensure_state_dir_empty_with_resume(
-        state_dir, resume=check_resume, run_id=run_id, condition=condition, patient_id=patient_id
+        state_dir, resume=check_resume, run_id=run_id, condition=condition, patient_id=research_id
     )
-    art_dir = _resolve_artifact_dir(state_dir, run_id)
+    art_dir = Path(artifacts_dir) if artifacts_dir is not None else _resolve_artifact_dir(state_dir, run_id)
     if art_dir != state_dir:
         ensure_state_dir_empty_with_resume(
-            art_dir, resume=check_resume, run_id=run_id, condition=condition, patient_id=patient_id
+            art_dir, resume=check_resume, run_id=run_id, condition=condition, patient_id=research_id
         )
     model_name = getattr(config, "model", "fake-model")
     temperature = getattr(config, "temperature", 0.0)
@@ -371,10 +378,10 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
     error = None
     termination_reason = None
     clear_session_cache()
-    patient_file = get_patient_file_for_state(state_dir, user_id)
+    patient_file = get_patient_file_for_state(state_dir, effective_user_id)
 
-    # Resolve artifact dir
-    artifact_dir = _resolve_artifact_dir(state_dir, run_id)
+    # Resolve artifact dir (explicit artifacts_dir keeps caller runs self-contained)
+    artifact_dir = Path(artifacts_dir) if artifacts_dir is not None else _resolve_artifact_dir(state_dir, run_id)
     # True resume idempotence check (#7) - if turn already exists and resume=True, return existing
     if resume:
         existing = _check_existing_turn(artifact_dir, turn_index)
@@ -388,7 +395,7 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
 
     # Also if not resume but we already have that turn, we would have raised earlier; but handle append-only
     # Load history for multi-turn (#5)
-    messages_hist = _load_history_messages(state_dir, patient_id, patient_file)
+    messages_hist = _load_history_messages(state_dir, effective_user_id, patient_file)
     # Delegate to shared core
     # Map model client to talker/planner
     talker_client = model_client
@@ -466,7 +473,7 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
 
     # Persist history after core mutated messages_hist
     try:
-        _persist_history(state_dir, patient_id, messages_hist)
+        _persist_history(state_dir, effective_user_id, messages_hist)
     except Exception:
         pass
 
@@ -498,7 +505,9 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
 
     result = {
         "run_id": run_id,
-        "patient_id": patient_id,
+        "patient_id": research_id,
+        "research_patient_id": research_id,
+        "user_id": effective_user_id,
         "condition": condition,
         "turn_index": turn_index,
         "user_message": message,
@@ -557,19 +566,20 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
 
     return result
 
-def run_trajectory(*, config: AblationConfig, patient_id: str, messages: list[str], state_dir: Path | str, model_client: Any, run_id: Optional[str] = None, resume: bool = False, patient_goal_checker: Optional[Callable] = None) -> list[dict]:
+def run_trajectory(*, config: AblationConfig, patient_id: str, messages: list[str], state_dir: Path | str, model_client: Any, run_id: Optional[str] = None, resume: bool = False, patient_goal_checker: Optional[Callable] = None, user_id: Optional[str] = None, research_patient_id: Optional[str] = None, artifacts_dir: Optional[Path | str] = None) -> list[dict]:
     cfg_run_id = getattr(config, "run_id", None)
     if run_id is not None and cfg_run_id is not None and cfg_run_id not in ("RUN-0000", ""):
         if run_id != cfg_run_id:
             raise ValueError(f"Run ID mismatch: config.run_id {cfg_run_id!r} != explicit run_id {run_id!r}")
     if run_id is None:
         run_id = cfg_run_id or f"RUN-{uuid.uuid4().hex[:8]}"
+    resolved_artifacts = Path(artifacts_dir) if artifacts_dir is not None else _resolve_artifact_dir(Path(state_dir), run_id)
     results = []
     max_turns = getattr(config, "max_turns", 6)
     # True resume: determine starting index from existing trajectories
     start_idx = 0
     if resume:
-        artifact_dir = _resolve_artifact_dir(Path(state_dir), run_id)
+        artifact_dir = resolved_artifacts
         # Check trajectories.jsonl length
         for cand in [artifact_dir / "trajectories.jsonl", Path(state_dir) / "trajectories.jsonl"]:
             if cand.exists():
@@ -604,7 +614,7 @@ def run_trajectory(*, config: AblationConfig, patient_id: str, messages: list[st
     effective_messages = messages[start_idx:]
     if start_idx >= max_turns:
         loaded = []
-        artifact_dir = _resolve_artifact_dir(Path(state_dir), run_id)
+        artifact_dir = resolved_artifacts
         traj_path = artifact_dir / "trajectories.jsonl"
         if not traj_path.exists():
             traj_path = Path(state_dir) / "trajectories.jsonl"
@@ -621,11 +631,13 @@ def run_trajectory(*, config: AblationConfig, patient_id: str, messages: list[st
         idx = start_idx + idx_offset
         res = run_ablation_turn(
             config=config,
-            user_id=patient_id,
+            user_id=user_id or patient_id,
             message=msg,
             state_dir=Path(state_dir),
             model_client=model_client,
             patient_id=patient_id,
+            research_patient_id=research_patient_id,
+            artifacts_dir=artifacts_dir,
             turn_index=idx,
             run_id=run_id,
             resume=resume,
@@ -645,7 +657,7 @@ def run_trajectory(*, config: AblationConfig, patient_id: str, messages: list[st
     # If resume=True and we had prior turns, include them in return for completeness
     if resume and start_idx > 0:
         prior = []
-        artifact_dir = _resolve_artifact_dir(Path(state_dir), run_id)
+        artifact_dir = resolved_artifacts
         traj_path = artifact_dir / "trajectories.jsonl"
         if not traj_path.exists():
             traj_path = Path(state_dir) / "trajectories.jsonl"
@@ -728,15 +740,15 @@ def to_contract_trajectory(
     """
     sd = Path(state_dir)
     artifact_dir = _resolve_artifact_dir(sd, run_id)
-    traj_path = artifact_dir / "trajectories.jsonl"
+    traj_path = sd / "trajectories.jsonl"
     if not traj_path.exists():
-        traj_path = sd / "trajectories.jsonl"
-    config_path = artifact_dir / "config.json"
+        traj_path = artifact_dir / "trajectories.jsonl"
+    config_path = sd / "config.json"
     if not config_path.exists():
-        config_path = sd / "config.json"
-    summary_path = artifact_dir / "summary.json"
+        config_path = artifact_dir / "config.json"
+    summary_path = sd / "summary.json"
     if not summary_path.exists():
-        summary_path = sd / "summary.json"
+        summary_path = artifact_dir / "summary.json"
 
     config_data = {}
     if config_path.exists():
@@ -796,9 +808,9 @@ def to_contract_trajectory(
 
     # Determine checkpoint_revision as max turn_index
     checkpoint_revision = len(turns) - 1 if turns else 0
-    cp_dir = artifact_dir / "checkpoints"
+    cp_dir = sd / "checkpoints"
     if not cp_dir.exists():
-        cp_dir = sd / "checkpoints"
+        cp_dir = artifact_dir / "checkpoints"
     if cp_dir.exists():
         try:
             cps = list(cp_dir.glob("checkpoint_turn_*.json"))
@@ -807,7 +819,9 @@ def to_contract_trajectory(
         except Exception:
             pass
 
-    turn_patient_id = last_turn_obj.get("patient_id") if last_turn_obj else None
+    turn_patient_id = None
+    if last_turn_obj:
+        turn_patient_id = last_turn_obj.get("research_patient_id") or last_turn_obj.get("patient_id")
     real_patient_id = turn_patient_id or config_data.get("patient_id") or summary_data.get("patient_id") or ""
 
     raw_condition = config_data.get("condition") or summary_data.get("condition") or ""
@@ -890,25 +904,89 @@ def to_blinded_contract_trajectory(
     return _strip_forbidden(contract)
 
 
-def _build_client_from_provider_config(provider_config: Optional[dict]) -> Any:
-    """Build production model client from provider config, failing closed if misconfigured."""
-    import os
-    cfg = provider_config or {}
-    if "factory" in cfg and callable(cfg["factory"]):
-        return cfg["factory"]()
+_PROVIDER_SECRET_MARKERS = ("api_key", "apikey", "api-key", "token", "secret", "password", "authorization")
+_GEMINI_OPENAI_COMPAT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+_GEMINI_ENDPOINT_HOST = "generativelanguage.googleapis.com"
 
-    api_key = (cfg.get("api_key") or os.environ.get("OPENAI_API_KEY", "")).strip()
+
+def _reject_provider_secrets(provider_config: Optional[dict]) -> dict:
+    cfg = dict(provider_config or {})
+    for key in cfg.keys():
+        lowered = str(key).lower()
+        for marker in _PROVIDER_SECRET_MARKERS:
+            if marker in lowered:
+                raise ValueError(
+                    f"provider_config must not contain secrets; rejected key {key!r} "
+                    f"(matched {marker!r}). API keys are ENV-ONLY."
+                )
+    return cfg
+
+
+def _is_gemini_endpoint(base_url: str) -> bool:
+    from urllib.parse import urlsplit
+    raw = (base_url or "").strip()
+    if not raw:
+        return False
+    try:
+        parts = urlsplit(raw)
+    except Exception:
+        return False
+    if parts.scheme not in ("http", "https"):
+        return False
+    host = (parts.hostname or "").lower()
+    if not host:
+        return False
+    return host == _GEMINI_ENDPOINT_HOST or host.endswith("." + _GEMINI_ENDPOINT_HOST)
+
+
+def resolve_provider_credentials(provider_config: Optional[dict]) -> tuple[str, str]:
+    """Resolve (api_key, base_url) for the formal Gemini client, fail-closed.
+
+    The formal experiment is Gemini-only. provider_config may carry only
+    non-secret settings (provider/base_url/timeout). The key is read from the
+    GEMINI_API_KEY environment variable only; OPENAI_API_KEY is never accepted.
+    A non-Gemini provider or a non-Gemini endpoint is rejected so a Gemini key
+    can never be paired with the wrong service.
+    """
+    import os
+    cfg = _reject_provider_secrets(provider_config)
+    provider = str(cfg.get("provider") or os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
+    if provider != "gemini":
+        raise RuntimeError(
+            f"正式實驗僅支援 Gemini provider，收到 provider={provider!r}，拒絕連線 (fail-closed)。"
+        )
+    explicit_base = str(cfg.get("base_url", "") or "").strip()
+    if explicit_base and not _is_gemini_endpoint(explicit_base):
+        raise RuntimeError(
+            "provider_config.base_url 指向非 Gemini endpoint，禁止與 GEMINI_API_KEY 配對，拒絕連線 (fail-closed)。"
+        )
+    env_base = (os.environ.get("GEMINI_BASE_URL", "") or "").strip()
+    if env_base and not _is_gemini_endpoint(env_base):
+        raise RuntimeError(
+            "GEMINI_BASE_URL 指向非 Gemini endpoint，拒絕連線 (fail-closed)。"
+        )
+    base_url = explicit_base or env_base or _GEMINI_OPENAI_COMPAT_BASE_URL
+    api_key = (os.environ.get("GEMINI_API_KEY", "") or "").strip()
     if not api_key:
         raise RuntimeError(
-            "正式模型連線缺少 OPENAI_API_KEY 環境變數或 provider_config.api_key，拒絕連線 (fail-closed)。"
+            "正式模型連線缺少 GEMINI_API_KEY，拒絕連線 (fail-closed)；正式實驗僅接受 Gemini。"
         )
+    return api_key, base_url
 
-    base_url = cfg.get("base_url") or os.environ.get("OPENAI_BASE_URL")
+
+def ensure_provider_ready(provider_config: Optional[dict]) -> tuple[str, str]:
+    """Fail-closed pre-flight check for WS4: validates provider config + env BEFORE spawning subprocess."""
+    return resolve_provider_credentials(provider_config)
+
+
+def _build_client_from_provider_config(provider_config: Optional[dict]) -> Any:
+    """Build the formal Gemini model client via the Gemini OpenAI-compatible endpoint, failing closed if misconfigured."""
+    api_key, base_url = resolve_provider_credentials(provider_config)
     try:
         import openai
         return openai.OpenAI(api_key=api_key, base_url=base_url)
-    except Exception as e:
-        raise RuntimeError(f"建立正式 OpenAI 客戶端失敗，拒絕連線 (fail-closed): {e}") from e
+    except Exception:
+        raise RuntimeError("建立正式 Gemini（OpenAI-compatible）模型客戶端失敗，拒絕連線 (fail-closed)") from None
 
 
 def _subprocess_target(
@@ -922,6 +1000,9 @@ def _subprocess_target(
     provider_config: Optional[dict] = None,
     result_queue: Any = None,
     resume: bool = False,
+    user_id: Optional[str] = None,
+    research_patient_id: Optional[str] = None,
+    artifacts_dir: Optional[str] = None,
 ):
     try:
         from llm_ablation_paper.workstream_1_technical_lead.harness.config import AblationConfig
@@ -945,6 +1026,9 @@ def _subprocess_target(
             model_client=client,
             run_id=run_id,
             resume=resume,
+            user_id=user_id,
+            research_patient_id=research_patient_id,
+            artifacts_dir=Path(artifacts_dir) if artifacts_dir is not None else None,
         )
         result_queue.put({"status": "ok", "results": results})
     except Exception as e:
@@ -965,6 +1049,9 @@ def run_trajectory_subprocess(
     fake_responses: list[str] | None = None,
     timeout: float = 30.0,
     resume: bool = False,
+    user_id: Optional[str] = None,
+    research_patient_id: Optional[str] = None,
+    artifacts_dir: Optional[Path | str] = None,
 ) -> list[dict]:
     if run_id is None:
         run_id = getattr(config, "run_id", f"RUN-{uuid.uuid4().hex[:8]}")
@@ -972,14 +1059,10 @@ def run_trajectory_subprocess(
     effective_factory = client_factory
 
     if model_client is not None:
-        if callable(model_client):
-            if effective_factory is None:
-                effective_factory = model_client
-        else:
-            raise TypeError(
-                f"run_trajectory_subprocess received unsupported model_client of type '{type(model_client).__name__}'. "
-                "Subprocess execution requires a callable client_factory or provider_config; raw non-callable model_client cannot be serialized across processes."
-            )
+        raise TypeError(
+            f"run_trajectory_subprocess received unsupported model_client of type '{type(model_client).__name__}'. "
+            "Subprocess execution requires a callable client_factory or provider_config; model_client cannot be serialized across processes."
+        )
 
     if effective_factory is not None:
         import pickle
@@ -990,6 +1073,8 @@ def run_trajectory_subprocess(
                 f"run_trajectory_subprocess received unpicklable client_factory '{effective_factory}': {e}. "
                 "Factory must be a picklable top-level function or class."
             ) from e
+    elif fake_responses is None:
+        ensure_provider_ready(provider_config)
 
     ctx = multiprocessing.get_context("spawn")
     q = ctx.Queue()
@@ -1008,6 +1093,9 @@ def run_trajectory_subprocess(
             provider_config,
             q,
             resume,
+            user_id,
+            research_patient_id,
+            str(Path(artifacts_dir)) if artifacts_dir is not None else None,
         ),
     )
     p.start()

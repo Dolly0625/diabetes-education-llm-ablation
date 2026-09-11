@@ -12,6 +12,8 @@ from .runner import (
     generate_random_condition_mapping,
     save_frozen_condition_mapping,
     load_frozen_condition_mapping,
+    resolve_provider_credentials,
+    ensure_provider_ready,
 )
 from .isolation import make_isolated_state_dir, clear_session_cache, get_patient_file_for_state
 
@@ -33,6 +35,8 @@ __all__ = [
     "generate_random_condition_mapping",
     "save_frozen_condition_mapping",
     "load_frozen_condition_mapping",
+    "resolve_provider_credentials",
+    "ensure_provider_ready",
     "make_isolated_state_dir",
     "clear_session_cache",
     "get_patient_file_for_state",

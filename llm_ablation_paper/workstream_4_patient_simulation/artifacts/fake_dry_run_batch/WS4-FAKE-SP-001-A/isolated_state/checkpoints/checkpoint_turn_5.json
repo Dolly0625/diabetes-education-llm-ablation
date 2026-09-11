@@ -13,14 +13,14 @@
     "is_blocked": false,
     "risk_category": "NONE"
   },
-  "latency_ms": 0,
+  "latency_ms": 5,
   "model": "fake-model",
   "output_guard_result": {
     "blocked_message": "",
     "is_blocked": false,
     "risk_category": "NONE"
   },
-  "patient_id": "ws4_sp-001_a_fake",
+  "patient_id": "SP-001",
   "planner_enabled": false,
   "planner_result_or_neutral": {
     "can_unlock_summary_tool": false,
@@ -48,6 +48,7 @@
     "talker_guidance": ""
   },
   "raw_talker_output": "謝謝您的說明，今天先到這裡。",
+  "research_patient_id": "SP-001",
   "retry_metadata": {
     "attempts": 1,
     "backoffs": [],
@@ -61,5 +62,6 @@
   "tool_rejections": [],
   "tool_results": [],
   "turn_index": 5,
+  "user_id": "ws4_sp-001_a_fake",
   "user_message": "我目前能想到的大概就是這些，還有什麼要問我嗎？"
 }
