@@ -427,6 +427,7 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
             model=model_name,
             temperature=temperature,
             max_tokens=500 if "gemini" in model_name.lower() else 250,
+            turn_index=turn_index,
         )
     except Exception as e:
         # Core failed - fallback minimal result
@@ -525,6 +526,7 @@ def run_ablation_turn(*args, config: Optional[AblationConfig] = None, user_id: O
         "events": core_res.get("events", []),
         "token_usage": core_res.get("token_usage", None),
         "retry_metadata": core_res.get("retry_metadata", None),
+        "error_metadata": core_res.get("error_metadata", None),
         "error": error,
         "model": model_name,
         "temperature": temperature,
