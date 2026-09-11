@@ -511,8 +511,9 @@ def test_run_condition_gate_passes_with_valid_formal_config(tmp_path, monkeypatc
     )
 
     class ImmediateEndPatientAgent(DeterministicPatientAgent):
-        # Minimal stub: end on the first turn so run_condition exits
-        # without touching the harness subprocess.
+        # 最小 stub：在第一回合即結束，使 run_condition 通過門禁後退出，不觸碰 harness subprocess
+        model = FORMAL_PATIENT_AGENT_MODEL
+        temperature = FORMAL_PATIENT_AGENT_TEMPERATURE
 
         def next_turn(self, *, profile, assistant_output, turn_number, prior_turns):
             patient_calls["count"] += 1
@@ -544,6 +545,329 @@ def test_run_condition_gate_passes_with_valid_formal_config(tmp_path, monkeypatc
     assert provider_calls["count"] == 1
     assert patient_calls["count"] >= 1
     assert harness_calls["count"] == 0
+
+
+def test_run_condition_envelope_gate_rejects_bad_subprocess_timeout(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        load_profiles,
+    )
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+    patient_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    class ValidPatientAgent(DeterministicPatientAgent):
+        model = FORMAL_PATIENT_AGENT_MODEL
+        temperature = FORMAL_PATIENT_AGENT_TEMPERATURE
+
+        def next_turn(self, **kwargs):
+            patient_calls["count"] += 1
+            return super().next_turn(**kwargs)
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=ValidPatientAgent(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=77.0,  # 錯誤 timeout
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("harness must not run when the envelope gate rejects")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError, match="subprocess_timeout_seconds"):
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+    assert provider_calls["count"] == 0
+    assert harness_calls["count"] == 0
+    assert patient_calls["count"] == 0
+
+
+def test_run_condition_envelope_gate_rejects_bad_patient_agent_model(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        load_profiles,
+    )
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+    patient_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    class WrongModelPatientAgent(DeterministicPatientAgent):
+        model = "wrong-patient-model"
+        temperature = FORMAL_PATIENT_AGENT_TEMPERATURE
+
+        def next_turn(self, **kwargs):
+            patient_calls["count"] += 1
+            return super().next_turn(**kwargs)
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=WrongModelPatientAgent(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=120.0,
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("harness must not run when the envelope gate rejects")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError, match=r"patient_agent\.model"):
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+    assert provider_calls["count"] == 0
+    assert harness_calls["count"] == 0
+    assert patient_calls["count"] == 0
+
+
+def test_run_condition_envelope_gate_rejects_bad_patient_agent_temperature(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        load_profiles,
+    )
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+    patient_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    class WrongTempPatientAgent(DeterministicPatientAgent):
+        model = FORMAL_PATIENT_AGENT_MODEL
+        temperature = 0.99
+
+        def next_turn(self, **kwargs):
+            patient_calls["count"] += 1
+            return super().next_turn(**kwargs)
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=WrongTempPatientAgent(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=120.0,
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("harness must not run when the envelope gate rejects")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError, match=r"patient_agent\.temperature"):
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+    assert provider_calls["count"] == 0
+    assert harness_calls["count"] == 0
+    assert patient_calls["count"] == 0
+
+
+@pytest.mark.parametrize(
+    "agent_factory,expected_match",
+    [
+        (lambda: SimpleNamespace(temperature=FORMAL_PATIENT_AGENT_TEMPERATURE), r"patient_agent\.model"),
+        (lambda: SimpleNamespace(model=FORMAL_PATIENT_AGENT_MODEL), r"patient_agent\.temperature"),
+        (lambda: SimpleNamespace(), r"patient_agent\.model"),
+    ],
+)
+def test_run_condition_envelope_gate_rejects_missing_patient_agent_attributes(
+    tmp_path, monkeypatch, agent_factory, expected_match
+):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import load_profiles
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=agent_factory(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=120.0,
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("harness must not run when attributes are missing")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError, match=expected_match):
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+    assert provider_calls["count"] == 0
+    assert harness_calls["count"] == 0
+
+
+def test_envelope_gate_error_message_does_not_leak_values_or_canary_key(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import load_profiles
+
+    canary_key = "CANARY-SECRET-ENVELOPE-KEY-99999"
+    bad_model = "CANARY-BAD-MODEL-VALUE"
+    monkeypatch.setenv("GEMINI_API_KEY", canary_key)
+
+    class CanaryTamperedPatientAgent:
+        model = bad_model
+        temperature = 0.8888
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=CanaryTamperedPatientAgent(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=77.7,
+    )
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError) as excinfo:
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+
+    msg = str(excinfo.value)
+    assert "subprocess_timeout_seconds" in msg
+    assert "patient_agent.model" in msg
+    assert "patient_agent.temperature" in msg
+    assert "77.7" not in msg
+    assert bad_model not in msg
+    assert "0.8888" not in msg
+    assert canary_key not in msg
+    assert "gemini_api_key" not in msg.lower()
+
+
+def test_adversarial_reproduction_unfrozen_runner_envelope_rejected(tmp_path, monkeypatch):
+    """對抗測試：重現原審查所發現之三個漏網值同時存在的情境，證明現已 fail-closed 拒絕。"""
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        load_profiles,
+    )
+
+    provider_calls = {"count": 0}
+    harness_calls = {"count": 0}
+    patient_calls = {"count": 0}
+
+    def fake_ensure_provider_ready(provider_config):
+        provider_calls["count"] += 1
+        return ("gemini", "stub")
+
+    monkeypatch.setattr(
+        "llm_ablation_paper.workstream_1_technical_lead.harness.ensure_provider_ready",
+        fake_ensure_provider_ready,
+    )
+
+    class AdversarialPatientAgent(DeterministicPatientAgent):
+        model = "wrong-patient-model"
+        temperature = 0.99
+
+        def next_turn(self, *, profile, assistant_output, turn_number, prior_turns):
+            patient_calls["count"] += 1
+            return {
+                "patient_utterance": "這是不應該執行的回合。",
+                "should_end": True,
+                "termination_reason": "PATIENT_GOAL_MET",
+                "disclosed_facts": [],
+                "evidence": "Adversarial stub that previously sneaked through.",
+            }
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=AdversarialPatientAgent(),
+        output_root=tmp_path,
+        config_factory=lambda condition: formal_ablation_config(condition),
+        provider_config={"provider": "gemini"},
+        subprocess_timeout_seconds=77.0,
+    )
+
+    def counting_harness(**kwargs):
+        harness_calls["count"] += 1
+        raise AssertionError("subprocess must not spawn in adversarial condition")
+
+    monkeypatch.setattr(runner, "_call_harness", counting_harness)
+
+    profile = load_profiles()["SP-001"]
+    with pytest.raises(ValueError) as excinfo:
+        runner.run_condition(profile=profile, condition="B", run_suffix="PILOT")
+
+    msg = str(excinfo.value)
+    assert "subprocess_timeout_seconds" in msg
+    assert "patient_agent.model" in msg
+    assert "patient_agent.temperature" in msg
+    assert provider_calls["count"] == 0
+    assert patient_calls["count"] == 0
+    assert harness_calls["count"] == 0
+
+
+def test_fake_dry_run_accepts_custom_timeout_and_deterministic_patient(tmp_path, monkeypatch):
+    from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
+        DeterministicPatientAgent,
+        FAKE_TALKER_RESPONSES,
+        load_profiles,
+    )
+
+    runner = run_simulation.RoleplayRunner(
+        patient_agent=DeterministicPatientAgent(),
+        output_root=tmp_path,
+        subprocess_timeout_seconds=77.0,  # fake dry-run 允許自訂 timeout
+    )
+
+    assert runner.subprocess_timeout_seconds == 77.0
+
+    def fake_harness(**kwargs):
+        return [{
+            "assistant_response": "ok",
+            "termination_reason": None,
+            "turn_index": 0,
+            "user_message": kwargs["messages"][-1],
+        }]
+
+    monkeypatch.setattr(runner, "_call_harness", fake_harness)
+    profile = load_profiles()["SP-001"]
+    result = runner.run_condition(
+        profile=profile,
+        condition="A",
+        fake_talker_responses=list(FAKE_TALKER_RESPONSES),
+        run_suffix="FAKE",
+    )
+    assert result["termination_reason"] == "MAX_TURNS"
+    assert len(result["records"]) == 6
 
 
 def test_fake_dry_run_path_skips_gate(tmp_path, monkeypatch):

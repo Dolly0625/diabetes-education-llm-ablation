@@ -37,7 +37,12 @@ FORMAL_PILOT_OUTPUT_ROOT = WS4_ROOT / "artifacts" / "formal_pilot"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from llm_ablation_paper.workstream_1_technical_lead.harness.config import require_frozen_formal_config
+from llm_ablation_paper.workstream_1_technical_lead.harness.config import (
+    FORMAL_PATIENT_AGENT_MODEL,
+    FORMAL_PATIENT_AGENT_TEMPERATURE,
+    FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
+    require_frozen_formal_config,
+)
 
 MAX_RETRY_DELAYS_SECONDS = (1, 2, 4, 8)
 TERMINATION_REASONS = {
@@ -380,6 +385,64 @@ def _patient_agent_metadata(patient_agent: PatientAgent) -> dict[str, Any]:
     return metadata
 
 
+def _execution_envelope_mismatches(
+    *,
+    config: Any,
+    patient_agent: Any,
+    subprocess_timeout_seconds: float,
+) -> list[str]:
+    """比對 Runner 實體執行環境與凍結正式規格之差異。
+
+    僅列出不符之欄位名稱，絕不包含實際值或機敏金鑰。
+    """
+    mismatches: list[str] = []
+    if subprocess_timeout_seconds != FORMAL_SUBPROCESS_TIMEOUT_SECONDS:
+        mismatches.append("subprocess_timeout_seconds")
+    expected_model = getattr(config, "patient_agent_model", FORMAL_PATIENT_AGENT_MODEL)
+    if not hasattr(patient_agent, "model") or getattr(patient_agent, "model") != expected_model:
+        mismatches.append("patient_agent.model")
+    expected_temp = getattr(config, "patient_agent_temperature", FORMAL_PATIENT_AGENT_TEMPERATURE)
+    if not hasattr(patient_agent, "temperature") or getattr(patient_agent, "temperature") != expected_temp:
+        mismatches.append("patient_agent.temperature")
+    return mismatches
+
+
+def is_frozen_formal_execution_envelope(
+    *,
+    config: Any,
+    patient_agent: Any,
+    subprocess_timeout_seconds: float,
+) -> bool:
+    """判斷執行環境是否完全符合凍結正式規格。"""
+    return not _execution_envelope_mismatches(
+        config=config,
+        patient_agent=patient_agent,
+        subprocess_timeout_seconds=subprocess_timeout_seconds,
+    )
+
+
+def require_frozen_formal_execution_envelope(
+    *,
+    config: Any,
+    patient_agent: Any,
+    subprocess_timeout_seconds: float,
+) -> None:
+    """驗證正式執行環境門禁，若有任何不符即 fail-closed 拒絕。
+
+    錯誤訊息僅列出不符欄位名稱，嚴禁洩漏實際數值或金鑰。
+    """
+    mismatches = _execution_envelope_mismatches(
+        config=config,
+        patient_agent=patient_agent,
+        subprocess_timeout_seconds=subprocess_timeout_seconds,
+    )
+    if mismatches:
+        raise ValueError(
+            "Formal execution requires the frozen execution envelope; "
+            f"mismatched fields: {', '.join(mismatches)}"
+        )
+
+
 @dataclass
 class RoleplayRunner:
     patient_agent: PatientAgent
@@ -519,6 +582,11 @@ class RoleplayRunner:
             raise ValueError("formal execution requires a frozen WS1 config_factory; fake-model is dry-run only")
         if is_formal:
             require_frozen_formal_config(config)
+            require_frozen_formal_execution_envelope(
+                config=config,
+                patient_agent=self.patient_agent,
+                subprocess_timeout_seconds=self.subprocess_timeout_seconds,
+            )
             if self.client_factory is not None:
                 raise ValueError("formal execution rejects client_factory mock injection (fail-closed)")
             if fake_talker_responses is not None:

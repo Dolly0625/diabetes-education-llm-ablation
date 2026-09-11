@@ -20,7 +20,12 @@ from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simu
 )
 from llm_ablation_paper.workstream_1_technical_lead.harness import AblationConfig
 from llm_ablation_paper.workstream_1_technical_lead.harness import resolve_provider_credentials
-from llm_ablation_paper.workstream_1_technical_lead.harness.config import formal_ablation_config
+from llm_ablation_paper.workstream_1_technical_lead.harness.config import (
+    FORMAL_PATIENT_AGENT_MODEL,
+    FORMAL_PATIENT_AGENT_TEMPERATURE,
+    FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
+    formal_ablation_config,
+)
 from llm_ablation_paper.workstream_1_technical_lead.harness.runner import _build_client_from_provider_config
 
 
@@ -160,18 +165,23 @@ def test_timeout_failure_keeps_error_and_attempts(tmp_path, monkeypatch):
     assert attempts[0]["error_type"] == "TimeoutError"
 
 
+class _FormalStubPatientAgent(DeterministicPatientAgent):
+    model = FORMAL_PATIENT_AGENT_MODEL
+    temperature = FORMAL_PATIENT_AGENT_TEMPERATURE
+
+
 def _formal_config_factory(condition):
-    # Exact frozen formal config: the run_condition formal gate now rejects
-    # anything else before the client_factory / env-key / secret checks below.
+    # 精確凍結 formal config：run_condition formal gate 在此處拒絕非 formal config
     return formal_ablation_config(condition)
 
 
 def test_formal_run_with_client_factory_rejected(tmp_path):
     runner = RoleplayRunner(
-        patient_agent=DeterministicPatientAgent(),
+        patient_agent=_FormalStubPatientAgent(),
         output_root=tmp_path,
         config_factory=_formal_config_factory,
         client_factory=lambda: None,
+        subprocess_timeout_seconds=FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
     )
     with pytest.raises(ValueError, match="client_factory"):
         runner.run_condition(
@@ -195,9 +205,10 @@ def test_formal_run_without_env_key_fails_before_subprocess(tmp_path, monkeypatc
 
     monkeypatch.setattr(harness_pkg, "run_trajectory_subprocess", spy_subprocess)
     runner = RoleplayRunner(
-        patient_agent=DeterministicPatientAgent(),
+        patient_agent=_FormalStubPatientAgent(),
         output_root=tmp_path,
         config_factory=_formal_config_factory,
+        subprocess_timeout_seconds=FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
     )
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         runner.run_condition(
@@ -212,10 +223,11 @@ def test_formal_run_without_env_key_fails_before_subprocess(tmp_path, monkeypatc
 def test_formal_provider_config_with_secret_rejected(tmp_path, monkeypatch, secret_key):
     monkeypatch.setenv("GEMINI_API_KEY", "sk-test-key")
     runner = RoleplayRunner(
-        patient_agent=DeterministicPatientAgent(),
+        patient_agent=_FormalStubPatientAgent(),
         output_root=tmp_path,
         config_factory=_formal_config_factory,
         provider_config={secret_key: "sk-test-key"},
+        subprocess_timeout_seconds=FORMAL_SUBPROCESS_TIMEOUT_SECONDS,
     )
     with pytest.raises(ValueError, match="must not contain secrets"):
         runner.run_condition(
