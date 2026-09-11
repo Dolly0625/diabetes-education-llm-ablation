@@ -1,0 +1,10 @@
+{
+  "condition": {
+    "from": "A",
+    "to": "B"
+  },
+  "enable_planner": {
+    "from": false,
+    "to": true
+  }
+}
