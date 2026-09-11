@@ -1,6 +1,5 @@
 """Freeze-candidate regression tests: share-free experiment outputs, rerun determinism,
-new Output Guard cases, and fingerprint computability."""
-import hashlib
+new Output Guard cases, and fingerprint equality with the candidate manifest."""
 import json
 import sys
 from pathlib import Path
@@ -11,7 +10,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from llm_ablation_paper.workstream_1_technical_lead.harness.config import compute_tool_snapshot_sha
 from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simulation import (
     DeterministicPatientAgent,
     FAKE_TALKER_RESPONSES,
@@ -19,8 +17,6 @@ from llm_ablation_paper.workstream_4_patient_simulation.scripts.run_patient_simu
     load_profiles,
 )
 from diabetes_chatbot.guard import inspect_output_guard
-from diabetes_chatbot.planner import PLANNER_SYSTEM_PROMPT
-from diabetes_chatbot.prompts import NURSE_SYSTEM_PROMPT
 from diabetes_chatbot.tools import generate_clinic_qr_payload, generate_line_flex_bubble
 
 SHARE_MARKERS = ("調閱碼", "share", "share_code", "share_url", "share_token")
@@ -127,14 +123,47 @@ def test_output_guard_allows_safe_guidance_cases(text):
     assert result.risk_category == "NONE"
 
 
-def test_prompt_and_tool_fingerprints_are_computable():
-    talker_sha = hashlib.sha256(NURSE_SYSTEM_PROMPT.encode("utf-8")).hexdigest()
-    planner_sha = hashlib.sha256(PLANNER_SYSTEM_PROMPT.encode("utf-8")).hexdigest()
-    tool_sha = compute_tool_snapshot_sha()
-    for digest in (talker_sha, planner_sha, tool_sha):
-        assert len(digest) == 64
-        int(digest, 16)
-    assert len(tool_sha) == 64
+def _manifest_fingerprints():
+    manifest_path = (
+        PROJECT_ROOT
+        / "llm_ablation_paper"
+        / "workstream_1_technical_lead"
+        / "FREEZE_CANDIDATE_MANIFEST.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return manifest, manifest["fingerprints_sha256"]
+
+
+def test_fingerprints_match_manifest_exactly():
+    from llm_ablation_paper.workstream_1_technical_lead.harness.fingerprints import (
+        canonical_tool_schema_sha256,
+        planner_system_prompt_sha256,
+        talker_base_prompt_sha256,
+        talker_prompt_template_bundle_sha256,
+    )
+
+    manifest, fingerprints = _manifest_fingerprints()
+
+    assert fingerprints["talker_base_prompt_sha256"] == talker_base_prompt_sha256()
+    assert fingerprints["talker_prompt_template_bundle_sha256"] == talker_prompt_template_bundle_sha256()
+    assert fingerprints["planner_system_prompt_sha256"] == planner_system_prompt_sha256()
+    assert fingerprints["canonical_tool_schema_sha256"] == canonical_tool_schema_sha256()
+    assert talker_prompt_template_bundle_sha256() != talker_base_prompt_sha256()
+    assert manifest["status"] == "REVIEW"
+    assert manifest["final_frozen"] is False
+    assert manifest["experiment_ready"] is False
+    assert manifest["formal_experiment_state"] == "BLOCKED"
+
+
+def test_talker_bundle_fingerprint_is_independent_of_patient_context_value():
+    from llm_ablation_paper.workstream_1_technical_lead.harness.fingerprints import (
+        talker_prompt_template_bundle_sha256,
+    )
+    from diabetes_chatbot.prompts import build_nurse_system_prompt
+
+    before = talker_prompt_template_bundle_sha256()
+    build_nurse_system_prompt("虛構病患背景：飯後血糖 135，服用庫魯化")
+    assert talker_prompt_template_bundle_sha256() == before
 
 
 def test_no_share_token_registration_in_experiment_core():

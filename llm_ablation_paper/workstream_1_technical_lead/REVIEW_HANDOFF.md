@@ -5,6 +5,8 @@
 - 狀態：`REVIEW`（freeze candidate 待審，尚未 final freeze；不得宣稱正式實驗 READY）。
 - 原功能備份：`backup/original-features-20260911`（完整保存原 working tree 29 項修改）。
 - Freeze candidate：`ws1-freeze-candidate`，自 `origin/main@435c91f` 建立，僅納入核心實驗功能；排除 Demo／醫護網頁／分享服務與隨機調閱碼。
+- Talker 指紋：`talker_base_prompt_sha256` 僅涵蓋 `NURSE_SYSTEM_PROMPT`；`talker_prompt_template_bundle_sha256` 另涵蓋 `build_nurse_system_prompt` 的注入模板來源，因此 base SHA 不等於完整模板 SHA。`patient_context` 為輸入資料，不納入任何指紋。
+- 指紋固定值記錄於 `FREEZE_CANDIDATE_MANIFEST.json`，並由 `tests/test_freeze_candidate.py` 精確比對（非僅長度檢查）。
 - 正式 12×4：`BLOCKED`（待 candidate 審核與 final freeze）。
 
 ## 目前判定

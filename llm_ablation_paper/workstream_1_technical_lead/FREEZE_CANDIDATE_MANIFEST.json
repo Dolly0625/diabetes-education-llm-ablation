@@ -11,10 +11,12 @@
   "experiment_ready": false,
   "formal_experiment_state": "BLOCKED",
   "fingerprints_sha256": {
-    "talker_system_prompt": "2c2a3850a8885a2598403971f2faec6d4dcbea414a120c4711dff9540073ce55",
-    "planner_system_prompt": "53d6b0f2ebb864116f0d914295b549a9d6d1236825f01cc9925e2185c842a409",
-    "canonical_tool_schema": "e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e"
+    "talker_base_prompt_sha256": "2c2a3850a8885a2598403971f2faec6d4dcbea414a120c4711dff9540073ce55",
+    "talker_prompt_template_bundle_sha256": "9a6b133ac53437e8a567d3c336fe43a99c57faeb82152c21ada6fe4799723f2b",
+    "planner_system_prompt_sha256": "53d6b0f2ebb864116f0d914295b549a9d6d1236825f01cc9925e2185c842a409",
+    "canonical_tool_schema_sha256": "e548a8c6a5d02577c971c0f77499adf8902cd0c4db1aa5263654f74d66ed776e"
   },
+  "talker_prompt_fingerprint_note": "Talker prompt is dynamic: talker_base_prompt_sha256 covers NURSE_SYSTEM_PROMPT only; talker_prompt_template_bundle_sha256 covers the base plus build_nurse_system_prompt builder source (the context-injection template), so the base SHA is not the full template SHA. patient_context is input data and is not included in any fingerprint.",
   "timeout_suggestion_seconds": 120,
   "timeout_frozen": false,
   "opaque_condition_mapping": "NOT_GENERATED",
