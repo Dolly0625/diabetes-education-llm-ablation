@@ -270,10 +270,12 @@ def check_pilot_completed_cleanly(pilot_summary_path: Path) -> None:
             )
 
         # 深入檢驗 run 目錄下的內部輪次 (fail-closed)
-        candidate_dirs = [
-            pilot_root / run_id,
-            pilot_root / f"WS4-PILOT-{DEFAULT_PILOT_PATIENT_ID}-{cond}",
-        ]
+        # run_id 為 None/缺漏時不得對其做路徑運算；僅在候選目錄存在時才遞迴檢視。
+        candidate_dirs: list[Path] = []
+        if run_id:
+            candidate_dirs.append(pilot_root / run_id)
+        if cond:
+            candidate_dirs.append(pilot_root / f"WS4-PILOT-{DEFAULT_PILOT_PATIENT_ID}-{cond}")
         for cdir in candidate_dirs:
             if cdir.exists():
                 has_nested_err, err_detail = inspect_run_for_nested_errors(cdir)
