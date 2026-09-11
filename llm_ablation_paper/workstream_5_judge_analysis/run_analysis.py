@@ -2,11 +2,15 @@
 
 Features:
   - Validates that Judge evaluations are complete before execution.
+  - Ingests WS1 canonical condition mapping (A-D -> opaque ID), validates it with
+    WS1 validate_condition_mapping, and strictly inverts it to (opaque ID -> A-D)
+    for downstream aggregate_pipeline deblinding.
   - Aggregates programmatic metrics and LLM judge scores via analysis_pipeline.
   - Generates derived results: summary.json, main_table.md, main_table.tex, results.csv.
   - Generates failure taxonomy visualizations (ASCII terminal chart + Matplotlib PNG).
   - Condition mapping (--mapping-file) is strictly optional and used ONLY downstream for unblinding.
   - Ensures missing != zero (empty conditions report None/-- with preserved denominators).
+  - Artifact paths anchored to PROJECT_ROOT/llm_ablation_paper/artifacts.
 """
 
 import argparse
@@ -15,6 +19,11 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+ARTIFACTS_ROOT = PROJECT_ROOT / "llm_ablation_paper" / "artifacts"
 
 from llm_ablation_paper.workstream_5_judge_analysis.analysis_pipeline import aggregate_pipeline
 from llm_ablation_paper.workstream_5_judge_analysis.format_results import (
@@ -30,10 +39,10 @@ from llm_ablation_paper.workstream_5_judge_analysis.plot_failure_taxonomy import
     plot_failure_distribution_figure,
 )
 
-DEFAULT_TRAJECTORIES_PATH = Path("artifacts/blinded_transcripts")
-DEFAULT_JUDGE_RESULTS_PATH = Path("artifacts/judge_raw/judge_results.jsonl")
-DEFAULT_OUTPUT_DIR = Path("artifacts/derived_results")
-DEFAULT_FIGURES_DIR = Path("artifacts/figures")
+DEFAULT_TRAJECTORIES_PATH = ARTIFACTS_ROOT / "blinded_transcripts"
+DEFAULT_JUDGE_RESULTS_PATH = ARTIFACTS_ROOT / "judge_raw" / "judge_results.jsonl"
+DEFAULT_OUTPUT_DIR = ARTIFACTS_ROOT / "derived_results"
+DEFAULT_FIGURES_DIR = ARTIFACTS_ROOT / "figures"
 
 
 def load_json_or_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -66,8 +75,15 @@ def load_json_or_jsonl(path: Path) -> List[Dict[str, Any]]:
     return items
 
 
-def load_condition_mapping(mapping_path: Optional[Path]) -> Optional[Dict[str, str]]:
-    """Load external condition mapping from file for unblinded analysis."""
+def load_and_invert_condition_mapping(mapping_path: Optional[Path]) -> Optional[Dict[str, str]]:
+    """Load, strictly validate with WS1 validator, and invert condition mapping for deblinding.
+
+    WS1 frozen mapping format:
+      {"A": "COND-...", "B": "COND-...", "C": "COND-...", "D": "COND-..."}
+    Inverted format returned:
+      {"COND-...": "A", ...}
+    Fails closed on any non-canonical or ambiguous formats.
+    """
     if not mapping_path:
         return None
     if not mapping_path.exists():
@@ -76,17 +92,21 @@ def load_condition_mapping(mapping_path: Optional[Path]) -> Optional[Dict[str, s
     with open(mapping_path, "r", encoding="utf-8") as fh:
         raw_map = json.load(fh)
 
-    if not isinstance(raw_map, dict):
-        raise ValueError(f"Condition mapping must be a dictionary, got {type(raw_map)}")
+    # 1. Strictly validate using WS1 canonical validator
+    from llm_ablation_paper.workstream_1_technical_lead.harness.runner import validate_condition_mapping
+    canonical_map = validate_condition_mapping(raw_map)
 
-    valid_targets = {"A", "B", "C", "D"}
-    for k, v in raw_map.items():
-        if v not in valid_targets:
-            raise ValueError(
-                f"Mapping target must be one of {valid_targets}, got {v!r} for key {k!r}"
-            )
+    # 2. Strictly invert: canonical format is real condition (A-D) -> opaque_id;
+    #    aggregate_pipeline deblinding requires opaque_id -> real condition (A-D).
+    inverted_map = {opaque_id: real_cond for real_cond, opaque_id in canonical_map.items()}
+    if len(inverted_map) != 4:
+        raise ValueError("Inverted condition mapping must contain exactly 4 unique opaque IDs.")
 
-    return raw_map
+    return inverted_map
+
+
+# Backwards compatibility alias
+load_condition_mapping = load_and_invert_condition_mapping
 
 
 def format_unblinded_results_csv(summary_by_group: Dict[str, Any]) -> str:
@@ -137,31 +157,31 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "--trajectories-path",
         type=Path,
         default=DEFAULT_TRAJECTORIES_PATH,
-        help="Path to blinded trajectories (directory or .jsonl file)",
+        help="Path to blinded trajectories (default: PROJECT_ROOT/llm_ablation_paper/artifacts/blinded_transcripts)",
     )
     parser.add_argument(
         "--judge-results-path",
         type=Path,
         default=DEFAULT_JUDGE_RESULTS_PATH,
-        help="Path to Judge results file (.jsonl) or checkpoints directory",
+        help="Path to Judge results file (.jsonl) or checkpoints directory (default: PROJECT_ROOT/llm_ablation_paper/artifacts/judge_raw/judge_results.jsonl)",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
-        help="Directory to save summary.json, main_table.md, main_table.tex, results.csv",
+        help="Directory to save summary.json, main_table.md, main_table.tex, results.csv (default: PROJECT_ROOT/llm_ablation_paper/artifacts/derived_results)",
     )
     parser.add_argument(
         "--figures-dir",
         type=Path,
         default=DEFAULT_FIGURES_DIR,
-        help="Directory to save failure taxonomy distribution figure",
+        help="Directory to save failure taxonomy distribution figure (default: PROJECT_ROOT/llm_ablation_paper/artifacts/figures)",
     )
     parser.add_argument(
         "--mapping-file",
         type=Path,
         default=None,
-        help="Optional external condition mapping JSON file provided by WS1 for unblinding",
+        help="Optional external condition mapping JSON file (A-D -> opaque ID) provided by WS1 for unblinding",
     )
     parser.add_argument(
         "--allow-incomplete",
@@ -177,6 +197,7 @@ def run_analysis_cli(args: Optional[List[str]] = None) -> int:
     print("================================================================")
     print("  WS5: Statistical Analysis & Output Formatter")
     print("================================================================")
+    print(f"Project Root:        {PROJECT_ROOT}")
     print(f"Trajectories Path:   {opts.trajectories_path}")
     print(f"Judge Results Path:  {opts.judge_results_path}")
     print(f"Output Dir:          {opts.output_dir}")
@@ -220,13 +241,13 @@ def run_analysis_cli(args: Optional[List[str]] = None) -> int:
         )
         return 1
 
-    # 3. Load Mapping (if provided)
+    # 3. Load and Invert Mapping (if provided)
     try:
-        condition_mapping = load_condition_mapping(opts.mapping_file)
+        condition_mapping = load_and_invert_condition_mapping(opts.mapping_file)
         if condition_mapping:
-            print(f"Loaded valid condition mapping with {len(condition_mapping)} conditions.")
+            print(f"Loaded and verified canonical mapping with {len(condition_mapping)} conditions.")
     except Exception as e:
-        print(f"\n[ERROR] Failed to load condition mapping: {e}", file=sys.stderr)
+        print(f"\n[ERROR] Failed to validate condition mapping: {e}", file=sys.stderr)
         return 1
 
     # 4. Run Aggregation Pipeline

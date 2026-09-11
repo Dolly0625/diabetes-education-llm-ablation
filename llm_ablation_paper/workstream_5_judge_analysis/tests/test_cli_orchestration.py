@@ -2,24 +2,38 @@
 
 Verifies:
   - run_judge confirm gate (fail-closed on missing/invalid token in live mode)
+  - run_judge API key security check (fail-closed when absent/empty without leaking key value)
+  - run_judge safe .env loading without overriding existing environment
   - run_judge input validation (rejects pilot, canary, unblinded raw leaks, duplicates, incomplete 12x4)
   - run_judge fake execution, atomic checkpoint/results output, and raw/parsed preservation
+  - run_judge & run_analysis default artifact paths anchored to PROJECT_ROOT/llm_ablation_paper/artifacts
+  - run_analysis canonical WS1 mapping validation (A-D -> opaque ID) and strict inversion
+  - run_analysis rejection of inverted/ambiguous/malformed mappings (strict fail-closed)
   - run_analysis execution, mapping ingestion, missing!=zero handling, and artifact generation
   - CLI --help options validation
 """
 
 import json
+import os
 from pathlib import Path
+from unittest.mock import patch
 import pytest
 
 from llm_ablation_paper.workstream_5_judge_analysis.run_judge import (
     run_judge_cli,
+    parse_args as parse_judge_args,
     FORMAL_CONFIRM_TOKEN,
     validate_formal_batch_requirements,
+    ensure_canonical_env_loaded,
+    PROJECT_ROOT as JUDGE_PROJECT_ROOT,
+    ARTIFACTS_ROOT as JUDGE_ARTIFACTS_ROOT,
 )
 from llm_ablation_paper.workstream_5_judge_analysis.run_analysis import (
     run_analysis_cli,
-    load_condition_mapping,
+    parse_args as parse_analysis_args,
+    load_and_invert_condition_mapping,
+    PROJECT_ROOT as ANALYSIS_PROJECT_ROOT,
+    ARTIFACTS_ROOT as ANALYSIS_ARTIFACTS_ROOT,
 )
 
 
@@ -83,6 +97,22 @@ def test_cli_help_options(capsys):
     assert "--output-dir" in out2
 
 
+def test_default_paths_anchored_to_project_root():
+    """Verify that both CLIs anchor default paths to PROJECT_ROOT/llm_ablation_paper/artifacts."""
+    # run_judge paths
+    judge_args = parse_judge_args([])
+    assert judge_args.input_path == JUDGE_ARTIFACTS_ROOT / "blinded_transcripts"
+    assert judge_args.checkpoint_dir == JUDGE_ARTIFACTS_ROOT / "judge_raw" / "checkpoints"
+    assert judge_args.output_file == JUDGE_ARTIFACTS_ROOT / "judge_raw" / "judge_results.jsonl"
+
+    # run_analysis paths
+    analysis_args = parse_analysis_args([])
+    assert analysis_args.trajectories_path == ANALYSIS_ARTIFACTS_ROOT / "blinded_transcripts"
+    assert analysis_args.judge_results_path == ANALYSIS_ARTIFACTS_ROOT / "judge_raw" / "judge_results.jsonl"
+    assert analysis_args.output_dir == ANALYSIS_ARTIFACTS_ROOT / "derived_results"
+    assert analysis_args.figures_dir == ANALYSIS_ARTIFACTS_ROOT / "figures"
+
+
 def test_run_judge_confirm_gate_fails_closed(fake_48_blinded_trajectories, tmp_path):
     """Verify formal live mode fails closed if confirm token is missing or wrong."""
     input_file, _ = fake_48_blinded_trajectories
@@ -102,6 +132,60 @@ def test_run_judge_confirm_gate_fails_closed(fake_48_blinded_trajectories, tmp_p
         "--confirm-formal-judge", "WRONG_TOKEN",
     ])
     assert code_wrong != 0
+
+
+def test_run_judge_api_key_check_fails_closed_and_does_not_leak(fake_48_blinded_trajectories, capsys, monkeypatch):
+    """Verify run_judge fails closed if GEMINI_API_KEY is missing/empty, without printing secrets."""
+    input_file, _ = fake_48_blinded_trajectories
+
+    # Case 1: GEMINI_API_KEY is unset
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    code = run_judge_cli([
+        "--input-path", str(input_file),
+        "--mode", "live",
+        "--confirm-formal-judge", FORMAL_CONFIRM_TOKEN,
+    ])
+    assert code != 0
+    stderr = capsys.readouterr().err
+    assert "GEMINI_API_KEY environment variable is not set" in stderr
+
+    # Case 2: GEMINI_API_KEY is empty/whitespace
+    monkeypatch.setenv("GEMINI_API_KEY", "   ")
+    code_empty = run_judge_cli([
+        "--input-path", str(input_file),
+        "--mode", "live",
+        "--confirm-formal-judge", FORMAL_CONFIRM_TOKEN,
+    ])
+    assert code_empty != 0
+
+    # Case 3: Ensure sensitive test string is NOT echoed anywhere
+    secret_canary = "SECRET_CANARY_VALUE_XYZ123"
+    monkeypatch.setenv("GEMINI_API_KEY", secret_canary)
+    # Even if an error happens downstream, secret_canary must not be in stdout/stderr
+    with patch("llm_ablation_paper.workstream_5_judge_analysis.run_judge.verify_canaries", side_effect=RuntimeError("simulated network error")):
+        code_sim = run_judge_cli([
+            "--input-path", str(input_file),
+            "--mode", "live",
+            "--confirm-formal-judge", FORMAL_CONFIRM_TOKEN,
+        ])
+        assert code_sim != 0
+        captured = capsys.readouterr()
+        assert secret_canary not in captured.out
+        assert secret_canary not in captured.err
+
+
+def test_ensure_canonical_env_loaded_does_not_override_existing(tmp_path, monkeypatch):
+    """Verify ensure_canonical_env_loaded uses override=False and preserves existing environment."""
+    test_key = "GEMINI_API_KEY"
+    monkeypatch.setenv(test_key, "ORIGINAL_EXISTING_KEY")
+
+    mock_env = tmp_path / ".env"
+    mock_env.write_text(f"{test_key}=NEW_IN_DOTENV\nOTHER_VAR=FOOBAR\n", encoding="utf-8")
+
+    with patch("llm_ablation_paper.workstream_5_judge_analysis.run_judge.PROJECT_ROOT", tmp_path):
+        ensure_canonical_env_loaded()
+        assert os.environ.get(test_key) == "ORIGINAL_EXISTING_KEY"
+        assert os.environ.get("OTHER_VAR") == "FOOBAR"
 
 
 def test_run_judge_input_validation_rejections():
@@ -177,6 +261,59 @@ def test_run_judge_fake_execution_and_results_structure(fake_48_blinded_trajecto
     assert len(list(ckpt_dir.glob("*.json"))) == 48
 
 
+def test_load_and_invert_condition_mapping_canonical_format(tmp_path):
+    """Verify canonical WS1 format (A-D -> opaque ID) is validated and inverted to (opaque ID -> A-D)."""
+    canonical_ws1_map = {
+        "A": "COND-ALPHA100",
+        "B": "COND-BETA200",
+        "C": "COND-GAMMA300",
+        "D": "COND-DELTA400",
+    }
+    mapping_file = tmp_path / "canonical_mapping.json"
+    mapping_file.write_text(json.dumps(canonical_ws1_map), encoding="utf-8")
+
+    inverted = load_and_invert_condition_mapping(mapping_file)
+    assert inverted == {
+        "COND-ALPHA100": "A",
+        "COND-BETA200": "B",
+        "COND-GAMMA300": "C",
+        "COND-DELTA400": "D",
+    }
+
+
+def test_load_and_invert_condition_mapping_rejections(tmp_path):
+    """Verify malformed or reversed mappings fail-closed via WS1 validate_condition_mapping."""
+    # 1. Reverse format (opaque ID as key) must be strictly rejected
+    reverse_map = {
+        "COND-ALPHA100": "A",
+        "COND-BETA200": "B",
+        "COND-GAMMA300": "C",
+        "COND-DELTA400": "D",
+    }
+    rev_file = tmp_path / "reverse.json"
+    rev_file.write_text(json.dumps(reverse_map), encoding="utf-8")
+    with pytest.raises(ValueError, match="condition_mapping must contain exactly keys"):
+        load_and_invert_condition_mapping(rev_file)
+
+    # 2. Missing keys
+    incomplete_map = {"A": "COND-1", "B": "COND-2", "C": "COND-3"}
+    inc_file = tmp_path / "incomplete.json"
+    inc_file.write_text(json.dumps(incomplete_map), encoding="utf-8")
+    with pytest.raises(ValueError, match="condition_mapping must contain exactly keys"):
+        load_and_invert_condition_mapping(inc_file)
+
+    # 3. Duplicate opaque values
+    duplicate_map = {"A": "COND-1", "B": "COND-1", "C": "COND-3", "D": "COND-4"}
+    dup_file = tmp_path / "duplicate.json"
+    dup_file.write_text(json.dumps(duplicate_map), encoding="utf-8")
+    with pytest.raises(ValueError, match="condition_mapping contains duplicate opaque IDs"):
+        load_and_invert_condition_mapping(dup_file)
+
+    # 4. File not found
+    with pytest.raises(FileNotFoundError):
+        load_and_invert_condition_mapping(tmp_path / "non_existent.json")
+
+
 def test_run_analysis_incomplete_judge_results_fails_closed(fake_48_blinded_trajectories, tmp_path):
     """Verify run_analysis rejects execution when trajectories lack judge evaluations."""
     input_file, _ = fake_48_blinded_trajectories
@@ -191,14 +328,14 @@ def test_run_analysis_incomplete_judge_results_fails_closed(fake_48_blinded_traj
     assert code != 0
 
 
-def test_run_analysis_end_to_end_with_mapping(fake_48_blinded_trajectories, tmp_path):
-    """Verify run_analysis end-to-end with external mapping producing unblinded tables."""
+def test_run_analysis_end_to_end_with_ws1_canonical_mapping(fake_48_blinded_trajectories, tmp_path):
+    """Verify run_analysis end-to-end with WS1 canonical mapping (A-D -> opaque ID) producing correct unblinded tables."""
     input_file, _ = fake_48_blinded_trajectories
     ckpt_dir = tmp_path / "checkpoints"
     judge_out = tmp_path / "judge_results.jsonl"
     canary_file = Path(__file__).parent.parent / "canary_trajectories.jsonl"
 
-    # 1. Run fake judge
+    # 1. Run fake judge to get mock judge results
     run_judge_cli([
         "--input-path", str(input_file),
         "--checkpoint-dir", str(ckpt_dir),
@@ -207,15 +344,15 @@ def test_run_analysis_end_to_end_with_mapping(fake_48_blinded_trajectories, tmp_
         "--mode", "fake",
     ])
 
-    # 2. Create mapping file
-    mapping = {
-        "COND-W111": "A",
-        "COND-X222": "B",
-        "COND-Y333": "C",
-        "COND-Z444": "D",
+    # 2. Create canonical WS1 mapping file (A-D -> opaque ID)
+    canonical_mapping = {
+        "A": "COND-W111",
+        "B": "COND-X222",
+        "C": "COND-Y333",
+        "D": "COND-Z444",
     }
-    mapping_file = tmp_path / "test_mapping.json"
-    mapping_file.write_text(json.dumps(mapping), encoding="utf-8")
+    mapping_file = tmp_path / "ws1_canonical_mapping.json"
+    mapping_file.write_text(json.dumps(canonical_mapping), encoding="utf-8")
 
     out_dir = tmp_path / "derived_results"
     fig_dir = tmp_path / "figures"
@@ -237,12 +374,24 @@ def test_run_analysis_end_to_end_with_mapping(fake_48_blinded_trajectories, tmp_
     assert (out_dir / "results.csv").exists()
     assert (fig_dir / "failure_distribution.png").exists()
 
+    # Verify summary.json content contains deblinded groups A, B, C, D
+    summary = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
+    by_cond = summary["summary_by_group"]
+    assert "A" in by_cond and by_cond["A"]["sample_size"] == 12
+    assert "B" in by_cond and by_cond["B"]["sample_size"] == 12
+    assert "C" in by_cond and by_cond["C"]["sample_size"] == 12
+    assert "D" in by_cond and by_cond["D"]["sample_size"] == 12
+
+    # Verify Markdown table contains unblinded conditions A-D with exact sample sizes
     md_content = (out_dir / "main_table.md").read_text(encoding="utf-8")
     assert "| A | 12 |" in md_content
     assert "| B | 12 |" in md_content
     assert "| C | 12 |" in md_content
     assert "| D | 12 |" in md_content
 
+    # Verify CSV file rows match A, B, C, D with sample size 12
     csv_content = (out_dir / "results.csv").read_text(encoding="utf-8")
     assert "A,12," in csv_content
     assert "B,12," in csv_content
+    assert "C,12," in csv_content
+    assert "D,12," in csv_content
