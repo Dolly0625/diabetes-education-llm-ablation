@@ -1057,17 +1057,17 @@
     "guard_override_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "條件 A、B、C 未啟用輸出防護罩（Output Guard），因此 guard_override_rate 為 0.0% 不能證明 Talker Agent 的自我約束能力；在適用條件下觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
     },
     "unexposed_tool_call_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "條件 A 與 B 本身即為全工具暴露結構（未實施動態工具門控），在此結構下未暴露工具調用率之資訊量有限；在適用條件下觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
     },
     "premature_summary_call_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "在適用條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
     }
   },
   "binary_outcome_patient_goal_met": {

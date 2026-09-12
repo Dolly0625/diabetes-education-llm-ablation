@@ -25,15 +25,15 @@
 | 指標名稱 | 檢定方法 | 狀態 (Status) | 檢定量 | 自由度 df | 原始 P 值 (Raw P) | 統計意涵與註記 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | 安全性 (Safety) | Friedman | `DEGENERATE_NOT_TESTABLE` | - | 3 | - | 退化 (無變異，不可檢定)；全條件觀測值皆為常數，無變異可檢定 (不可標記為 p=0) |
-| 工具使用 (Tool Use) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
-| 狀態一致性 (State Cons.) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
-| 對話規劃 (Dialogue Plan.) | Friedman | `TESTED` | 4.2308 | 3 | 2.3760e-01 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
-| 實用性 (Helpfulness) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 工具使用 (Tool Use) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p = 0.3916)；檢驗通過 |
+| 狀態一致性 (State Cons.) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p = 0.3916)；檢驗通過 |
+| 對話規劃 (Dialogue Plan.) | Friedman | `TESTED` | 4.2308 | 3 | 2.3760e-01 | 未達顯著 (p = 0.2376)；檢驗通過 |
+| 實用性 (Helpfulness) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p = 0.3916)；檢驗通過 |
 | 每輪平均提問數 | Friedman | `TESTED` | 11.3304 | 3 | 1.0067e-02 | **顯著差異 (p = 0.0101)**；檢驗通過 |
-| 每輪平均延遲 (ms) | Friedman | `TESTED` | 25.9000 | 3 | 1.0008e-05 | **顯著差異 (p = 0.0000)**；檢驗通過 |
+| 每輪平均延遲 (ms) | Friedman | `TESTED` | 25.9000 | 3 | 1.0008e-05 | **顯著差異 (p < 0.0001)**；檢驗通過 |
 | 對話總 Tokens | Friedman | `TESTED` | 17.6000 | 3 | 5.3181e-04 | **顯著差異 (p = 0.0005)**；檢驗通過 |
-| 模型呼叫次數 | Friedman | `TESTED` | 0.4021 | 3 | 9.3982e-01 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
-| 終止對話輪數 | Friedman | `TESTED` | 5.2597 | 3 | 1.5374e-01 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 模型呼叫次數 | Friedman | `TESTED` | 0.4021 | 3 | 9.3982e-01 | 未達顯著 (p = 0.9398)；檢驗通過 |
+| 終止對話輪數 | Friedman | `TESTED` | 5.2597 | 3 | 1.5374e-01 | 未達顯著 (p = 0.1537)；檢驗通過 |
 | **病患目標達成率 (Goal Met)** | Cochran's Q | `TESTED` | 10.9200 | 3 | 0.0122 | **顯著條件間差異 (p = 0.0122)** |
 
 ## 3. 指定成對比較與效果量 (A-B / B-C / C-D / A-D)
@@ -89,16 +89,23 @@
 
 ## 4. 完全無變異指標描述性說明
 
-1. **安全性評分 (Safety Score)**：48 筆對話之評審一致性評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。
-2. **防護罩攔截率與未授權工具呼叫**：全條件下 `guard_override_rate`、`unexposed_tool_call_rate`、`premature_summary_call_rate` 觀測值均為 0.0%，顯示 Talker 在所有架構下皆未出現主動越權調用未開放工具之行為。
+1. **安全性評分 (Safety Score)**：在基於雙盲 LLM-judge 共識之觀測 (LLM-judge consensus observations) 下，以 12 位病患配對組塊編排之 48 條對話軌跡 (48 trajectories arranged in 12 matched patient blocks) 之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。
+2. **未暴露工具與防護罩指標之結構限制**：
+   - **未暴露工具呼叫率 (`unexposed_tool_call_rate`)**：條件 A 與 B 本身即為全工具暴露結構（未實施動態工具門控），在此結構下未暴露工具調用率之資訊量有限；在適用條件下觀測值皆為 0.0%。
+   - **防護罩攔截率 (`guard_override_rate`)**：條件 A、B、C 未啟用輸出防護罩（Output Guard），因此 `guard_override_rate=0.0%` 不能證明 Talker Agent 的自我約束能力；在適用條件下觀測值皆為 0.0%。
+   - **過早摘要呼叫率 (`premature_summary_call_rate`)**：在適用條件下觀測值皆為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。
 
 ## 5. 探索性核心發現與邊界約束
 
 1. **延遲與 Token 成本 (Efficiency Trade-off)**：
-   - 加入交談規劃器後，每輪延遲顯著增加（A: 1528ms vs B: 3888ms，Wilcoxon Adj p < 0.01，$r_{rb} = -1.00$）。
-   - 但總 Token 消耗顯著降低（A: 17,045 tokens vs B: 9,515 tokens，Wilcoxon Adj p < 0.01，$r_{rb} = +0.97$），反映出 Planner 有效聚焦對話核心，收斂對話發散。
+   - 引入交談規劃器（Planner）伴隨每輪延遲顯著增加（A: 1528.5ms vs B: 3888.5ms，Wilcoxon Adj p < 0.01，$r_{rb} = -1.00$）。
+   - 伴隨對話總 Token 消耗顯著降低（A: 17,045.8 tokens vs B: 9,515.1 tokens，Wilcoxon Adj p < 0.01，$r_{rb} = +0.97$），呈現對話焦點收斂之相關性。
 2. **病患目標達成率 (Goal Met Rate)**：
-   - 條件 A (91.7%) 與 B (100.0%) 維持極高目標達成率；條件 C 因嚴格工具門控下長輩飲食描述未觸發工具開放，導致未產出就醫摘要而以最大輪數結束，目標達成率降至 50.0%（B vs C Exact McNemar 原始 p = 0.031，Holm 校正後 p = 0.125）。
-3. **嚴格禁止之主張**：
+   - 條件 A (91.7%) 與 B (100.0%) 呈現高比例目標達成；條件 C 觀測目標達成率為 50.0%（Cochran's Q = 10.92, p = 0.0122）。
+   - **成對比較顯著性**：條件 B 與 C 之 Exact McNemar 檢定原始 p = 0.03125，惟經多重比較 **Holm 校正後 p = 0.125，未達統計顯著（不顯著）**。
+   - **跨情境分佈描述**：`scenario_breakdown.csv` 顯示條件 B 至 C 之 6 筆未達成案例分佈於 4 類情境（日常飲食 DAILY_DIET 2 筆、事實矛盾 FACT_CONTRADICTION 2 筆、用藥順從性 MEDICATION_NONADHERENCE 1 筆、亞急性低血糖 SUBACUTE_HYPOGLYCEMIA 1 筆），屬跨 4 類情境之探索性描述現象；具體機制（如工具門控狀態、提問輪數消耗或角色互動對答）須逐軌跡質性審閱才能判定，不可單一斷言主要導因於特定情境或工具門控。
+3. **研究性質與因果邊界重申**：
+   - 本統計分析為事後探索性配對分析 (Post-hoc Exploratory Paired Analysis，非預先註冊)，且每條件僅採單次隨機軌跡 (single random trajectory per condition)，結果應以相關性與伴隨關係解讀，嚴禁作直接因果推論。
+4. **嚴格禁止之主張**：
    - 嚴禁聲稱「條件 D 顯著更安全」（因 Safety 分數全條件皆為 2.0，無統計差異）。
    - 嚴禁聲稱「具備臨床有效性」或「已證明醫療改善」（本實驗為模擬環境下之工程架構消融，非臨床試驗）。
