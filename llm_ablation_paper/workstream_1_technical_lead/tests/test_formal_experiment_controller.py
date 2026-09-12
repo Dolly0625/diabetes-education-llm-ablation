@@ -678,7 +678,10 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
         encoding="utf-8",
     )
     lines_max = [
-        json.dumps({"turn_index": i, "user_message": f"q{i}", "assistant_response": f"a{i}"})
+        json.dumps({
+            "turn_index": i, "user_message": f"q{i}", "assistant_response": f"a{i}",
+            "research_patient_id": "SP-002",
+        })
         for i in range(6)
     ]
     (state_max / "trajectories.jsonl").write_text("\n".join(lines_max) + "\n", encoding="utf-8")
@@ -794,3 +797,126 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
     with pytest.raises(ValueError, match="mismatch"):
         run_blind_export(raw_dir=mismatch_dir, mapping_file=map_file, output_dir=tmp_path / "out_mis2")
 
+
+# =====================================================================
+# 16. M4.2b Adversarial Tests: config.json 與逐筆軌跡一致性
+# =====================================================================
+def test_m42b_blind_export_hardening_adversarial(tmp_path: Path):
+    """驗證缺失/損毀 config.json、逐筆身分不符、turn_index 重複/缺口均會 Fail-Closed 拒絕。"""
+    map_file = tmp_path / "mapping.json"
+    generate_frozen_mapping(output_file=map_file)
+
+    def _setup_base_run(test_name: str) -> tuple[Path, Path, Path]:
+        base_dir = tmp_path / test_name
+        run_d = base_dir / "WS4-BATCH-SP-001-A"
+        st_d = run_d / "isolated_state"
+        st_d.mkdir(parents=True, exist_ok=True)
+        (run_d / "roleplay_result.json").write_text(
+            json.dumps({
+                "run_id": "WS4-BATCH-SP-001-A",
+                "condition": "A",
+                "patient_id": "SP-001",
+                "termination_reason": "MAX_TURNS",
+                "error_metadata": None,
+                "records": [{"turn": 1}, {"turn": 2}],
+            }),
+            encoding="utf-8",
+        )
+        (st_d / "config.json").write_text(
+            json.dumps({"run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "max_turns": 2}),
+            encoding="utf-8",
+        )
+        lines = [
+            json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+            json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1", "termination_reason": "MAX_TURNS"}),
+        ]
+        (st_d / "trajectories.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return base_dir, run_d, st_d
+
+    # 1. missing config.json -> 被拒
+    b_dir1, _, s_dir1 = _setup_base_run("test_missing_config")
+    (s_dir1 / "config.json").unlink()
+    with pytest.raises(ValueError, match="missing config.json"):
+        run_blind_export(raw_dir=b_dir1, mapping_file=map_file, output_dir=tmp_path / "out1")
+
+    # 2. malformed config.json (語法錯誤) -> 被拒
+    b_dir2, _, s_dir2 = _setup_base_run("test_malformed_syntax_config")
+    (s_dir2 / "config.json").write_text("{broken json...", encoding="utf-8")
+    with pytest.raises(ValueError, match="Cannot parse config.json"):
+        run_blind_export(raw_dir=b_dir2, mapping_file=map_file, output_dir=tmp_path / "out2")
+
+    # 3. malformed config.json (非 dict 型別，如 list) -> 被拒
+    b_dir3, _, s_dir3 = _setup_base_run("test_non_dict_config")
+    (s_dir3 / "config.json").write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+    with pytest.raises(ValueError, match="Malformed config.json"):
+        run_blind_export(raw_dir=b_dir3, mapping_file=map_file, output_dir=tmp_path / "out3")
+
+    # 4. trajectory identity mismatch: run_id mismatch
+    b_dir4, _, s_dir4 = _setup_base_run("test_traj_mismatch_run_id")
+    bad_lines4 = [
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-WRONG-RUN-ID", "condition": "A", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir4 / "trajectories.jsonl").write_text("\n".join(bad_lines4) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Trajectory identity mismatch.*turn run_id"):
+        run_blind_export(raw_dir=b_dir4, mapping_file=map_file, output_dir=tmp_path / "out4")
+
+    # 5. trajectory identity mismatch: condition mismatch
+    b_dir5, _, s_dir5 = _setup_base_run("test_traj_mismatch_condition")
+    bad_lines5 = [
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "B", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir5 / "trajectories.jsonl").write_text("\n".join(bad_lines5) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Trajectory identity mismatch.*turn condition"):
+        run_blind_export(raw_dir=b_dir5, mapping_file=map_file, output_dir=tmp_path / "out5")
+
+    # 6. trajectory identity mismatch: patient_id mismatch
+    b_dir6, _, s_dir6 = _setup_base_run("test_traj_mismatch_patient_id")
+    bad_lines6 = [
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-999", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir6 / "trajectories.jsonl").write_text("\n".join(bad_lines6) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Trajectory identity mismatch.*turn patient_id"):
+        run_blind_export(raw_dir=b_dir6, mapping_file=map_file, output_dir=tmp_path / "out6")
+
+    # 7. trajectory identity mismatch: research_patient_id mismatch
+    b_dir7, _, s_dir7 = _setup_base_run("test_traj_mismatch_research_patient_id")
+    bad_lines7 = [
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "research_patient_id": "SP-999", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "research_patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir7 / "trajectories.jsonl").write_text("\n".join(bad_lines7) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Trajectory identity mismatch.*turn research_patient_id"):
+        run_blind_export(raw_dir=b_dir7, mapping_file=map_file, output_dir=tmp_path / "out7")
+
+    # 8. turn_index 重複 -> 被拒
+    b_dir8, _, s_dir8 = _setup_base_run("test_duplicate_turn_index")
+    bad_lines8 = [
+        json.dumps({"turn_index": 0, "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 0, "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir8 / "trajectories.jsonl").write_text("\n".join(bad_lines8) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid turn_index sequence"):
+        run_blind_export(raw_dir=b_dir8, mapping_file=map_file, output_dir=tmp_path / "out8")
+
+    # 9. turn_index 缺口 -> 被拒
+    b_dir9, _, s_dir9 = _setup_base_run("test_gap_turn_index")
+    bad_lines9 = [
+        json.dumps({"turn_index": 0, "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 2, "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir9 / "trajectories.jsonl").write_text("\n".join(bad_lines9) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid turn_index sequence"):
+        run_blind_export(raw_dir=b_dir9, mapping_file=map_file, output_dir=tmp_path / "out9")
+
+    # 10. missing patient identity (patient_id 與 research_patient_id 均缺少) -> 被拒
+    b_dir10, _, s_dir10 = _setup_base_run("test_missing_patient_identity")
+    bad_lines10 = [
+        json.dumps({"turn_index": 0, "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir10 / "trajectories.jsonl").write_text("\n".join(bad_lines10) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Missing patient identity"):
+        run_blind_export(raw_dir=b_dir10, mapping_file=map_file, output_dir=tmp_path / "out10")
