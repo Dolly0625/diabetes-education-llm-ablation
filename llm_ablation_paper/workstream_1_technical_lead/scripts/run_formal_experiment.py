@@ -624,22 +624,97 @@ def run_blind_export(
 
         state_dir = run_dir if (run_dir / "trajectories.jsonl").exists() else (parent_run_dir / "isolated_state")
         state_cfg_file = state_dir / "config.json"
-        if state_cfg_file.exists():
+        if not state_cfg_file.exists():
+            raise ValueError(
+                f"Trajectory {run_id} is incomplete: missing config.json in {state_dir} (fail-closed)"
+            )
+        try:
+            state_cfg = json.loads(state_cfg_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise ValueError(
+                f"Cannot parse config.json in {state_dir}: {e} (fail-closed)"
+            ) from e
+        if not isinstance(state_cfg, dict):
+            raise ValueError(
+                f"Malformed config.json in {state_dir}: expected dict, got {type(state_cfg).__name__} (fail-closed)"
+            )
+
+        if state_cfg.get("run_id") and state_cfg.get("run_id") != rp_run_id:
+            raise ValueError(
+                f"run_id mismatch between roleplay_result ({rp_run_id}) and config.json ({state_cfg.get('run_id')}) in {parent_run_dir} (fail-closed)"
+            )
+        if state_cfg.get("condition") and state_cfg.get("condition") != rp_data.get("condition"):
+            raise ValueError(
+                f"condition mismatch between roleplay_result ({rp_data.get('condition')}) and config.json ({state_cfg.get('condition')}) in {parent_run_dir} (fail-closed)"
+            )
+        if state_cfg.get("patient_id") and state_cfg.get("patient_id") != rp_data.get("patient_id"):
+            raise ValueError(
+                f"patient_id mismatch between roleplay_result ({rp_data.get('patient_id')}) and config.json ({state_cfg.get('patient_id')}) in {parent_run_dir} (fail-closed)"
+            )
+
+        traj_lines = [l for l in tf.read_text(encoding="utf-8").splitlines() if l.strip()]
+        if not traj_lines:
+            raise ValueError(f"Trajectory {run_id} is incomplete: trajectories.jsonl is empty in {state_dir} (fail-closed)")
+
+        rp_condition = rp_data.get("condition")
+        rp_patient_id = rp_data.get("patient_id")
+
+        parsed_turns = []
+        for line_no, raw_line in enumerate(traj_lines):
             try:
-                state_cfg = json.loads(state_cfg_file.read_text(encoding="utf-8"))
-                if state_cfg.get("run_id") and state_cfg.get("run_id") != rp_run_id:
-                    raise ValueError(f"run_id mismatch between roleplay_result ({rp_run_id}) and config.json ({state_cfg.get('run_id')}) in {parent_run_dir} (fail-closed)")
-                if state_cfg.get("condition") and state_cfg.get("condition") != rp_data.get("condition"):
-                    raise ValueError(f"condition mismatch between roleplay_result ({rp_data.get('condition')}) and config.json ({state_cfg.get('condition')}) in {parent_run_dir} (fail-closed)")
-                if state_cfg.get("patient_id") and state_cfg.get("patient_id") != rp_data.get("patient_id"):
-                    raise ValueError(f"patient_id mismatch between roleplay_result ({rp_data.get('patient_id')}) and config.json ({state_cfg.get('patient_id')}) in {parent_run_dir} (fail-closed)")
+                turn_obj = json.loads(raw_line)
             except Exception as e:
-                if isinstance(e, ValueError):
-                    raise
-                pass
+                raise ValueError(
+                    f"Cannot parse trajectories.jsonl line {line_no} in {state_dir}: {e} (fail-closed)"
+                ) from e
+            if not isinstance(turn_obj, dict):
+                raise ValueError(
+                    f"Malformed trajectory line {line_no} in {state_dir}: expected dict, got {type(turn_obj).__name__} (fail-closed)"
+                )
+
+            # 驗證 run_id（若存在）
+            if turn_obj.get("run_id") is not None and turn_obj.get("run_id") != rp_run_id:
+                raise ValueError(
+                    f"Trajectory identity mismatch in turn {line_no} of {state_dir}: "
+                    f"turn run_id {turn_obj.get('run_id')!r} != roleplay_result run_id {rp_run_id!r} (fail-closed)"
+                )
+
+            # 驗證 condition（若存在）
+            if turn_obj.get("condition") is not None and turn_obj.get("condition") != rp_condition:
+                raise ValueError(
+                    f"Trajectory identity mismatch in turn {line_no} of {state_dir}: "
+                    f"turn condition {turn_obj.get('condition')!r} != roleplay_result condition {rp_condition!r} (fail-closed)"
+                )
+
+            # 驗證 patient_id 與 research_patient_id
+            turn_pid = turn_obj.get("patient_id")
+            turn_rpid = turn_obj.get("research_patient_id")
+            if turn_pid is None and turn_rpid is None:
+                raise ValueError(
+                    f"Missing patient identity in trajectory turn {line_no} of {state_dir} (fail-closed)"
+                )
+            if turn_pid is not None and turn_pid != rp_patient_id:
+                raise ValueError(
+                    f"Trajectory identity mismatch in turn {line_no} of {state_dir}: "
+                    f"turn patient_id {turn_pid!r} != roleplay_result patient_id {rp_patient_id!r} (fail-closed)"
+                )
+            if turn_rpid is not None and turn_rpid != rp_patient_id:
+                raise ValueError(
+                    f"Trajectory identity mismatch in turn {line_no} of {state_dir}: "
+                    f"turn research_patient_id {turn_rpid!r} != roleplay_result patient_id {rp_patient_id!r} (fail-closed)"
+                )
+
+            parsed_turns.append(turn_obj)
+
+        # 驗證 turn_index 序列無重複、無缺口 (必須為 0, 1, ..., len-1)
+        actual_indices = [t.get("turn_index") for t in parsed_turns]
+        expected_indices = list(range(len(parsed_turns)))
+        if actual_indices != expected_indices:
+            raise ValueError(
+                f"Invalid turn_index sequence in {state_dir}: expected {expected_indices}, got {actual_indices} (fail-closed)"
+            )
 
         if "records" in rp_data and isinstance(rp_data["records"], list):
-            traj_lines = [l for l in tf.read_text(encoding="utf-8").splitlines() if l.strip()]
             if len(rp_data["records"]) != len(traj_lines):
                 raise ValueError(
                     f"Turn count mismatch in {parent_run_dir}: roleplay_result records count ({len(rp_data['records'])}) "
