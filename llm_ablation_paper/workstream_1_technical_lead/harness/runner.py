@@ -731,15 +731,25 @@ def to_contract_trajectory(
     state_dir: Path | str,
     condition_mapping: Optional[dict[str, str]] = None,
     allow_incomplete: bool = True,
+    termination_reason_override: Optional[str] = None,
 ) -> dict:
     """Convert flat JSONL per-turn records into EXPERIMENT_CONTRACT trajectory JSON.
 
     Guarantees:
       - patient_id is strictly derived from turn record (never patient_text).
-      - termination_reason is None unless max_turns reached or stopped by guard/error.
+      - termination_reason is None unless max_turns reached or stopped by guard/error,
+        or overridden by a strictly validated run-level termination_reason_override.
       - if allow_incomplete=False, rejects incomplete trajectories.
       - preserves token_usage.
     """
+    ALLOWED_OVERRIDE_REASONS = frozenset({"PATIENT_GOAL_MET", "MAX_TURNS", "COMMON_INPUT_BLOCK"})
+    if termination_reason_override is not None:
+        if termination_reason_override not in ALLOWED_OVERRIDE_REASONS:
+            raise ValueError(
+                f"Invalid termination_reason_override: {termination_reason_override!r}. "
+                f"Must be one of {sorted(ALLOWED_OVERRIDE_REASONS)} (ERROR, None, or unknown rejected, fail-closed)."
+            )
+
     sd = Path(state_dir)
     artifact_dir = _resolve_artifact_dir(sd, run_id)
     traj_path = sd / "trajectories.jsonl"
@@ -773,6 +783,7 @@ def to_contract_trajectory(
     termination_reason = None
     error = None
     last_turn_obj = None
+    has_turn_level_error = False
     if traj_path.exists():
         for line in traj_path.read_text(encoding="utf-8").strip().splitlines():
             if not line.strip():
@@ -791,15 +802,29 @@ def to_contract_trajectory(
                 "latency_ms": obj.get("latency_ms", 0),
                 "token_usage": obj.get("token_usage", None),
             })
-            if obj.get("termination_reason"):
+            if obj.get("termination_reason") == "ERROR":
+                has_turn_level_error = True
+                termination_reason = "ERROR"
+            elif obj.get("termination_reason"):
                 termination_reason = obj.get("termination_reason")
             if obj.get("error"):
                 error = obj.get("error")
+                has_turn_level_error = True
+            if obj.get("error_metadata") is not None and error is None:
+                error = str(obj.get("error_metadata"))
+                has_turn_level_error = True
 
-    # 只有實際最後一輪達到 config.max_turns 才能寫 MAX_TURNS
     max_turns = config_data.get("max_turns", 10)
-    if termination_reason is None and len(turns) >= max_turns and len(turns) > 0:
-        termination_reason = "MAX_TURNS"
+    if termination_reason_override is not None:
+        if error is not None or has_turn_level_error:
+            raise ValueError(
+                f"Cannot apply termination_reason_override to trajectory {run_id} with error: {error!r} (fail-closed)"
+            )
+        termination_reason = termination_reason_override
+    else:
+        # 只有實際最後一輪達到 config.max_turns 才能寫 MAX_TURNS
+        if termination_reason is None and len(turns) >= max_turns and len(turns) > 0:
+            termination_reason = "MAX_TURNS"
 
     # 若不允許未完成軌跡，但 termination_reason 仍為 None，拒絕進入正式 completed artifact
     if not allow_incomplete and termination_reason is None:
@@ -854,6 +879,7 @@ def to_blinded_contract_trajectory(
     condition_mapping: Optional[dict[str, str]] = None,
     blinded_run_id: Optional[str] = None,
     require_completed: bool = True,
+    termination_reason_override: Optional[str] = None,
 ) -> dict:
     """Produce blinded trajectory contract for Workstream 5 (Judge).
 
@@ -873,6 +899,7 @@ def to_blinded_contract_trajectory(
         state_dir,
         condition_mapping=valid_map,
         allow_incomplete=not require_completed,
+        termination_reason_override=termination_reason_override,
     )
 
     if require_completed and contract.get("termination_reason") is None:
@@ -883,6 +910,7 @@ def to_blinded_contract_trajectory(
     contract["state_dir_id"] = f"STATE-{b_id}"
     contract.pop("condition", None)
     contract.pop("mapping", None)
+    contract.pop("research_patient_id", None)
 
     forbidden_keys = {
         "enable_planner",
@@ -894,11 +922,16 @@ def to_blinded_contract_trajectory(
         "planner_enabled",
         "condition",
         "mapping",
+        "research_patient_id",
     }
 
     def _strip_forbidden(item: Any) -> Any:
         if isinstance(item, dict):
-            return {k: _strip_forbidden(v) for k, v in item.items() if k not in forbidden_keys}
+            return {
+                k: _strip_forbidden(v)
+                for k, v in item.items()
+                if k not in forbidden_keys and not k.startswith("enable_") and k != "research_patient_id"
+            }
         elif isinstance(item, list):
             return [_strip_forbidden(v) for v in item]
         return item

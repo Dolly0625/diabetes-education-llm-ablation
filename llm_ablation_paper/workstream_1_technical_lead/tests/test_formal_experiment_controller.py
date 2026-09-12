@@ -114,6 +114,7 @@ def _create_mock_run_dir(
         "run_id": run_id,
         "condition": condition,
         "patient_id": patient_id,
+        "records": [{"turn": idx + 1} for idx in range(num_turns)],
         "termination_reason": "ERROR" if is_error else "MAX_TURNS",
         "error_metadata": "Simulated error" if is_error else None,
     }
@@ -614,3 +615,182 @@ def test_cli_entrypoint(tmp_path: Path):
     exit_code = main(["generate-mapping", "--output-file", str(map_out)])
     assert exit_code == 0
     assert map_out.exists()
+
+
+# =====================================================================
+# 15. M4.2 Blind Export Wiring 與嚴格驗證測試
+# =====================================================================
+def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
+    """驗證 M4.2 終止理由傳遞、合約一致性校驗與去識別化保證。"""
+    map_file = tmp_path / "mapping.json"
+    mapping = generate_frozen_mapping(output_file=map_file)
+
+    # 1. 提前 PATIENT_GOAL_MET 的 run (例如 2 turns < 6 turns) 可成功匯出，合約理由為 PATIENT_GOAL_MET
+    raw_dir_early = tmp_path / "raw_early"
+    run_early = raw_dir_early / "WS4-BATCH-SP-001-A"
+    state_early = run_early / "isolated_state"
+    state_early.mkdir(parents=True, exist_ok=True)
+    (state_early / "config.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "max_turns": 6}),
+        encoding="utf-8",
+    )
+    lines_early = [
+        json.dumps({
+            "turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-001",
+            "enable_planner": False,
+        }),
+        json.dumps({
+            "turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-001",
+            "enable_planner": False,
+        }),
+    ]
+    (state_early / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+    (run_early / "roleplay_result.json").write_text(
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001",
+            "termination_reason": "PATIENT_GOAL_MET", "error_metadata": None,
+            "records": [{"turn": 1}, {"turn": 2}],
+        }),
+        encoding="utf-8",
+    )
+    out_early = tmp_path / "out_early"
+    res_early = run_blind_export(raw_dir=raw_dir_early, mapping_file=map_file, output_dir=out_early)
+    assert res_early["exported_count"] == 1
+    exported_files = list(out_early.glob("*.json"))
+    assert len(exported_files) == 1
+    content_early = json.loads(exported_files[0].read_text(encoding="utf-8"))
+    assert content_early["termination_reason"] == "PATIENT_GOAL_MET"
+
+    # 驗證絕無殘留欄位與原始識別
+    raw_content = exported_files[0].read_text(encoding="utf-8")
+    assert "research_patient_id" not in raw_content
+    assert "enable_" not in raw_content
+    assert '"WS4-' not in raw_content
+    assert content_early["patient_id"] == "SP-001"
+
+    # 2. 達 MAX_TURNS (6 turns) 正常 export
+    raw_dir_max = tmp_path / "raw_max"
+    run_max = raw_dir_max / "WS4-BATCH-SP-002-B"
+    state_max = run_max / "isolated_state"
+    state_max.mkdir(parents=True, exist_ok=True)
+    (state_max / "config.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-SP-002-B", "condition": "B", "patient_id": "SP-002", "max_turns": 6}),
+        encoding="utf-8",
+    )
+    lines_max = [
+        json.dumps({"turn_index": i, "user_message": f"q{i}", "assistant_response": f"a{i}"})
+        for i in range(6)
+    ]
+    (state_max / "trajectories.jsonl").write_text("\n".join(lines_max) + "\n", encoding="utf-8")
+    (run_max / "roleplay_result.json").write_text(
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-002-B", "condition": "B", "patient_id": "SP-002",
+            "termination_reason": "MAX_TURNS", "error_metadata": None,
+            "records": [{"turn": i + 1} for i in range(6)],
+        }),
+        encoding="utf-8",
+    )
+    out_max = tmp_path / "out_max"
+    res_max = run_blind_export(raw_dir=raw_dir_max, mapping_file=map_file, output_dir=out_max)
+    assert res_max["exported_count"] == 1
+    content_max = json.loads(list(out_max.glob("*.json"))[0].read_text(encoding="utf-8"))
+    assert content_max["termination_reason"] == "MAX_TURNS"
+
+    # 3. roleplay_result termination_reason 為 None、未知或 error_metadata 非空時被拒絕
+    for bad_reason in (None, "UNKNOWN_REASON", "INVALID"):
+        bad_dir = tmp_path / f"raw_bad_{bad_reason}"
+        run_bad = bad_dir / "WS4-BATCH-SP-003-C"
+        s_bad = run_bad / "isolated_state"
+        s_bad.mkdir(parents=True, exist_ok=True)
+        (s_bad / "config.json").write_text(
+            json.dumps({"run_id": "WS4-BATCH-SP-003-C", "condition": "C", "patient_id": "SP-003", "max_turns": 6}),
+            encoding="utf-8",
+        )
+        (s_bad / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+        (run_bad / "roleplay_result.json").write_text(
+            json.dumps({
+                "run_id": "WS4-BATCH-SP-003-C", "condition": "C", "patient_id": "SP-003",
+                "termination_reason": bad_reason, "error_metadata": None,
+            }),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError):
+            run_blind_export(raw_dir=bad_dir, mapping_file=map_file, output_dir=tmp_path / f"out_bad_{bad_reason}")
+
+    # error_metadata 非空被拒絕排除
+    err_meta_dir = tmp_path / "raw_err_meta"
+    run_err = err_meta_dir / "WS4-BATCH-SP-004-D"
+    s_err = run_err / "isolated_state"
+    s_err.mkdir(parents=True, exist_ok=True)
+    (s_err / "config.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-SP-004-D", "condition": "D", "patient_id": "SP-004", "max_turns": 6}),
+        encoding="utf-8",
+    )
+    (s_err / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+    (run_err / "roleplay_result.json").write_text(
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-004-D", "condition": "D", "patient_id": "SP-004",
+            "termination_reason": "PATIENT_GOAL_MET", "error_metadata": {"code": 500},
+        }),
+        encoding="utf-8",
+    )
+    res_err = run_blind_export(raw_dir=err_meta_dir, mapping_file=map_file, output_dir=tmp_path / "out_err_meta")
+    assert res_err["skipped_error"] == 1
+    assert res_err["exported_count"] == 0
+
+    # 4. 具 per-turn nested ERROR 的 run 即使 roleplay_result 標示非 ERROR，仍被排除
+    nested_err_dir = tmp_path / "raw_nested_err"
+    run_nested = nested_err_dir / "WS4-BATCH-SP-005-A"
+    s_nested = run_nested / "isolated_state"
+    s_nested.mkdir(parents=True, exist_ok=True)
+    (s_nested / "config.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-SP-005-A", "condition": "A", "patient_id": "SP-005", "max_turns": 6}),
+        encoding="utf-8",
+    )
+    lines_nested = [
+        json.dumps({"turn_index": 0, "user_message": "q1", "assistant_response": "a1", "termination_reason": "ERROR"}),
+    ]
+    (s_nested / "trajectories.jsonl").write_text("\n".join(lines_nested) + "\n", encoding="utf-8")
+    (run_nested / "roleplay_result.json").write_text(
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-005-A", "condition": "A", "patient_id": "SP-005",
+            "termination_reason": "PATIENT_GOAL_MET", "error_metadata": None,
+        }),
+        encoding="utf-8",
+    )
+    res_nested = run_blind_export(raw_dir=nested_err_dir, mapping_file=map_file, output_dir=tmp_path / "out_nested")
+    assert res_nested["skipped_error"] == 1
+    assert res_nested["exported_count"] == 0
+
+    # 5. identity 不一致或 turn 數不一致被拒絕
+    mismatch_dir = tmp_path / "raw_mismatch"
+    run_mis = mismatch_dir / "WS4-BATCH-SP-006-A"
+    s_mis = run_mis / "isolated_state"
+    s_mis.mkdir(parents=True, exist_ok=True)
+    (s_mis / "config.json").write_text(
+        json.dumps({"run_id": "WS4-BATCH-SP-006-A", "condition": "A", "patient_id": "SP-006", "max_turns": 6}),
+        encoding="utf-8",
+    )
+    (s_mis / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+    # run_id mismatch
+    (run_mis / "roleplay_result.json").write_text(
+        json.dumps({
+            "run_id": "WS4-BATCH-WRONG-A", "condition": "A", "patient_id": "SP-006",
+            "termination_reason": "PATIENT_GOAL_MET",
+        }),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="mismatch"):
+        run_blind_export(raw_dir=mismatch_dir, mapping_file=map_file, output_dir=tmp_path / "out_mis")
+
+    # records count mismatch
+    (run_mis / "roleplay_result.json").write_text(
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-006-A", "condition": "A", "patient_id": "SP-006",
+            "termination_reason": "PATIENT_GOAL_MET", "records": [{"turn": 1}],  # only 1 record while 2 turns in traj
+        }),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="mismatch"):
+        run_blind_export(raw_dir=mismatch_dir, mapping_file=map_file, output_dir=tmp_path / "out_mis2")
+

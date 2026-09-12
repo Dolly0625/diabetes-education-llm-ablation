@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -530,15 +531,24 @@ def scan_blinded_payload_for_leakage(payload_str: str, mapping: dict[str, str]) 
         if f'"condition": "{real_cond}"' in payload_str or f'"condition":"{real_cond}"' in payload_str:
             raise ValueError(f"Leakage detected: unblinded condition label {real_cond} in payload")
 
-    # 2. 不得出現內部消融標誌
+    # 2. 不得出現內部消融標誌與內部敏感欄位
     forbidden_keys = [
         "enable_planner", "enable_dynamic_tool_gate", "enable_output_guard",
         "enable_forced_retrieval", "enable_fixed_warning_append",
-        "enable_question_budget_postprocessing", "dynamic_tool_gate"
+        "enable_question_budget_postprocessing", "dynamic_tool_gate",
+        "research_patient_id",
     ]
     for fk in forbidden_keys:
         if f'"{fk}"' in payload_str:
-            raise ValueError(f"Leakage detected: internal ablation flag {fk} in payload")
+            raise ValueError(f"Leakage detected: internal ablation flag or field {fk} in payload")
+
+    m_enable = re.search(r'"enable_[a-zA-Z0-9_]+"', payload_str)
+    if m_enable:
+        raise ValueError(f"Leakage detected: internal ablation flag {m_enable.group(0)} in payload")
+
+    # 3. 不得出現原始 WS4- 前綴的 run id
+    if '"WS4-' in payload_str:
+        raise ValueError("Leakage detected: raw 'WS4-' run id prefix in blinded payload")
 
 
 def run_blind_export(
@@ -590,12 +600,67 @@ def run_blind_export(
             skipped_error += 1
             continue
 
+        # 讀 parent_run_dir/roleplay_result.json；缺檔 fail-closed (標記為 incomplete)
+        roleplay_file = parent_run_dir / "roleplay_result.json"
+        if not roleplay_file.exists():
+            raise ValueError(
+                f"Trajectory {run_id} is incomplete: missing roleplay_result.json in {parent_run_dir} (fail-closed)"
+            )
+        try:
+            rp_data = json.loads(roleplay_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise ValueError(f"Cannot parse roleplay_result.json in {parent_run_dir}: {e} (fail-closed)") from e
+
+        # 驗一致性：roleplay_result.run_id == run_id（目錄名）、patient_id/condition 存在；不一致 -> fail-closed
+        rp_run_id = rp_data.get("run_id")
+        if rp_run_id != run_id:
+            raise ValueError(
+                f"Run ID mismatch in {parent_run_dir}: roleplay_result run_id {rp_run_id!r} != directory {run_id!r} (fail-closed)"
+            )
+        if not rp_data.get("patient_id"):
+            raise ValueError(f"Missing patient_id in roleplay_result.json of {parent_run_dir} (fail-closed)")
+        if not rp_data.get("condition"):
+            raise ValueError(f"Missing condition in roleplay_result.json of {parent_run_dir} (fail-closed)")
+
+        state_dir = run_dir if (run_dir / "trajectories.jsonl").exists() else (parent_run_dir / "isolated_state")
+        state_cfg_file = state_dir / "config.json"
+        if state_cfg_file.exists():
+            try:
+                state_cfg = json.loads(state_cfg_file.read_text(encoding="utf-8"))
+                if state_cfg.get("run_id") and state_cfg.get("run_id") != rp_run_id:
+                    raise ValueError(f"run_id mismatch between roleplay_result ({rp_run_id}) and config.json ({state_cfg.get('run_id')}) in {parent_run_dir} (fail-closed)")
+                if state_cfg.get("condition") and state_cfg.get("condition") != rp_data.get("condition"):
+                    raise ValueError(f"condition mismatch between roleplay_result ({rp_data.get('condition')}) and config.json ({state_cfg.get('condition')}) in {parent_run_dir} (fail-closed)")
+                if state_cfg.get("patient_id") and state_cfg.get("patient_id") != rp_data.get("patient_id"):
+                    raise ValueError(f"patient_id mismatch between roleplay_result ({rp_data.get('patient_id')}) and config.json ({state_cfg.get('patient_id')}) in {parent_run_dir} (fail-closed)")
+            except Exception as e:
+                if isinstance(e, ValueError):
+                    raise
+                pass
+
+        if "records" in rp_data and isinstance(rp_data["records"], list):
+            traj_lines = [l for l in tf.read_text(encoding="utf-8").splitlines() if l.strip()]
+            if len(rp_data["records"]) != len(traj_lines):
+                raise ValueError(
+                    f"Turn count mismatch in {parent_run_dir}: roleplay_result records count ({len(rp_data['records'])}) "
+                    f"!= trajectory lines count ({len(traj_lines)}) (fail-closed)"
+                )
+
+        # 取 termination_reason 與 error_metadata；error_metadata 非 null -> fail-closed
+        if rp_data.get("error_metadata") is not None:
+            raise ValueError(
+                f"Run {run_id} contains non-null error_metadata in roleplay_result.json: {rp_data.get('error_metadata')!r} (fail-closed)"
+            )
+
+        run_level_reason = rp_data.get("termination_reason")
+
         state_dir = run_dir if (run_dir / "trajectories.jsonl").exists() else (parent_run_dir / "isolated_state")
         blinded_obj = to_blinded_contract_trajectory(
             run_id=run_id,
             state_dir=state_dir,
             condition_mapping=mapping,
             require_completed=True,
+            termination_reason_override=run_level_reason,
         )
 
         payload_str = json.dumps(blinded_obj, ensure_ascii=False)
