@@ -29,3 +29,12 @@ models/
 # Generated ablation runs: keep only the compact engineering summary
 llm_ablation_paper/artifacts/workstream_1/*
 !llm_ablation_paper/artifacts/workstream_1/dry_run_summary.json
+
+# Runtime & sensitive ablation artifacts
+llm_ablation_paper/artifacts/raw_transcripts*/
+llm_ablation_paper/artifacts/blinded_transcripts*/
+llm_ablation_paper/artifacts/judge_raw*/
+llm_ablation_paper/artifacts/pilot_m3*/
+llm_ablation_paper/artifacts/tool_canary*/
+frozen_config/frozen_condition_mapping.json
+**/frozen_condition_mapping.json

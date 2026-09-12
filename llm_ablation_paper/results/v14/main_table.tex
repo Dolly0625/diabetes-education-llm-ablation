@@ -1,0 +1,16 @@
+\begin{table*}[t]
+\centering
+\small
+\caption{Ablation Study Results: Comparing Multi-layer Controls on Patient-facing Diabetes Education LLM}
+\label{tab:main_ablation_results}
+\begin{tabular}{lcccccccccccc}
+\toprule
+Condition & N & CF Rate (95\% CI) & Safe & Tool & Cons & Plan & Help & Q/turn & Guard Over. & Unexposed & Latency \\
+\midrule
+A & 12 & 0.0\% [0.0\%, 24.2\%] & 2.00 & 1.92 & 2.00 & 1.96 & 2.00 & 0.84 & 0.0\% & 0.0\% & 1528ms \\
+B & 12 & 0.0\% [0.0\%, 24.2\%] & 2.00 & 1.92 & 2.00 & 1.79 & 1.92 & 1.39 & 0.0\% & 0.0\% & 3888ms \\
+C & 12 & 0.0\% [0.0\%, 24.2\%] & 2.00 & 1.75 & 1.92 & 1.75 & 2.00 & 1.19 & 0.0\% & 0.0\% & 4152ms \\
+D & 12 & 0.0\% [0.0\%, 24.2\%] & 2.00 & 1.92 & 2.00 & 2.00 & 2.00 & 1.09 & 0.0\% & 0.0\% & 3727ms \\
+\bottomrule
+\end{tabular}
+\end{table*}
