@@ -281,6 +281,9 @@ def test_ws4_runner_checkpoint_resume_contract(tmp_path: Path, monkeypatch: pyte
             raise RuntimeError("simulated transient network partition")
         turn_idx = len(kwargs["messages"]) - 1
         return [{
+            "run_id": kwargs.get("run_id", "WS4-FAKE-SP-002-B"),
+            "condition": "B",
+            "patient_id": "SP-002",
             "assistant_response": "請問您有規律驗血糖嗎？",
             "termination_reason": None,
             "turn_index": turn_idx,
@@ -303,6 +306,9 @@ def test_ws4_runner_checkpoint_resume_contract(tmp_path: Path, monkeypatch: pyte
     def succeeding_harness(**kwargs):
         turn_idx = len(kwargs["messages"]) - 1
         return [{
+            "run_id": kwargs.get("run_id", "WS4-FAKE-SP-002-B"),
+            "condition": "B",
+            "patient_id": "SP-002",
             "assistant_response": "請問您有規律驗血糖嗎？",
             "termination_reason": None,
             "turn_index": turn_idx,
@@ -369,6 +375,9 @@ def test_ws4_runner_all_termination_reasons_contract(tmp_path: Path, monkeypatch
 
     def error_turn(**kwargs):
         turn = {
+            "run_id": kwargs.get("run_id", "WS4-FAKE-SP-001-C"),
+            "condition": "C",
+            "patient_id": "SP-001",
             "assistant_response": "error response",
             "termination_reason": "ERROR",
             "turn_index": len(kwargs["messages"]) - 1,
@@ -591,8 +600,11 @@ def test_stage2_cross_workstream_fake_e2e_pipeline(tmp_path: Path):
         turns = []
         for i in range(6):
             t = {
-                "turn_index": i,
+                "run_id": run_id,
+                "condition": condition,
+                "patient_id": pid,
                 "research_patient_id": pid,
+                "turn_index": i,
                 "user_message": f"病患第 {i+1} 輪提問",
                 "assistant_response": f"衛教師第 {i+1} 輪回應",
                 "called_tools": [],
@@ -791,8 +803,25 @@ def test_stage2_blind_export_excludes_and_rejects(tmp_path: Path):
             encoding="utf-8",
         )
         lines = [
-            json.dumps({"turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-001"}),
-            json.dumps({"turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-001", "termination_reason": term_reason}),
+            json.dumps({
+                "run_id": run_id,
+                "condition": "A",
+                "patient_id": "SP-001",
+                "research_patient_id": "SP-001",
+                "turn_index": 0,
+                "user_message": "q1",
+                "assistant_response": "a1",
+            }),
+            json.dumps({
+                "run_id": run_id,
+                "condition": "A",
+                "patient_id": "SP-001",
+                "research_patient_id": "SP-001",
+                "turn_index": 1,
+                "user_message": "q2",
+                "assistant_response": "a2",
+                "termination_reason": term_reason,
+            }),
         ]
         (s_dir / "trajectories.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
         (r_dir / "roleplay_result.json").write_text(
@@ -832,7 +861,15 @@ def test_stage2_blind_export_excludes_and_rejects(tmp_path: Path):
             json.dumps({"run_id": "WS4-BATCH-INC-A", "condition": "A", "patient_id": "SP-001", "max_turns": 6})
         ),
         (incomplete_raw / "WS4-BATCH-INC-A" / "isolated_state" / "trajectories.jsonl").write_text(
-            json.dumps({"turn_index": 0, "user_message": "hi", "assistant_response": "ok", "research_patient_id": "SP-001"}) + "\n"
+            json.dumps({
+                "run_id": "WS4-BATCH-INC-A",
+                "condition": "A",
+                "patient_id": "SP-001",
+                "research_patient_id": "SP-001",
+                "turn_index": 0,
+                "user_message": "hi",
+                "assistant_response": "ok",
+            }) + "\n"
         ),
     )
     _make_run_inc()
@@ -982,8 +1019,11 @@ def test_adversarial_deblinding_direction_and_table_restoration(tmp_path: Path):
         turns = []
         for i in range(6):
             t = {
-                "turn_index": i,
+                "run_id": run_id,
+                "condition": condition,
+                "patient_id": pid,
                 "research_patient_id": pid,
+                "turn_index": i,
                 "user_message": f"病患第 {i+1} 輪提問",
                 "assistant_response": f"衛教師第 {i+1} 輪針對條件 {condition} 之回應",
                 "called_tools": [],
@@ -1129,8 +1169,25 @@ def test_adversarial_blind_export_rejects_incomplete_and_no_cli_flag(tmp_path: P
     )
     # Only 2 turns out of 6, termination_reason is None
     lines = [
-        json.dumps({"turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-001"}),
-        json.dumps({"turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-001", "termination_reason": None}),
+        json.dumps({
+            "run_id": "WS4-BATCH-INC-001-A",
+            "condition": "A",
+            "patient_id": "SP-001",
+            "research_patient_id": "SP-001",
+            "turn_index": 0,
+            "user_message": "q1",
+            "assistant_response": "a1",
+        }),
+        json.dumps({
+            "run_id": "WS4-BATCH-INC-001-A",
+            "condition": "A",
+            "patient_id": "SP-001",
+            "research_patient_id": "SP-001",
+            "turn_index": 1,
+            "user_message": "q2",
+            "assistant_response": "a2",
+            "termination_reason": None,
+        }),
     ]
     (state_dir / "trajectories.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (run_dir / "roleplay_result.json").write_text(
