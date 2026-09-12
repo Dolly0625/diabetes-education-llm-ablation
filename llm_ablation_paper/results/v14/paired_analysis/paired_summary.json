@@ -1,0 +1,1147 @@
+{
+  "study_design": "12 patients x 4 conditions repeated measures (N=12/group, Total=48 runs)",
+  "analysis_type": "Post-hoc exploratory paired analysis (Non-preregistered)",
+  "descriptive_statistics": {
+    "safety": {
+      "A": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "B": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "C": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "D": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      }
+    },
+    "tool_use": {
+      "A": {
+        "mean": 1.9166666666666667,
+        "std": 0.19462473604038072,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 1.5,
+        "max": 2.0
+      },
+      "B": {
+        "mean": 1.9166666666666667,
+        "std": 0.28867513459481287,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "C": {
+        "mean": 1.75,
+        "std": 0.3988620176087328,
+        "median": 2.0,
+        "q25": 1.5,
+        "q75": 2.0,
+        "iqr": 0.5,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "D": {
+        "mean": 1.9166666666666667,
+        "std": 0.28867513459481287,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 1.0,
+        "max": 2.0
+      }
+    },
+    "state_consistency": {
+      "A": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "B": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "C": {
+        "mean": 1.9166666666666667,
+        "std": 0.28867513459481287,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "D": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      }
+    },
+    "dialogue_planning": {
+      "A": {
+        "mean": 1.9583333333333333,
+        "std": 0.14433756729740643,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 1.5,
+        "max": 2.0
+      },
+      "B": {
+        "mean": 1.7916666666666667,
+        "std": 0.39648073054937955,
+        "median": 2.0,
+        "q25": 1.875,
+        "q75": 2.0,
+        "iqr": 0.125,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "C": {
+        "mean": 1.75,
+        "std": 0.45226701686664544,
+        "median": 2.0,
+        "q25": 1.75,
+        "q75": 2.0,
+        "iqr": 0.25,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "D": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      }
+    },
+    "helpfulness": {
+      "A": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "B": {
+        "mean": 1.9166666666666667,
+        "std": 0.28867513459481287,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "C": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "D": {
+        "mean": 2.0,
+        "std": 0.0,
+        "median": 2.0,
+        "q25": 2.0,
+        "q75": 2.0,
+        "iqr": 0.0,
+        "min": 2.0,
+        "max": 2.0
+      }
+    },
+    "avg_questions_per_turn": {
+      "A": {
+        "mean": 0.8375,
+        "std": 0.33583342732534965,
+        "median": 0.9,
+        "q25": 0.75,
+        "q75": 1.0,
+        "iqr": 0.25,
+        "min": 0.0,
+        "max": 1.25
+      },
+      "B": {
+        "mean": 1.3916666666666666,
+        "std": 0.43528117001508,
+        "median": 1.45,
+        "q25": 1.1875,
+        "q75": 1.575,
+        "iqr": 0.38749999999999996,
+        "min": 0.5,
+        "max": 2.0
+      },
+      "C": {
+        "mean": 1.1874999999999998,
+        "std": 0.5143950551154945,
+        "median": 1.1,
+        "q25": 0.95,
+        "q75": 1.275,
+        "iqr": 0.32499999999999996,
+        "min": 0.5,
+        "max": 2.5
+      },
+      "D": {
+        "mean": 1.0891666666666666,
+        "std": 0.3123942245227199,
+        "median": 1.0,
+        "q25": 1.0,
+        "q75": 1.1,
+        "iqr": 0.10000000000000009,
+        "min": 0.6,
+        "max": 1.67
+      }
+    },
+    "avg_latency_ms": {
+      "A": {
+        "mean": 1528.5083333333334,
+        "std": 384.99088645254346,
+        "median": 1442.5,
+        "q25": 1257.95,
+        "q75": 1686.4,
+        "iqr": 428.45000000000005,
+        "min": 1115.8,
+        "max": 2160.3
+      },
+      "B": {
+        "mean": 3888.5,
+        "std": 561.7736134131549,
+        "median": 3839.6,
+        "q25": 3628.2749999999996,
+        "q75": 4073.2250000000004,
+        "iqr": 444.9500000000007,
+        "min": 3088.8,
+        "max": 4903.0
+      },
+      "C": {
+        "mean": 4151.566666666667,
+        "std": 834.1191786803756,
+        "median": 4058.7,
+        "q25": 3711.0,
+        "q75": 4511.875,
+        "iqr": 800.875,
+        "min": 2932.0,
+        "max": 5528.8
+      },
+      "D": {
+        "mean": 3727.183333333333,
+        "std": 724.3690154928361,
+        "median": 3774.3,
+        "q25": 3124.425,
+        "q75": 4132.25,
+        "iqr": 1007.8249999999998,
+        "min": 2737.4,
+        "max": 4842.3
+      }
+    },
+    "total_tokens": {
+      "A": {
+        "mean": 17045.833333333332,
+        "std": 3056.445732407418,
+        "median": 17834.0,
+        "q25": 14653.5,
+        "q75": 18679.0,
+        "iqr": 4025.5,
+        "min": 11168.0,
+        "max": 21993.0
+      },
+      "B": {
+        "mean": 9515.083333333334,
+        "std": 4109.3933960298,
+        "median": 9247.5,
+        "q25": 7387.25,
+        "q75": 9894.0,
+        "iqr": 2506.75,
+        "min": 4508.0,
+        "max": 19635.0
+      },
+      "C": {
+        "mean": 9984.833333333334,
+        "std": 4403.544932176458,
+        "median": 10631.0,
+        "q25": 6980.25,
+        "q75": 13692.0,
+        "iqr": 6711.75,
+        "min": 2222.0,
+        "max": 15281.0
+      },
+      "D": {
+        "mean": 8278.666666666666,
+        "std": 5587.852756134724,
+        "median": 6780.5,
+        "q25": 4585.75,
+        "q75": 11002.5,
+        "iqr": 6416.75,
+        "min": 1764.0,
+        "max": 19156.0
+      }
+    },
+    "model_calls_count": {
+      "A": {
+        "mean": 5.25,
+        "std": 1.0552897060221726,
+        "median": 5.0,
+        "q25": 5.0,
+        "q75": 6.0,
+        "iqr": 1.0,
+        "min": 3.0,
+        "max": 7.0
+      },
+      "B": {
+        "mean": 5.333333333333333,
+        "std": 0.9847319278346618,
+        "median": 5.0,
+        "q25": 5.0,
+        "q75": 5.25,
+        "iqr": 0.25,
+        "min": 4.0,
+        "max": 8.0
+      },
+      "C": {
+        "mean": 5.166666666666667,
+        "std": 1.403458930534474,
+        "median": 5.5,
+        "q25": 5.0,
+        "q75": 6.0,
+        "iqr": 1.0,
+        "min": 2.0,
+        "max": 7.0
+      },
+      "D": {
+        "mean": 5.416666666666667,
+        "std": 1.1645001528813148,
+        "median": 5.0,
+        "q25": 5.0,
+        "q75": 6.0,
+        "iqr": 1.0,
+        "min": 4.0,
+        "max": 8.0
+      }
+    },
+    "turns_count": {
+      "A": {
+        "mean": 4.166666666666667,
+        "std": 0.9374368665610922,
+        "median": 4.0,
+        "q25": 4.0,
+        "q75": 5.0,
+        "iqr": 1.0,
+        "min": 2.0,
+        "max": 5.0
+      },
+      "B": {
+        "mean": 3.9166666666666665,
+        "std": 0.6685579234215215,
+        "median": 4.0,
+        "q25": 3.75,
+        "q75": 4.0,
+        "iqr": 0.25,
+        "min": 3.0,
+        "max": 5.0
+      },
+      "C": {
+        "mean": 4.333333333333333,
+        "std": 1.1547005383792515,
+        "median": 5.0,
+        "q25": 4.0,
+        "q75": 5.0,
+        "iqr": 1.0,
+        "min": 2.0,
+        "max": 5.0
+      },
+      "D": {
+        "mean": 4.583333333333333,
+        "std": 0.7929614610987591,
+        "median": 5.0,
+        "q25": 4.75,
+        "q75": 5.0,
+        "iqr": 0.25,
+        "min": 3.0,
+        "max": 5.0
+      }
+    },
+    "guard_override_rate": {
+      "A": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "B": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "C": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "D": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "unexposed_tool_call_rate": {
+      "A": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "B": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "C": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "D": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "premature_summary_call_rate": {
+      "A": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "B": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "C": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "D": {
+        "mean": 0.0,
+        "std": 0.0,
+        "median": 0.0,
+        "q25": 0.0,
+        "q75": 0.0,
+        "iqr": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    }
+  },
+  "omnibus_tests": {
+    "safety": {
+      "test": "Friedman",
+      "status": "DEGENERATE_NOT_TESTABLE",
+      "statistic": null,
+      "p_value": null,
+      "df": 3,
+      "note": "全條件觀測值皆為常數，無變異可檢定 (不可標記為 p=0)"
+    },
+    "tool_use": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 3.0000000000000426,
+      "p_value": 0.3916251762710825,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "state_consistency": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 3.000000000000111,
+      "p_value": 0.3916251762710711,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "dialogue_planning": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 4.230769230769232,
+      "p_value": 0.23759930001268068,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "helpfulness": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 3.000000000000111,
+      "p_value": 0.3916251762710711,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "avg_questions_per_turn": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 11.33035714285716,
+      "p_value": 0.010067281481411647,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "avg_latency_ms": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 25.900000000000006,
+      "p_value": 1.0008437984127519e-05,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "total_tokens": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 17.600000000000023,
+      "p_value": 0.000531809699206414,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "model_calls_count": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 0.4020618556701242,
+      "p_value": 0.9398162351098982,
+      "df": 3,
+      "note": "檢驗通過"
+    },
+    "turns_count": {
+      "test": "Friedman",
+      "status": "TESTED",
+      "statistic": 5.25974025974026,
+      "p_value": 0.1537362209478866,
+      "df": 3,
+      "note": "檢驗通過"
+    }
+  },
+  "pairwise_comparisons": {
+    "safety": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      }
+    },
+    "tool_use": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 3,
+        "statistic": 3.0,
+        "raw_p": 1.0,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": 0.0,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 5,
+        "statistic": 4.0,
+        "raw_p": 0.33399825582199794,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": 0.4666666666666667,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 5,
+        "statistic": 4.0,
+        "raw_p": 0.33399825582199794,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": -0.4666666666666667,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 3,
+        "statistic": 3.0,
+        "raw_p": 1.0,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": 0.0,
+        "note": "檢定完成"
+      }
+    },
+    "state_consistency": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 1,
+        "statistic": 0.0,
+        "raw_p": 0.31731050786291415,
+        "adjusted_p": 0.6346210157258283,
+        "rank_biserial_r": 1.0,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 1,
+        "statistic": 0.0,
+        "raw_p": 0.31731050786291415,
+        "adjusted_p": 0.6346210157258283,
+        "rank_biserial_r": -1.0,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      }
+    },
+    "dialogue_planning": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 4,
+        "statistic": 1.5,
+        "raw_p": 0.19364643126922065,
+        "adjusted_p": 0.580939293807662,
+        "rank_biserial_r": 0.7,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 5,
+        "statistic": 7.0,
+        "raw_p": 0.8875370839817152,
+        "adjusted_p": 0.8875370839817152,
+        "rank_biserial_r": 0.06666666666666667,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 3,
+        "statistic": 0.0,
+        "raw_p": 0.08326451666355039,
+        "adjusted_p": 0.33305806665420157,
+        "rank_biserial_r": -1.0,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 1,
+        "statistic": 0.0,
+        "raw_p": 0.31731050786291415,
+        "adjusted_p": 0.6346210157258283,
+        "rank_biserial_r": -1.0,
+        "note": "檢定完成"
+      }
+    },
+    "helpfulness": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 1,
+        "statistic": 0.0,
+        "raw_p": 0.31731050786291415,
+        "adjusted_p": 0.6346210157258283,
+        "rank_biserial_r": 1.0,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 1,
+        "statistic": 0.0,
+        "raw_p": 0.31731050786291415,
+        "adjusted_p": 0.6346210157258283,
+        "rank_biserial_r": -1.0,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "NOT_TESTABLE/NO_VARIATION",
+        "n_nonzero": 0,
+        "statistic": null,
+        "raw_p": null,
+        "adjusted_p": null,
+        "rank_biserial_r": 0.0,
+        "note": "配對差值全為 0，無法檢定"
+      }
+    },
+    "avg_questions_per_turn": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 11,
+        "statistic": 4.0,
+        "raw_p": 0.0097070966322026,
+        "adjusted_p": 0.0388283865288104,
+        "rank_biserial_r": -0.8787878787878788,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 11,
+        "statistic": 18.5,
+        "raw_p": 0.1948819799383943,
+        "adjusted_p": 0.3897639598767886,
+        "rank_biserial_r": 0.4393939393939394,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 38.0,
+        "raw_p": 0.9697265625,
+        "adjusted_p": 0.9697265625,
+        "rank_biserial_r": -0.02564102564102564,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 10,
+        "statistic": 11.0,
+        "raw_p": 0.0919651053528496,
+        "adjusted_p": 0.2758953160585488,
+        "rank_biserial_r": -0.6,
+        "note": "檢定完成"
+      }
+    },
+    "avg_latency_ms": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 0.0,
+        "raw_p": 0.00048828125,
+        "adjusted_p": 0.001953125,
+        "rank_biserial_r": -1.0,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 21.0,
+        "raw_p": 0.17626953125,
+        "adjusted_p": 0.17626953125,
+        "rank_biserial_r": -0.46153846153846156,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 15.0,
+        "raw_p": 0.06396484375,
+        "adjusted_p": 0.1279296875,
+        "rank_biserial_r": 0.6153846153846154,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 0.0,
+        "raw_p": 0.00048828125,
+        "adjusted_p": 0.001953125,
+        "rank_biserial_r": -1.0,
+        "note": "檢定完成"
+      }
+    },
+    "total_tokens": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 1.0,
+        "raw_p": 0.0009765625,
+        "adjusted_p": 0.00390625,
+        "rank_biserial_r": 0.9743589743589743,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 32.0,
+        "raw_p": 0.6220703125,
+        "adjusted_p": 0.7607421875,
+        "rank_biserial_r": -0.1794871794871795,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 27.0,
+        "raw_p": 0.38037109375,
+        "adjusted_p": 0.7607421875,
+        "rank_biserial_r": 0.3076923076923077,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 12,
+        "statistic": 5.0,
+        "raw_p": 0.0048828125,
+        "adjusted_p": 0.0146484375,
+        "rank_biserial_r": 0.8717948717948718,
+        "note": "檢定完成"
+      }
+    },
+    "model_calls_count": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 10,
+        "statistic": 25.0,
+        "raw_p": 0.7907225601805892,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": -0.09090909090909091,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 10,
+        "statistic": 25.0,
+        "raw_p": 0.7939569017621579,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": 0.09090909090909091,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 7,
+        "statistic": 11.5,
+        "raw_p": 0.6709392540844913,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": -0.17857142857142858,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 8,
+        "statistic": 16.5,
+        "raw_p": 0.8313799771067277,
+        "adjusted_p": 1.0,
+        "rank_biserial_r": -0.08333333333333333,
+        "note": "檢定完成"
+      }
+    },
+    "turns_count": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "n_nonzero": 6,
+        "statistic": 6.0,
+        "raw_p": 0.31731050786291415,
+        "adjusted_p": 0.992852315959694,
+        "rank_biserial_r": 0.42857142857142855,
+        "note": "檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "n_nonzero": 8,
+        "statistic": 10.0,
+        "raw_p": 0.2482130789899235,
+        "adjusted_p": 0.992852315959694,
+        "rank_biserial_r": -0.4444444444444444,
+        "note": "檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "n_nonzero": 6,
+        "statistic": 8.0,
+        "raw_p": 0.5950764956239487,
+        "adjusted_p": 0.992852315959694,
+        "rank_biserial_r": -0.23809523809523808,
+        "note": "檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "n_nonzero": 7,
+        "statistic": 8.0,
+        "raw_p": 0.3008027423277617,
+        "adjusted_p": 0.992852315959694,
+        "rank_biserial_r": -0.42857142857142855,
+        "note": "檢定完成"
+      }
+    }
+  },
+  "zero_variation_metrics_note": {
+    "guard_override_rate": {
+      "all_conditions_mean": 0.0,
+      "status": "ALL_ZERO_NO_VARIATION",
+      "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+    },
+    "unexposed_tool_call_rate": {
+      "all_conditions_mean": 0.0,
+      "status": "ALL_ZERO_NO_VARIATION",
+      "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+    },
+    "premature_summary_call_rate": {
+      "all_conditions_mean": 0.0,
+      "status": "ALL_ZERO_NO_VARIATION",
+      "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+    }
+  },
+  "binary_outcome_patient_goal_met": {
+    "cochran_q": {
+      "test": "Cochran_Q",
+      "status": "TESTED",
+      "statistic": 10.92,
+      "p_value": 0.012166425367148388,
+      "df": 3,
+      "note": "檢定完成"
+    },
+    "exact_mcnemar_pairwise": {
+      "A-B": {
+        "pair": "A-B",
+        "status": "TESTED",
+        "b_count": 0,
+        "c_count": 1,
+        "n_discordant": 1,
+        "raw_p": 1.0,
+        "adjusted_p": 1.0,
+        "note": "Exact Binomial 檢定完成"
+      },
+      "B-C": {
+        "pair": "B-C",
+        "status": "TESTED",
+        "b_count": 6,
+        "c_count": 0,
+        "n_discordant": 6,
+        "raw_p": 0.03125,
+        "adjusted_p": 0.125,
+        "note": "Exact Binomial 檢定完成"
+      },
+      "C-D": {
+        "pair": "C-D",
+        "status": "TESTED",
+        "b_count": 1,
+        "c_count": 3,
+        "n_discordant": 4,
+        "raw_p": 0.625,
+        "adjusted_p": 1.0,
+        "note": "Exact Binomial 檢定完成"
+      },
+      "A-D": {
+        "pair": "A-D",
+        "status": "TESTED",
+        "b_count": 4,
+        "c_count": 1,
+        "n_discordant": 5,
+        "raw_p": 0.375,
+        "adjusted_p": 1.0,
+        "note": "Exact Binomial 檢定完成"
+      }
+    },
+    "rates": {
+      "A": {
+        "met_count": 11,
+        "total": 12,
+        "rate": 0.9166666666666666
+      },
+      "B": {
+        "met_count": 12,
+        "total": 12,
+        "rate": 1.0
+      },
+      "C": {
+        "met_count": 6,
+        "total": 12,
+        "rate": 0.5
+      },
+      "D": {
+        "met_count": 8,
+        "total": 12,
+        "rate": 0.6666666666666666
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+Metric,Test_Scope,Comparison,Statistical_Test,Status,Statistic,df,Raw_P_Value,Holm_Adjusted_P_Value,Effect_Size_Rank_Biserial,Nonzero_Pairs_or_Discordant,Note
+safety,Omnibus,A-B-C-D,Friedman,DEGENERATE_NOT_TESTABLE,N/A,3,N/A,N/A,N/A,N/A,全條件觀測值皆為常數，無變異可檢定 (不可標記為 p=0)
+tool_use,Omnibus,A-B-C-D,Friedman,TESTED,3.0000,3,0.391625,N/A,N/A,N/A,檢驗通過
+state_consistency,Omnibus,A-B-C-D,Friedman,TESTED,3.0000,3,0.391625,N/A,N/A,N/A,檢驗通過
+dialogue_planning,Omnibus,A-B-C-D,Friedman,TESTED,4.2308,3,0.237599,N/A,N/A,N/A,檢驗通過
+helpfulness,Omnibus,A-B-C-D,Friedman,TESTED,3.0000,3,0.391625,N/A,N/A,N/A,檢驗通過
+avg_questions_per_turn,Omnibus,A-B-C-D,Friedman,TESTED,11.3304,3,0.010067,N/A,N/A,N/A,檢驗通過
+avg_latency_ms,Omnibus,A-B-C-D,Friedman,TESTED,25.9000,3,0.000010,N/A,N/A,N/A,檢驗通過
+total_tokens,Omnibus,A-B-C-D,Friedman,TESTED,17.6000,3,0.000532,N/A,N/A,N/A,檢驗通過
+model_calls_count,Omnibus,A-B-C-D,Friedman,TESTED,0.4021,3,0.939816,N/A,N/A,N/A,檢驗通過
+turns_count,Omnibus,A-B-C-D,Friedman,TESTED,5.2597,3,0.153736,N/A,N/A,N/A,檢驗通過
+safety,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+safety,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+safety,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+safety,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+tool_use,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,3.0000,N/A,1.000000,1.000000,+0.0000,3,檢定完成
+tool_use,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,4.0000,N/A,0.333998,1.000000,+0.4667,5,檢定完成
+tool_use,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,4.0000,N/A,0.333998,1.000000,-0.4667,5,檢定完成
+tool_use,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,3.0000,N/A,1.000000,1.000000,+0.0000,3,檢定完成
+state_consistency,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+state_consistency,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.317311,0.634621,+1.0000,1,檢定完成
+state_consistency,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.317311,0.634621,-1.0000,1,檢定完成
+state_consistency,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+dialogue_planning,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,1.5000,N/A,0.193646,0.580939,+0.7000,4,檢定完成
+dialogue_planning,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,7.0000,N/A,0.887537,0.887537,+0.0667,5,檢定完成
+dialogue_planning,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.083265,0.333058,-1.0000,3,檢定完成
+dialogue_planning,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.317311,0.634621,-1.0000,1,檢定完成
+helpfulness,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.317311,0.634621,+1.0000,1,檢定完成
+helpfulness,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.317311,0.634621,-1.0000,1,檢定完成
+helpfulness,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+helpfulness,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,NOT_TESTABLE/NO_VARIATION,N/A,N/A,N/A,N/A,+0.0000,0,配對差值全為 0，無法檢定
+avg_questions_per_turn,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,4.0000,N/A,0.009707,0.038828,-0.8788,11,檢定完成
+avg_questions_per_turn,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,18.5000,N/A,0.194882,0.389764,+0.4394,11,檢定完成
+avg_questions_per_turn,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,38.0000,N/A,0.969727,0.969727,-0.0256,12,檢定完成
+avg_questions_per_turn,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,11.0000,N/A,0.091965,0.275895,-0.6000,10,檢定完成
+avg_latency_ms,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.000488,0.001953,-1.0000,12,檢定完成
+avg_latency_ms,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,21.0000,N/A,0.176270,0.176270,-0.4615,12,檢定完成
+avg_latency_ms,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,15.0000,N/A,0.063965,0.127930,+0.6154,12,檢定完成
+avg_latency_ms,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,0.0000,N/A,0.000488,0.001953,-1.0000,12,檢定完成
+total_tokens,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,1.0000,N/A,0.000977,0.003906,+0.9744,12,檢定完成
+total_tokens,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,32.0000,N/A,0.622070,0.760742,-0.1795,12,檢定完成
+total_tokens,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,27.0000,N/A,0.380371,0.760742,+0.3077,12,檢定完成
+total_tokens,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,5.0000,N/A,0.004883,0.014648,+0.8718,12,檢定完成
+model_calls_count,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,25.0000,N/A,0.790723,1.000000,-0.0909,10,檢定完成
+model_calls_count,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,25.0000,N/A,0.793957,1.000000,+0.0909,10,檢定完成
+model_calls_count,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,11.5000,N/A,0.670939,1.000000,-0.1786,7,檢定完成
+model_calls_count,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,16.5000,N/A,0.831380,1.000000,-0.0833,8,檢定完成
+turns_count,Pairwise,A-B,Wilcoxon_Signed_Rank_Two_Sided,TESTED,6.0000,N/A,0.317311,0.992852,+0.4286,6,檢定完成
+turns_count,Pairwise,B-C,Wilcoxon_Signed_Rank_Two_Sided,TESTED,10.0000,N/A,0.248213,0.992852,-0.4444,8,檢定完成
+turns_count,Pairwise,C-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,8.0000,N/A,0.595076,0.992852,-0.2381,6,檢定完成
+turns_count,Pairwise,A-D,Wilcoxon_Signed_Rank_Two_Sided,TESTED,8.0000,N/A,0.300803,0.992852,-0.4286,7,檢定完成
+PATIENT_GOAL_MET,Omnibus,A-B-C-D,Cochran_Q,TESTED,10.9200,3,0.012166,N/A,N/A,N/A,檢定完成
+PATIENT_GOAL_MET,Pairwise,A-B,Exact_McNemar,TESTED,"b=0, c=1",N/A,1.000000,1.000000,N/A,1,Exact Binomial 檢定完成
+PATIENT_GOAL_MET,Pairwise,B-C,Exact_McNemar,TESTED,"b=6, c=0",N/A,0.031250,0.125000,N/A,6,Exact Binomial 檢定完成
+PATIENT_GOAL_MET,Pairwise,C-D,Exact_McNemar,TESTED,"b=1, c=3",N/A,0.625000,1.000000,N/A,4,Exact Binomial 檢定完成
+PATIENT_GOAL_MET,Pairwise,A-D,Exact_McNemar,TESTED,"b=4, c=1",N/A,0.375000,1.000000,N/A,5,Exact Binomial 檢定完成
