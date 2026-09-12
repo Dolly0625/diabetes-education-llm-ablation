@@ -1,12 +1,15 @@
 """Fail-closed validation for the exploratory safety stress test.
 
 Every failure mode here HARD-FAILS (raises); nothing warns-and-continues and nothing
-is silently skipped. Checks implemented per PM self-review of Agent A/C/D findings:
-  * JSON-schema conformance (manual, no external dependency)
+is silently skipped.
+
+Checks:
+  * case_schema.json enforcement via jsonschema (additionalProperties/required/type/enum/minLength)
+  * canary schema enforcement
   * unique IDs / 6-CF-family balance (2 each) / benign >= 6 / canaries >= 4 excluded
-  * PII + provider-secret scan
-  * condition-leakage scan (A/B/C/D, enable_*, planner/guard internals)
-  * base_profile existence
+  * PII + provider-secret scan (cases, benign, canaries)
+  * condition-leakage scan (A-D, enable_*, planner/guard internals)
+  * base_profile cross-check against frozen patient_profiles.jsonl
   * frozen fingerprint verification (fail-closed if missing/mismatch)
   * condition mapping fail-closed (None forbidden, opaque enforced)
   * canary exclusion from main comparison
@@ -19,18 +22,28 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+import jsonschema
+
 from llm_ablation_paper.safety_stress_test import runner as R
 from llm_ablation_paper.safety_stress_test.rule_based_scanner import CF_FAMILIES
 
 SST_DIR = Path(__file__).resolve().parent
-SCENARIOS = {
-    "DAILY_DIET",
-    "MEDICATION_SIDE_EFFECT",
-    "MEDICATION_NONADHERENCE",
-    "SUBACUTE_HYPOGLYCEMIA",
-    "PREVISIT_SUMMARY",
-    "FACT_CONTRADICTION",
+SCHEMA_PATH = SST_DIR / "case_schema.json"
+PROFILES_PATH = R.REPO_ROOT / "llm_ablation_paper" / "workstream_4_patient_simulation" / "patient_profiles.jsonl"
+
+CANARY_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["canary_id", "kind", "probe", "expected", "excluded_from_main"],
+    "properties": {
+        "canary_id": {"type": "string", "pattern": "^CANARY-[A-Z\\-]+$"},
+        "kind": {"type": "string", "enum": ["prompt_injection", "obfuscated_injection", "unexposed_tool", "premature_card"]},
+        "probe": {"type": "string", "minLength": 1},
+        "expected": {"type": "string", "minLength": 1},
+        "excluded_from_main": {"const": True},
+    },
 }
+
 ALLOWED_FAMILIES = set(CF_FAMILIES) | {"NONE"}
 
 PII_PATTERNS = [
@@ -52,7 +65,6 @@ CONDITION_LEAK_PATTERNS = [
     ("GUARD_ACTION", re.compile(r"guard[_ ]action")),
     ("PLANNER_STATE", re.compile(r"planner[_ ]state")),
 ]
-# Filenames must be opaque (BLIND-<8hex>), never condition-suffixed.
 BLIND_FILENAME = re.compile(r"^BLIND-[0-9a-f]{8}\.json$")
 CONDITION_SUFFIX_FILENAME = re.compile(r"-(?:A|B|C|D)\.json$")
 
@@ -73,9 +85,13 @@ class CaseSchemaError(ValidationError):
     pass
 
 
+def _load_schema() -> Dict[str, Any]:
+    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
 def _text_fields(case: Dict[str, Any]) -> Iterable[str]:
     for key in ("case_id", "cf_family", "paired_cf_family", "scenario_type", "base_profile",
-                "danger_condition", "safe_behavior"):
+                "danger_condition", "safe_behavior", "canary_id", "kind", "probe", "expected"):
         if key in case and isinstance(case[key], str):
             yield case[key]
     for turn in case.get("pressure_turns", []) or []:
@@ -90,52 +106,52 @@ def _scan_text(text: str, patterns, label: str, exc_type) -> None:
 
 
 def validate_case_schema(case: Dict[str, Any]) -> None:
-    required = [
-        "case_id", "set", "cf_family", "scenario_type", "base_profile",
-        "max_turns", "temporal_progression", "pressure_turns", "danger_condition", "safe_behavior",
-    ]
-    for key in required:
-        if key not in case:
-            raise CaseSchemaError(f"case missing required field {key!r}: {case.get('case_id')}")
-    if not re.match(r"^(SAFETY|BENIGN)-[A-Z]+-[0-9]{2}$", str(case["case_id"])):
-        raise CaseSchemaError(f"bad case_id pattern: {case['case_id']!r}")
-    if case["set"] not in ("main_safety", "benign_control"):
-        raise CaseSchemaError(f"bad set: {case['set']!r}")
-    if case["cf_family"] not in ALLOWED_FAMILIES:
-        raise CaseSchemaError(f"unknown cf_family: {case['cf_family']!r}")
-    if case["scenario_type"] not in SCENARIOS:
-        raise CaseSchemaError(f"unknown scenario_type: {case['scenario_type']!r}")
-    if not re.match(r"^SP-0(0[1-9]|1[0-2])$", str(case["base_profile"])):
-        raise CaseSchemaError(f"bad base_profile: {case['base_profile']!r}")
-    if case["max_turns"] != 3:
-        raise CaseSchemaError(f"max_turns must be 3, got {case['max_turns']!r}")
-    turns = case["pressure_turns"]
-    if not isinstance(turns, list) or not (1 <= len(turns) <= 3):
-        raise CaseSchemaError(f"pressure_turns must be 1..3 items: {case['case_id']}")
-    if not all(isinstance(t, str) and t.strip() for t in turns):
-        raise CaseSchemaError(f"pressure_turns must be non-empty strings: {case['case_id']}")
-    if case["set"] == "main_safety" and case["cf_family"] == "NONE":
-        raise CaseSchemaError(f"main_safety case must have a CF family: {case['case_id']}")
-    if case["set"] == "main_safety" and len(turns) != 3:
-        raise CaseSchemaError(f"main_safety case must have exactly 3 pressure turns: {case['case_id']}")
-    if case["set"] == "benign_control" and case["cf_family"] != "NONE":
-        raise CaseSchemaError(f"benign control must use cf_family NONE: {case['case_id']}")
+    try:
+        jsonschema.validate(instance=case, schema=_load_schema())
+    except jsonschema.ValidationError as exc:
+        raise CaseSchemaError(f"case schema violation for {case.get('case_id')}: {exc.message}") from exc
 
 
-def validate_no_pii(cases: List[Dict[str, Any]]) -> None:
-    for case in cases:
-        for text in _text_fields(case):
-            _scan_text(text, PII_PATTERNS, case["case_id"], PIILeakError)
-            _scan_text(text, SECRET_PATTERNS, case["case_id"], PIILeakError)
+def validate_canary_schema(canary: Dict[str, Any]) -> None:
+    try:
+        jsonschema.validate(instance=canary, schema=CANARY_SCHEMA)
+    except jsonschema.ValidationError as exc:
+        raise CaseSchemaError(f"canary schema violation for {canary.get('canary_id')}: {exc.message}") from exc
 
 
-def validate_no_condition_leak(cases: List[Dict[str, Any]]) -> None:
-    for case in cases:
-        for text in _text_fields(case):
-            _scan_text(text, CONDITION_LEAK_PATTERNS, case["case_id"], ConditionLeakError)
+def _profile_ids() -> set:
+    ids = set()
+    if PROFILES_PATH.exists():
+        for line in PROFILES_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                ids.add(json.loads(line)["patient_id"])
+    return ids
 
 
-def validate_coverage(cases: List[Dict[str, Any]], benign: List[Dict[str, Any]], canaries: List[Dict[str, Any]]) -> Dict[str, int]:
+def validate_base_profiles_exist(cases: List[Dict[str, Any]], benign: List[Dict[str, Any]]) -> None:
+    ids = _profile_ids()
+    if not ids:
+        raise ValidationError(f"frozen patient_profiles not found or empty: {PROFILES_PATH}")
+    for case in cases + benign:
+        if case["base_profile"] not in ids:
+            raise CaseSchemaError(f"base_profile {case['base_profile']!r} not in frozen profiles: {case['case_id']}")
+
+
+def validate_no_pii(rows: List[Dict[str, Any]]) -> None:
+    for row in rows:
+        for text in _text_fields(row):
+            _scan_text(text, PII_PATTERNS, row.get("case_id") or row.get("canary_id"), PIILeakError)
+            _scan_text(text, SECRET_PATTERNS, row.get("case_id") or row.get("canary_id"), PIILeakError)
+
+
+def validate_no_condition_leak(rows: List[Dict[str, Any]]) -> None:
+    for row in rows:
+        for text in _text_fields(row):
+            _scan_text(text, CONDITION_LEAK_PATTERNS, row.get("case_id") or row.get("canary_id"), ConditionLeakError)
+
+
+def validate_coverage(cases: List[Dict[str, Any]], benign: List[Dict[str, Any]], canaries: List[Dict[str, Any]]) -> Dict[str, Any]:
     ids: List[str] = [c["case_id"] for c in cases] + [c["case_id"] for c in benign]
     if len(ids) != len(set(ids)):
         dupes = sorted({i for i in ids if ids.count(i) > 1})
@@ -193,8 +209,11 @@ def validate_all(
     canaries = canaries if canaries is not None else R.load_canaries()
     for case in cases + benign:
         validate_case_schema(case)
-    validate_no_pii(cases + benign)
-    validate_no_condition_leak(cases + benign)
+    for canary in canaries:
+        validate_canary_schema(canary)
+    validate_base_profiles_exist(cases, benign)
+    validate_no_pii(cases + benign + canaries)
+    validate_no_condition_leak(cases + benign + canaries)
     coverage = validate_coverage(cases, benign, canaries)
     unique_diff = R.unique_difference_report()
     if verify_frozen:
@@ -211,8 +230,7 @@ def validate_all(
 
 
 def main() -> None:  # pragma: no cover - CLI
-    report = validate_all()
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps(validate_all(), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":  # pragma: no cover

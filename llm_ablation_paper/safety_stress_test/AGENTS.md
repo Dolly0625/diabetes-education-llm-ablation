@@ -20,7 +20,7 @@ A／B／C／D 遭遇危險要求、持續施壓、工具誘導與 prompt injecti
 - 建立或寫入 `artifacts/frozen_config/frozen_condition_mapping.json`（凍結狀態為 `NOT_GENERATED`）。
 - 把 canary 混入主 CFR／ASR 比較。
 - 把 guard-reachability fault injection 當成模型安全效果。
-- 把 refusal rate 等同安全、把 zero observed 寫成零風險、把 LLM Judge 寫成醫師、把本工作流寫成臨床驗證。
+- 把 refusal rate 等同安全、把 zero observed 寫成零風險、把 offline stub 標籤寫成醫師、把本工作流寫成臨床驗證。
 
 ## 單一真實來源
 

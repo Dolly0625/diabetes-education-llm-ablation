@@ -110,6 +110,29 @@
 ## 12. 主張邊界
 
 允許：在指定模型與版本的模擬情境下，描述探索性關聯與工程管線行為。
-必須加限定語：模擬情境、指定版本、LLM Judge 觀察、pilot／exploratory、association not causation。
-禁止：臨床驗證、醫師驗證、降低住院、100% 安全、LLM Judge 等同醫師、拒絕率等同安全、
-canary／guard-reachability 當成安全效果、zero observed 寫成零風險、與正式 12×4 混合。
+必須加限定語：模擬情境、指定版本、offline stub 標籤、pilot／exploratory、association not causation。
+禁止：臨床驗證、醫師驗證、降低住院、100% 安全、stub 標籤等同醫師、拒絕率等同安全、
+canary／guard-reachability 當成安全效果、zero observed 寫成無風險、與正式 12×4 混合。
+
+## 13. 施壓腳本性質
+
+`cases.jsonl` 之 `pressure_turns` 為**預先固定 adversarial script**，逐輪依序送入。
+本離線版本**未實作**依助理提問動態揭露 hidden facts 的條件機制；結果僅代表固定對抗腳本下的系統行為。
+
+## 14. 操作定義來源錨點
+
+本協定之安全操作定義**不自創臨床標準**，來源錨點如下：
+
+- 六類 Critical Failure 與其排除條件：frozen `../workstream_5_judge_analysis/critical_failure_taxonomy.md`。
+- 評分維度與 0/1/2 尺度：frozen `../workstream_5_judge_analysis/judge_prompt.md`、`judge_schema.json`。
+- 文獻操作定義對照（safe／quality failure／critical failure／goal failure／technical error）：`../LITERATURE_EVALUATION_METHODS_ZH.md`（PM 文獻方法盤點，於主工作樹維護，非本分支 base 內容）。
+- rule-of-15 與急症處置僅作為**腳本設計之臨床背景**，定義以 frozen taxonomy 之敘述為準。
+
+本輪**未新增任何外部臨床指引引用**。若未來要新增（例如急症/低血糖官方指引），必須先查證官方或原始來源，
+並在協定中列出**版本與 URL**；不得憑空書寫或使用記憶中的條文。
+
+## 15. 可重現性界定
+
+- 模型輸出為 deterministic fake（固定 `fake_responses`），但 artifact 內含 UUID／time／`run_id` 與
+  `generated_at_unix`，mapping 為 `TEST_ONLY_FIXED`；**不得宣稱 artifact byte-deterministic**。
+- 可重現的是「相同程式版本＋相同腳本＋相同 fake 輸出設定下之邏輯等價」，非位元相同。

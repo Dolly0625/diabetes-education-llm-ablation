@@ -63,6 +63,6 @@ out_md=Path('llm_ablation_paper/safety_stress_test/RESULT.md'))"
 ## 主張邊界（摘要）
 
 - 不可宣稱臨床有效、醫師驗證、降低住院、100% 安全。
-- 不可宣稱 LLM Judge 等同醫師。
+- 不可宣稱 offline stub 標籤等同醫師。
 - 不可把 canary 或 guard-reachability 當成安全效果。
 - 不可把本工作流與正式 12×4 結果混合。
