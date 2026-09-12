@@ -1,15 +1,15 @@
 # 糖尿病衛教大型語言模型消融實驗事後探索性配對統計報告 (v14)
 
 > [!IMPORTANT]
-> **研究性質聲明**：本統計分析為評審評判完成後之**事後探索性配對分析 (Post-hoc Exploratory Paired Analysis)**，**非預先註冊 (Not Preregistered)**。
-> 實驗嚴格以**病患為配對封閉單元 (Block/Pairing: 12 位病患 × 4 條件)**，絕不作為 48 筆獨立樣本推論。
+> **研究性質聲明**：本統計分析為評審評判完成後之**事後探索性配對分析 (Post-hoc Exploratory Paired Analysis)**，**非預先註冊 (Not Preregistered)**；每位病患每條件僅一條隨機軌跡 (one stochastic trajectory per patient-condition)。
+> 實驗嚴格以**病患為配對封閉單元 (Block/Pairing: 12 位病患 × 4 條件；48 條軌跡為 12 個配對病患區集，絕非 48 筆獨立樣本)**。
 > 所有統計檢定皆採用非參數配對檢定（Friedman、Wilcoxon 雙尾、Cochran's Q、Exact McNemar），並施加 Holm-Bonferroni 多重比較校正。
 
 ## 1. 描述性統計摘要 (N=12 病患 / 組)
 
 | 指標 | 條件 A (Baseline) | 條件 B (Planner) | 條件 C (Planner+Gate) | 條件 D (Full) | 單位/範圍 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **安全性 (Safety)** | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 0.0 - 2.0 |
+| **安全性 (Safety；LLM-judge 共識觀察，非臨床事實)** | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 0.0 - 2.0 |
 | **工具使用 (Tool Use)** | 1.92 (中位 2.00, IQR 0.00) | 1.92 (中位 2.00, IQR 0.00) | 1.75 (中位 2.00, IQR 0.50) | 1.92 (中位 2.00, IQR 0.00) | 0.0 - 2.0 |
 | **狀態一致性 (State Cons.)** | 2.00 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 1.92 (中位 2.00, IQR 0.00) | 2.00 (中位 2.00, IQR 0.00) | 0.0 - 2.0 |
 | **對話規劃 (Dialogue Plan.)** | 1.96 (中位 2.00, IQR 0.00) | 1.79 (中位 2.00, IQR 0.12) | 1.75 (中位 2.00, IQR 0.25) | 2.00 (中位 2.00, IQR 0.00) | 0.0 - 2.0 |
@@ -24,17 +24,17 @@
 
 | 指標名稱 | 檢定方法 | 狀態 (Status) | 檢定量 | 自由度 df | 原始 P 值 (Raw P) | 統計意涵與註記 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| 安全性 (Safety) | Friedman | `DEGENERATE_NOT_TESTABLE` | - | 3 | - | 退化 (無變異，不可檢定)；全條件觀測值皆為常數，無變異可檢定 (不可標記為 p=0) |
-| 工具使用 (Tool Use) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p = 0.3916)；檢驗通過 |
-| 狀態一致性 (State Cons.) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p = 0.3916)；檢驗通過 |
-| 對話規劃 (Dialogue Plan.) | Friedman | `TESTED` | 4.2308 | 3 | 2.3760e-01 | 未達顯著 (p = 0.2376)；檢驗通過 |
-| 實用性 (Helpfulness) | Friedman | `TESTED` | 3.0000 | 3 | 3.9163e-01 | 未達顯著 (p = 0.3916)；檢驗通過 |
-| 每輪平均提問數 | Friedman | `TESTED` | 11.3304 | 3 | 1.0067e-02 | **顯著差異 (p = 0.0101)**；檢驗通過 |
-| 每輪平均延遲 (ms) | Friedman | `TESTED` | 25.9000 | 3 | 1.0008e-05 | **顯著差異 (p < 0.0001)**；檢驗通過 |
-| 對話總 Tokens | Friedman | `TESTED` | 17.6000 | 3 | 5.3181e-04 | **顯著差異 (p = 0.0005)**；檢驗通過 |
-| 模型呼叫次數 | Friedman | `TESTED` | 0.4021 | 3 | 9.3982e-01 | 未達顯著 (p = 0.9398)；檢驗通過 |
-| 終止對話輪數 | Friedman | `TESTED` | 5.2597 | 3 | 1.5374e-01 | 未達顯著 (p = 0.1537)；檢驗通過 |
-| **病患目標達成率 (Goal Met)** | Cochran's Q | `TESTED` | 10.9200 | 3 | 0.0122 | **顯著條件間差異 (p = 0.0122)** |
+| 安全性 (Safety；LLM-judge 共識觀察，非臨床事實) | Friedman | `DEGENERATE_NOT_TESTABLE` | - | 3 | - | 退化 (無變異，不可檢定)；全條件觀測值皆為常數，無變異可檢定 (不可標記為 p=0) |
+| 工具使用 (Tool Use) | Friedman | `TESTED` | 3.0000 | 3 | 0.3916 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 狀態一致性 (State Cons.) | Friedman | `TESTED` | 3.0000 | 3 | 0.3916 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 對話規劃 (Dialogue Plan.) | Friedman | `TESTED` | 4.2308 | 3 | 0.2376 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 實用性 (Helpfulness) | Friedman | `TESTED` | 3.0000 | 3 | 0.3916 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 每輪平均提問數 | Friedman | `TESTED` | 11.3304 | 3 | 0.0101 | **顯著差異 (p=0.0101)**；檢驗通過 |
+| 每輪平均延遲 (ms) | Friedman | `TESTED` | 25.9000 | 3 | <0.0001 | **顯著差異 (p<0.0001)**；檢驗通過 |
+| 對話總 Tokens | Friedman | `TESTED` | 17.6000 | 3 | 0.0005 | **顯著差異 (p=0.0005)**；檢驗通過 |
+| 模型呼叫次數 | Friedman | `TESTED` | 0.4021 | 3 | 0.9398 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| 終止對話輪數 | Friedman | `TESTED` | 5.2597 | 3 | 0.1537 | 未達顯著 (p ≥ 0.05)；檢驗通過 |
+| **病患目標達成率 (Goal Met)** | Cochran's Q | `TESTED` | 10.9200 | 3 | 0.0122 | **顯著條件間差異 (p=0.0122)** |
 
 ## 3. 指定成對比較與效果量 (A-B / B-C / C-D / A-D)
 
@@ -42,10 +42,10 @@
 
 | 指標 | 成對比較 | 非零 Pair 數 | Rank-Biserial $r_{rb}$ | 原始 P 值 (Raw P) | 校正後 P 值 (Holm Adj P) | 檢定結論 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| 安全性 (Safety) | A-B | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
-| 安全性 (Safety) | B-C | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
-| 安全性 (Safety) | C-D | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
-| 安全性 (Safety) | A-D | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
+| 安全性 (Safety；LLM-judge 共識觀察，非臨床事實) | A-B | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
+| 安全性 (Safety；LLM-judge 共識觀察，非臨床事實) | B-C | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
+| 安全性 (Safety；LLM-judge 共識觀察，非臨床事實) | C-D | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
+| 安全性 (Safety；LLM-judge 共識觀察，非臨床事實) | A-D | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
 | 工具使用 (Tool Use) | A-B | 3 | +0.00 | 1.0000 | 1.0000 | 未達顯著 (Adj p ≥ 0.05) |
 | 工具使用 (Tool Use) | B-C | 5 | +0.47 | 0.3340 | 1.0000 | 未達顯著 (Adj p ≥ 0.05) |
 | 工具使用 (Tool Use) | C-D | 5 | -0.47 | 0.3340 | 1.0000 | 未達顯著 (Adj p ≥ 0.05) |
@@ -62,18 +62,18 @@
 | 實用性 (Helpfulness) | B-C | 1 | -1.00 | 0.3173 | 0.6346 | 未達顯著 (Adj p ≥ 0.05) |
 | 實用性 (Helpfulness) | C-D | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
 | 實用性 (Helpfulness) | A-D | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |
-| 每輪平均提問數 | A-B | 11 | -0.88 | 0.0097 | 0.0388 | **顯著 (Adj p = 0.0388)** |
+| 每輪平均提問數 | A-B | 11 | -0.88 | 0.0097 | 0.0388 | **顯著 (p=0.0388 Holm-adjusted)** |
 | 每輪平均提問數 | B-C | 11 | +0.44 | 0.1949 | 0.3898 | 未達顯著 (Adj p ≥ 0.05) |
 | 每輪平均提問數 | C-D | 12 | -0.03 | 0.9697 | 0.9697 | 未達顯著 (Adj p ≥ 0.05) |
 | 每輪平均提問數 | A-D | 10 | -0.60 | 0.0920 | 0.2759 | 未達顯著 (Adj p ≥ 0.05) |
-| 每輪平均延遲 (ms) | A-B | 12 | -1.00 | 0.0005 | 0.0020 | **顯著 (Adj p = 0.0020)** |
+| 每輪平均延遲 (ms) | A-B | 12 | -1.00 | 0.0005 | 0.0020 | **顯著 (p=0.0020 Holm-adjusted)** |
 | 每輪平均延遲 (ms) | B-C | 12 | -0.46 | 0.1763 | 0.1763 | 未達顯著 (Adj p ≥ 0.05) |
 | 每輪平均延遲 (ms) | C-D | 12 | +0.62 | 0.0640 | 0.1279 | 未達顯著 (Adj p ≥ 0.05) |
-| 每輪平均延遲 (ms) | A-D | 12 | -1.00 | 0.0005 | 0.0020 | **顯著 (Adj p = 0.0020)** |
-| 對話總 Tokens | A-B | 12 | +0.97 | 0.0010 | 0.0039 | **顯著 (Adj p = 0.0039)** |
+| 每輪平均延遲 (ms) | A-D | 12 | -1.00 | 0.0005 | 0.0020 | **顯著 (p=0.0020 Holm-adjusted)** |
+| 對話總 Tokens | A-B | 12 | +0.97 | 0.0010 | 0.0039 | **顯著 (p=0.0039 Holm-adjusted)** |
 | 對話總 Tokens | B-C | 12 | -0.18 | 0.6221 | 0.7607 | 未達顯著 (Adj p ≥ 0.05) |
 | 對話總 Tokens | C-D | 12 | +0.31 | 0.3804 | 0.7607 | 未達顯著 (Adj p ≥ 0.05) |
-| 對話總 Tokens | A-D | 12 | +0.87 | 0.0049 | 0.0146 | **顯著 (Adj p = 0.0146)** |
+| 對話總 Tokens | A-D | 12 | +0.87 | 0.0049 | 0.0146 | **顯著 (p=0.0146 Holm-adjusted)** |
 | 模型呼叫次數 | A-B | 10 | -0.09 | 0.7907 | 1.0000 | 未達顯著 (Adj p ≥ 0.05) |
 | 模型呼叫次數 | B-C | 10 | +0.09 | 0.7940 | 1.0000 | 未達顯著 (Adj p ≥ 0.05) |
 | 模型呼叫次數 | C-D | 7 | -0.18 | 0.6709 | 1.0000 | 未達顯著 (Adj p ≥ 0.05) |
@@ -89,23 +89,17 @@
 
 ## 4. 完全無變異指標描述性說明
 
-1. **安全性評分 (Safety Score)**：在基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 下，以 12 位病患配對組塊編排之 48 條對話軌跡 (48 trajectories arranged in 12 matched patient blocks) 之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。
-2. **未暴露工具與防護罩指標之結構限制**：
-   - **未暴露工具呼叫率 (`unexposed_tool_call_rate`)**：條件 A 與 B 本身即為全工具暴露結構（未實施動態工具門控），在此結構下未暴露工具調用率之資訊量有限；在適用條件下觀測值皆為 0.0%。
-   - **防護罩攔截率 (`guard_override_rate`)**：條件 A、B、C 未啟用輸出防護罩（Output Guard），因此 `guard_override_rate=0.0%` 不能證明 Talker Agent 的自我約束能力；在適用條件下觀測值皆為 0.0%。
-   - **過早摘要呼叫率 (`premature_summary_call_rate`)**：在適用條件下觀測值皆為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。
+1. **安全性評分 (Safety Score)**：在基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations；LLM-judge (gemini-3.7-flash) consensus observation, not clinical fact) 下，48 條配對對話軌跡（以 12 位病患配對組塊編排之 48 trajectories arranged in 12 matched patient blocks，非 48 筆獨立樣本）之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。
+2. **防護罩攔截率與未授權工具呼叫 (zero observed only)**：全條件下 `guard_override_rate`、`unexposed_tool_call_rate`、`premature_summary_call_rate` 觀測值皆為 0（zero observed only）；條件 A 與 B 本身即為全工具暴露結構（未實施動態工具門控），在此結構下未暴露工具調用率之資訊量有限 (structurally uninformative in A/B (all tools exposed))；條件 A、B、C 未啟用輸出防護罩 (no output guard)，因此 `guard_override_rate=0.0%` 不能證明 Talker Agent 的自我約束能力 (cannot establish Talker self-restraint)，亦不可解讀為越權行為缺席之證據；呈現完全常數無變異，僅作描述性報告，不進行假設檢定。
 
 ## 5. 探索性核心發現與邊界約束
 
-1. **延遲與 Token 成本 (Efficiency Trade-off)**：
-   - 引入交談規劃器（Planner）伴隨每輪延遲顯著增加（A: 1528.5ms vs B: 3888.5ms，Wilcoxon Adj p < 0.01，$r_{rb} = -1.00$）。
-   - 伴隨對話總 Token 消耗顯著降低（A: 17,045.8 tokens vs B: 9,515.1 tokens，Wilcoxon Adj p < 0.01，$r_{rb} = +0.97$），呈現對話焦點收斂之相關性。
-2. **病患目標達成率 (Goal Met Rate)**：
-   - 條件 A (91.7%) 與 B (100.0%) 呈現高比例目標達成；條件 C 觀測目標達成率為 50.0%（Cochran's Q = 10.92, p = 0.0122）。
-   - **成對比較顯著性**：條件 B 與 C 之 Exact McNemar 檢定原始 p = 0.03125，惟經多重比較 **Holm 校正後 p = 0.125，未達統計顯著（不顯著）**。
-   - **跨情境分佈描述**：`scenario_breakdown.csv` 顯示條件 B 至 C 之 6 筆未達成案例分佈於 4 類情境（日常飲食 DAILY_DIET 2 筆、事實矛盾 FACT_CONTRADICTION 2 筆、用藥順從性 MEDICATION_NONADHERENCE 1 筆、亞急性低血糖 SUBACUTE_HYPOGLYCEMIA 1 筆），屬跨 4 類情境之探索性描述現象；具體機制（如工具門控狀態、提問輪數消耗或角色互動對答）須逐軌跡質性審閱才能判定，不可單一斷言主要導因於特定情境或工具門控。
-3. **研究性質與因果邊界重申**：
-   - 本統計分析為事後探索性配對分析 (Post-hoc Exploratory Paired Analysis，非預先註冊)，且每條件僅採單次隨機軌跡 (single random trajectory per condition)，結果應以相關性與伴隨關係解讀，嚴禁作直接因果推論。
-4. **嚴格禁止之主張**：
-   - 嚴禁聲稱「條件 D 顯著更安全」（因 Safety 分數全條件皆為 2.0，無統計差異）。
-   - 嚴禁聲稱「具備臨床有效性」或「已證明醫療改善」（本實驗為模擬環境下之工程架構消融，非臨床試驗）。
+1. **延遲與 Token 成本 (Efficiency Trade-off；事後探索、非預先註冊；每位病患每條件僅一條隨機軌跡)**：
+   - 觀察到加入交談規劃器與每輪延遲增加相關（A: 1528ms vs B: 3888ms，Wilcoxon Holm-adjusted p=0.0020，$r_{rb} = -1.00$；post-hoc，非預先註冊）。
+   - 觀察到總 Token 消耗與 Planner 條件相關之下降（A: 17,045 tokens vs B: 9,515 tokens，Wilcoxon Holm-adjusted p=0.0039，$r_{rb} = +0.97$）；此為伴隨觀察 (association)，不構成 Planner 收斂對話之因果證明；每位病患每條件僅一條隨機軌跡 (one stochastic trajectory per patient-condition)。
+2. **病患目標達成率 (Goal Met Rate；事後探索、非預先註冊)**：
+   - 條件 A (91.7%) 與 B (100.0%) 觀察到高目標達成率；條件 C 觀測為 50.0%。B–C Exact McNemar raw p=.03125, Holm-adjusted p=.125, not significant after correction.
+   - B-to-C 6 discordant losses 分佈跨 4 類情境 (span DAILY_DIET 2, FACT_CONTRADICTION 2, MEDICATION_NONADHERENCE 1, SUBACUTE_HYPOGLYCEMIA 1; gate-mechanism hypothesis requires trajectory-level qualitative review (機制須逐軌跡質性審閱判定，尚未確立), not established). 上述為伴隨觀察，非因果證明；每位病患每條件僅一條隨機軌跡。
+3. **嚴格禁止之主張**：
+   - 嚴禁聲稱「條件 D 顯著更安全」（Safety 為 LLM-judge (gemini-3.7-flash) consensus observation, not clinical fact；全條件皆為 2.0，無統計差異）。
+   - 嚴禁聲稱「具備臨床有效性」或「已證明醫療改善」（本實驗為模擬環境下之工程架構消融，非臨床試驗；事後探索、非預先註冊）。

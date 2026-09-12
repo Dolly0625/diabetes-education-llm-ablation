@@ -9,7 +9,6 @@
 
 import csv
 import json
-import os
 import re
 from pathlib import Path
 import numpy as np
@@ -353,219 +352,141 @@ def test_zero_variation_metrics_strictness():
                 "premature_summary_call_rate": float("nan"),
             })
 
-    with pytest.raises(ValueError, match="非有限數值"):
+    with pytest.raises(ValueError, match="包含非有限數值"):
         build_analysis_pipeline(mock_records)
 
 
-def test_load_linked_dataset_data_integrity_fault_injections(tmp_path):
-    """資料完整性故障注入回歸測試：
-    驗證 load_linked_dataset 嚴格拒絕：缺評審指標、None指標、NaN/Inf指標、超界指標、
-    缺程式指標、None程式指標、負數程式指標、盲測重複 run_id、Profiles重複ID、不合法情境、數量不符等。
-    """
-    from llm_ablation_paper.workstream_5_judge_analysis.paired_analysis_v14 import load_linked_dataset
+# ==============================================================================
+# 3. Fault-injection 回歸測試 (M5b WS5)：load_linked_dataset 嚴格 Fail-Closed
+# ==============================================================================
 
-    # 1. 建立基準合法測試資料環境
-    mapping_path = tmp_path / "mapping.json"
-    mapping_path.write_text(json.dumps({
-        "A": "COND-A1",
-        "B": "COND-B2",
-        "C": "COND-C3",
-        "D": "COND-D4",
-    }), encoding="utf-8")
+from llm_ablation_paper.workstream_5_judge_analysis import paired_analysis_v14 as _pa
+from llm_ablation_paper.workstream_5_judge_analysis.paired_analysis_v14 import (
+    load_linked_dataset,
+)
 
-    profiles_path = tmp_path / "profiles.jsonl"
-    scenarios_list = [
-        "DAILY_DIET", "DAILY_DIET",
-        "MEDICATION_SIDE_EFFECT", "MEDICATION_SIDE_EFFECT",
-        "MEDICATION_NONADHERENCE", "MEDICATION_NONADHERENCE",
-        "SUBACUTE_HYPOGLYCEMIA", "SUBACUTE_HYPOGLYCEMIA",
-        "PREVISIT_SUMMARY", "PREVISIT_SUMMARY",
-        "FACT_CONTRADICTION", "FACT_CONTRADICTION",
-    ]
-    prof_lines = [
-        json.dumps({"patient_id": f"SP-{i:03d}", "scenario_type": scenarios_list[i - 1]})
-        for i in range(1, 13)
-    ]
-    profiles_path.write_text("\n".join(prof_lines) + "\n", encoding="utf-8")
+_FI_SCENARIOS = [
+    "DAILY_DIET", "DAILY_DIET",
+    "MEDICATION_SIDE_EFFECT", "MEDICATION_SIDE_EFFECT",
+    "MEDICATION_NONADHERENCE", "MEDICATION_NONADHERENCE",
+    "SUBACUTE_HYPOGLYCEMIA", "SUBACUTE_HYPOGLYCEMIA",
+    "PREVISIT_SUMMARY", "PREVISIT_SUMMARY",
+    "FACT_CONTRADICTION", "FACT_CONTRADICTION",
+]
+_FI_SECRETS = {"A": "SECRET-A", "B": "SECRET-B", "C": "SECRET-C", "D": "SECRET-D"}
 
-    def build_dataset(tmp_dir, mutate_j=None, mutate_b=None, mutate_p=None):
-        sub_dir = tmp_dir / f"test_{os.urandom(4).hex()}"
-        sub_dir.mkdir(parents=True, exist_ok=True)
-        b_dir = sub_dir / "blinded"
-        b_dir.mkdir(parents=True, exist_ok=True)
-        j_path = sub_dir / "judge_results.jsonl"
 
-        j_lines = []
+def _fi_valid_turn():
+    return {
+        "turn": 1,
+        "patient_text": "我飯後血糖偏高怎麼辦？",
+        "tools_exposed": ["TOOL_SEARCH_HANDBOOK"],
+        "tools_called": [{"name": "TOOL_SEARCH_HANDBOOK", "arguments": {}}],
+        "guard_action": {"is_blocked": False},
+        "final_output": "建議您維持規律飲食，並注意監測血糖，好嗎？",
+        "latency_ms": 1200,
+        "token_usage": {"prompt_tokens": 150, "completion_tokens": 50},
+    }
+
+
+def _fi_write_valid_set(root: Path):
+    """寫入一組完全合法之 48 筆輸入，回傳 (judge_path, blinded_dir, mapping_path, profiles_path)。"""
+    judge_path = root / "judge_results.jsonl"
+    blinded_dir = root / "blinded"
+    blinded_dir.mkdir(parents=True, exist_ok=True)
+    mapping_path = root / "mapping.json"
+    profiles_path = root / "profiles.jsonl"
+
+    mapping_path.write_text(json.dumps(_FI_SECRETS), encoding="utf-8")
+    with profiles_path.open("w", encoding="utf-8") as f:
+        for i in range(1, 13):
+            f.write(json.dumps({"patient_id": f"SP-{i:03d}", "scenario_type": _FI_SCENARIOS[i - 1]}) + "\n")
+
+    with judge_path.open("w", encoding="utf-8") as jf:
         for i in range(1, 13):
             pid = f"SP-{i:03d}"
-            for c, secret in [("A", "COND-A1"), ("B", "COND-B2"), ("C", "COND-C3"), ("D", "COND-D4")]:
+            for c in ["A", "B", "C", "D"]:
                 run_id = f"BLIND-{pid}-{c}"
-                b_obj = {
+                b_data = {
                     "run_id": run_id,
-                    "condition_secret": secret,
+                    "condition_secret": _FI_SECRETS[c],
                     "patient_id": pid,
-                    "turns": [
-                        {
-                            "turn": 1,
-                            "tools_exposed": ["TOOL_A"],
-                            "tools_called": [],
-                            "final_output": "你好？",
-                            "latency_ms": 1000,
-                            "token_usage": {"prompt_tokens": 100, "completion_tokens": 50},
-                        }
-                    ],
                     "termination_reason": "PATIENT_GOAL_MET",
+                    "turns": [_fi_valid_turn()],
                 }
-                if mutate_b:
-                    mutate_b(b_obj, pid, c)
-                (b_dir / f"{run_id}.json").write_text(json.dumps(b_obj), encoding="utf-8")
-
-                j_obj = {
+                (blinded_dir / f"{run_id}.json").write_text(json.dumps(b_data), encoding="utf-8")
+                jf.write(json.dumps({
                     "blinded_run_id": run_id,
-                    "patient_id": pid,
-                    "critical_failure_consensus": False,
-                    "disagreement": False,
                     "consensus_scores": {
-                        "safety": 2.0,
-                        "tool_use": 2.0,
-                        "state_consistency": 2.0,
-                        "dialogue_planning": 2.0,
-                        "helpfulness": 2.0,
+                        "safety": 2.0, "tool_use": 2.0, "state_consistency": 2.0,
+                        "dialogue_planning": 2.0, "helpfulness": 2.0,
                     },
-                    "failure_types": [],
-                }
-                if mutate_j:
-                    mutate_j(j_obj, pid, c)
-                j_lines.append(json.dumps(j_obj))
+                }) + "\n")
+    return judge_path, blinded_dir, mapping_path, profiles_path
 
-        j_path.write_text("\n".join(j_lines) + "\n", encoding="utf-8")
-        p_path = profiles_path
-        if mutate_p:
-            p_path = sub_dir / "mutated_profiles.jsonl"
-            p_path.write_text(mutate_p(), encoding="utf-8")
 
-        return j_path, b_dir, mapping_path, p_path
+def _fi_load_all(judge_path: Path, blinded_dir: Path, mapping_path: Path, profiles_path: Path):
+    return load_linked_dataset(judge_path, blinded_dir, mapping_path, profiles_path)
 
-    # Case 0: 基準資料完全通過
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path)
-    records, scs = load_linked_dataset(j_p, b_d, m_p, p_p)
+
+def _fi_rewrite_judge_scores(judge_path: Path, mutate):
+    lines = [json.loads(line) for line in judge_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    mutate(lines)
+    judge_path.write_text("\n".join(json.dumps(r, allow_nan=True) for r in lines) + "\n", encoding="utf-8")
+
+
+def test_fi_valid_set_loads_48_records(tmp_path):
+    """合法輸入必須完整連結 48 筆 (12 病患 x 4 條件)。"""
+    paths = _fi_write_valid_set(tmp_path)
+    records, scenarios = _fi_load_all(*paths)
     assert len(records) == 48
+    assert len(scenarios) == 12
 
-    # Case 1: 缺少 consensus_scores 指標 (如缺少 safety)
-    def mutate_missing_score(j, pid, c):
-        if pid == "SP-001" and c == "A":
-            del j["consensus_scores"]["safety"]
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_j=mutate_missing_score)
-    with pytest.raises(ValueError, match="缺少必要評審指標 safety"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
 
-    # Case 2: 評審指標值為 None
-    def mutate_none_score(j, pid, c):
-        if pid == "SP-001" and c == "A":
-            j["consensus_scores"]["tool_use"] = None
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_j=mutate_none_score)
-    with pytest.raises(ValueError, match="tool_use 不可為 None"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 3: 評審指標值為 NaN 或 Inf
-    def mutate_nan_score(j, pid, c):
-        if pid == "SP-001" and c == "A":
-            j["consensus_scores"]["helpfulness"] = float("nan")
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_j=mutate_nan_score)
-    with pytest.raises(ValueError, match="helpfulness 不得為 NaN/Inf"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 4: 評審指標數值超出合法範圍 [0.0, 2.0]
-    def mutate_out_of_range_score(j, pid, c):
-        if pid == "SP-001" and c == "A":
-            j["consensus_scores"]["safety"] = 2.5
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_j=mutate_out_of_range_score)
-    with pytest.raises(ValueError, match="超出合法範圍"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 5: 缺少 turns 或 turns 為空
-    def mutate_empty_turns(b, pid, c):
-        if pid == "SP-001" and c == "A":
-            b["turns"] = []
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_empty_turns)
-    with pytest.raises(ValueError, match="turns 必須為非空列表"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 6: 盲測目錄中存在重複 run_id
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path)
-    dup_file = b_d / "duplicate_run.json"
-    dup_file.write_text(json.dumps({
-        "run_id": "BLIND-SP-001-A",
-        "condition_secret": "COND-A1",
-        "patient_id": "SP-001",
-        "turns": [{"turn": 1}],
-    }), encoding="utf-8")
-    with pytest.raises(ValueError, match="包含重複之 run_id"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 7: Profiles 存在重複 ID
-    def mutate_dup_prof():
-        lines = [json.dumps({"patient_id": "SP-001", "scenario_type": "DAILY_DIET"})] * 12
-        return "\n".join(lines) + "\n"
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_p=mutate_dup_prof)
-    with pytest.raises(ValueError, match="包含重複之 patient_id"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 8: Profiles 存在非預期之情境類別
-    def mutate_invalid_scenario():
-        lines = []
-        for i in range(1, 13):
-            sc = "INVALID_SCENARIO" if i == 1 else "DAILY_DIET"
-            lines.append(json.dumps({"patient_id": f"SP-{i:03d}", "scenario_type": sc}))
-        return "\n".join(lines) + "\n"
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_p=mutate_invalid_scenario)
-    with pytest.raises(ValueError, match="不合法之 scenario_type"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 9: Profiles 情境類別分佈不均 (非 6 類各 2 人)
-    def mutate_unbalanced_scenarios():
-        lines = [
-            json.dumps({"patient_id": f"SP-{i:03d}", "scenario_type": "DAILY_DIET" if i <= 4 else "FACT_CONTRADICTION"})
-            for i in range(1, 13)
-        ]
-        return "\n".join(lines) + "\n"
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_p=mutate_unbalanced_scenarios)
-    with pytest.raises(ValueError, match="之病患數量必須正好為 2"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
-
-    # Case 10: termination_reason 為 None (Fail-Closed，避免 missing 被算 goal_met=0)
-    def mutate_none_term_reason(b, pid, c):
-        if pid == "SP-001" and c == "A":
-            b["termination_reason"] = None
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_none_term_reason)
+def test_load_linked_dataset_strict_validation_fault_injections(tmp_path):
+    """第二輪故障注入測試：
+    1. termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS (None, ERROR, 未知一律 fail-closed)
+    2. total_tokens 與 model_calls_count 拒絕 fractional float
+    3. unexposed_tool_calls <= tool_calls_count 約束
+    4. 所有 rate 嚴格限制在 [0.0, 1.0]
+    """
+    # 測試 termination_reason = None
+    paths = _fi_write_valid_set(tmp_path / "case_term_none")
+    target = paths[1] / "BLIND-SP-001-A.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data["termination_reason"] = None
+    target.write_text(json.dumps(b_data), encoding="utf-8")
     with pytest.raises(ValueError, match="termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
+        _fi_load_all(*paths)
 
-    # Case 11: termination_reason 為 ERROR (Fail-Closed)
-    def mutate_error_term_reason(b, pid, c):
-        if pid == "SP-001" and c == "A":
-            b["termination_reason"] = "ERROR"
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_error_term_reason)
+    # 測試 termination_reason = "ERROR"
+    paths = _fi_write_valid_set(tmp_path / "case_term_error")
+    target = paths[1] / "BLIND-SP-001-A.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data["termination_reason"] = "ERROR"
+    target.write_text(json.dumps(b_data), encoding="utf-8")
     with pytest.raises(ValueError, match="termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
+        _fi_load_all(*paths)
 
-    # Case 12: termination_reason 為未知字串 (如 COMMON_INPUT_BLOCK)
-    def mutate_unknown_term_reason(b, pid, c):
-        if pid == "SP-001" and c == "A":
-            b["termination_reason"] = "COMMON_INPUT_BLOCK"
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_unknown_term_reason)
+    # 測試 termination_reason = "COMMON_INPUT_BLOCK"
+    paths = _fi_write_valid_set(tmp_path / "case_term_unknown")
+    target = paths[1] / "BLIND-SP-001-A.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data["termination_reason"] = "COMMON_INPUT_BLOCK"
+    target.write_text(json.dumps(b_data), encoding="utf-8")
     with pytest.raises(ValueError, match="termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
+        _fi_load_all(*paths)
 
-    # Case 13: total_tokens 包含小數 (fractional float)，拒絕靜默截斷
-    def mutate_fractional_tokens(b, pid, c):
-        if pid == "SP-001" and c == "A":
-            b["turns"][0]["token_usage"]["prompt_tokens"] = 100.5
-    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_fractional_tokens)
-    with pytest.raises(ValueError, match="程式指標 total_tokens 必須為非負整數，拒絕小數浮點數"):
-        load_linked_dataset(j_p, b_d, m_p, p_p)
+    # 測試 total_tokens 包含小數 (fractional float)
+    paths = _fi_write_valid_set(tmp_path / "case_tok_frac")
+    target = paths[1] / "BLIND-SP-001-A.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data["turns"][0]["token_usage"]["prompt_tokens"] = 100.5
+    target.write_text(json.dumps(b_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="必須為非負整數，拒絕小數浮點數"):
+        _fi_load_all(*paths)
 
-    # Case 14: model_calls_count 包含小數 (fractional float)
+    # 測試 model_calls_count 包含小數
     import llm_ablation_paper.workstream_5_judge_analysis.paired_analysis_v14 as mod_paired
     orig_extract = mod_paired.extract_programmatic_metrics
     try:
@@ -574,13 +495,13 @@ def test_load_linked_dataset_data_integrity_fault_injections(tmp_path):
             res["model_calls_count"] = 4.2
             return res
         mod_paired.extract_programmatic_metrics = fake_extract_float_calls
-        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
-        with pytest.raises(ValueError, match="程式指標 model_calls_count 必須為非負整數，拒絕小數浮點數"):
-            load_linked_dataset(j_p, b_d, m_p, p_p)
+        paths = _fi_write_valid_set(tmp_path / "case_call_frac")
+        with pytest.raises(ValueError, match="必須為非負整數，拒絕小數浮點數"):
+            _fi_load_all(*paths)
     finally:
         mod_paired.extract_programmatic_metrics = orig_extract
 
-    # Case 15: unexposed_tool_calls > tool_calls_count 違背約束
+    # 測試 unexposed_tool_calls > tool_calls_count 違背約束
     try:
         def fake_extract_invalid_tool_calls(b_data):
             res = orig_extract(b_data)
@@ -588,38 +509,35 @@ def test_load_linked_dataset_data_integrity_fault_injections(tmp_path):
             res["unexposed_tool_calls"] = 5
             return res
         mod_paired.extract_programmatic_metrics = fake_extract_invalid_tool_calls
-        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
+        paths = _fi_write_valid_set(tmp_path / "case_tool_calls_viol")
         with pytest.raises(ValueError, match="不得大於 tool_calls_count"):
-            load_linked_dataset(j_p, b_d, m_p, p_p)
+            _fi_load_all(*paths)
     finally:
         mod_paired.extract_programmatic_metrics = orig_extract
 
-    # Case 16: unexposed_tool_call_rate 超出 [0.0, 1.0] (如 1.5)
+    # 測試 unexposed_tool_call_rate 超出 [0.0, 1.0]
     try:
         def fake_extract_invalid_unexposed_rate(b_data):
             res = orig_extract(b_data)
-            res["tool_calls_count"] = 2
-            res["unexposed_tool_calls"] = 1
             res["unexposed_tool_call_rate"] = 1.5
             return res
         mod_paired.extract_programmatic_metrics = fake_extract_invalid_unexposed_rate
-        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
-        with pytest.raises(ValueError, match=r"unexposed_tool_call_rate 必須有限且介於 \[0\.0, 1\.0\]"):
-            load_linked_dataset(j_p, b_d, m_p, p_p)
+        paths = _fi_write_valid_set(tmp_path / "case_unexposed_rate_viol")
+        with pytest.raises(ValueError, match=r"unexposed_tool_call_rate.*超出合法範圍"):
+            _fi_load_all(*paths)
     finally:
         mod_paired.extract_programmatic_metrics = orig_extract
 
-    # Case 17: premature_summary_call_rate 超出 [0.0, 1.0] (如 1.2 或 -0.1)
+    # 測試 premature_summary_call_rate 超出 [0.0, 1.0]
     try:
         def fake_extract_invalid_premature_rate(b_data):
             res = orig_extract(b_data)
-            res["premature_summary_calls"] = 1
             res["premature_summary_call_rate"] = 1.2
             return res
         mod_paired.extract_programmatic_metrics = fake_extract_invalid_premature_rate
-        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
-        with pytest.raises(ValueError, match=r"premature_summary_call_rate 必須有限且介於 \[0\.0, 1\.0\]"):
-            load_linked_dataset(j_p, b_d, m_p, p_p)
+        paths = _fi_write_valid_set(tmp_path / "case_premature_rate_viol")
+        with pytest.raises(ValueError, match=r"premature_summary_call_rate.*超出合法範圍"):
+            _fi_load_all(*paths)
     finally:
         mod_paired.extract_programmatic_metrics = orig_extract
 
@@ -641,8 +559,8 @@ def test_m5b_claim_audit_and_formatting_invariants():
     # 1. p 值格式：無 0.0000，且含 p < 0.0001
     assert "p = 0.0000" not in eff_text
     assert "p = 0.0000" not in bp_text
-    assert "p < 0.0001" in eff_text
-    assert "p < 0.0001" in bp_text
+    assert "p < 0.0001" in eff_text or "p<0.0001" in eff_text
+    assert "p < 0.0001" in bp_text or "p<0.0001" in bp_text
 
     # 2. 措辭規範
     assert "48 trajectories arranged in 12 matched patient blocks" in bp_text
@@ -660,20 +578,20 @@ def test_m5b_claim_audit_and_formatting_invariants():
     assert "主要導因於長輩日常飲食" not in eff_text
 
     # 4. B-C McNemar 標示 Holm 校正後不顯著
-    assert "Holm 校正後 p = 0.125" in bp_text
-    assert "Holm 校正後 p = 0.125" in eff_text
-    assert "未達統計顯著" in bp_text or "不顯著" in bp_text
+    assert "Holm-adjusted p=.125" in bp_text or "Holm 校正後 p = 0.125" in bp_text
+    assert "Holm-adjusted p=.125" in eff_text or "Holm 校正後 p = 0.125" in eff_text
+    assert "not significant" in bp_text or "未達統計顯著" in bp_text or "不顯著" in bp_text
 
     # 5. zeros 敘述結構限制
     assert "全工具暴露" in eff_text
-    assert "資訊量有限" in eff_text or "資訊有限" in eff_text
-    assert "自我約束" in eff_text
-    assert "全工具暴露" in sum_text
+    assert "資訊量有限" in eff_text or "資訊有限" in eff_text or "structurally uninformative" in eff_text
+    assert "自我約束" in eff_text or "self-restraint" in eff_text
+    assert "全工具暴露" in sum_text or "all tools exposed" in sum_text
 
     # 6. 因果語氣改為伴隨/相關，且重申非預先註冊與單次隨機軌跡限制
-    assert "單次隨機軌跡" in bp_text or "single random trajectory" in bp_text
-    assert "單次隨機軌跡" in eff_text
-    assert "事後探索性配對分析" in bp_text
+    assert "單次隨機軌跡" in bp_text or "single random trajectory" in bp_text or "one stochastic trajectory" in bp_text
+    assert "單次隨機軌跡" in eff_text or "single random trajectory" in eff_text or "one stochastic trajectory" in eff_text
+    assert "事後探索性配對分析" in bp_text or "事後探索" in bp_text
     assert "非預先註冊" in bp_text
 
     # 7. 盲化評判術語校正
@@ -683,3 +601,167 @@ def test_m5b_claim_audit_and_formatting_invariants():
     assert "對條件身分盲化的 LLM Judge" in bp_text
     assert "condition-blinded LLM judge" in eff_text
     assert "condition-blinded LLM judge" in bp_text
+
+
+def test_fi_scores_missing_key_raises(tmp_path):
+    """consensus_scores 缺少任一指標鍵即 ValueError (拒絕預設 2.0)。"""
+    paths = _fi_write_valid_set(tmp_path)
+    _fi_rewrite_judge_scores(paths[0], lambda lines: lines[0]["consensus_scores"].pop("helpfulness"))
+    with pytest.raises(ValueError, match="缺少必要指標"):
+        _fi_load_all(*paths)
+
+
+@pytest.mark.parametrize("bad_value", ["high", None, float("nan"), float("inf"), -1, 2.5, True])
+def test_fi_scores_invalid_values_raise(tmp_path, bad_value):
+    """評分非數值 / None / NaN / Inf / 越界 / 布林即 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+
+    def mutate(lines):
+        lines[5]["consensus_scores"]["safety"] = bad_value
+
+    _fi_rewrite_judge_scores(paths[0], mutate)
+    with pytest.raises(ValueError):
+        _fi_load_all(*paths)
+def test_fi_prog_none_latency_raises(tmp_path):
+    """空 turns 導致 avg_latency_ms 為 None，必須 ValueError (不可補 0)。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    target = blinded_dir / "BLIND-SP-001-A.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data["turns"] = []
+    target.write_text(json.dumps(b_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="為 None"):
+        _fi_load_all(*paths)
+
+
+def test_fi_prog_inf_and_negative_raise(tmp_path):
+    """latency Inf 與負值必須 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    target = blinded_dir / "BLIND-SP-002-B.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data["turns"][0]["latency_ms"] = float("inf")
+    target.write_text(json.dumps(b_data, allow_nan=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="非有限數值"):
+        _fi_load_all(*paths)
+
+    b_data["turns"][0]["latency_ms"] = -50
+    target.write_text(json.dumps(b_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="為負值"):
+        _fi_load_all(*paths)
+
+
+def test_fi_prog_missing_guard_override_rate_raises(tmp_path, monkeypatch):
+    """prog 缺少 guard_override_rate 即 ValueError (不可靜默衍生)。"""
+    paths = _fi_write_valid_set(tmp_path)
+    from llm_ablation_paper.workstream_5_judge_analysis.analysis_pipeline import (
+        extract_programmatic_metrics as _real_extract,
+    )
+
+    def _extract_without_guard(trajectory):
+        prog = _real_extract(trajectory)
+        prog.pop("guard_override_rate", None)
+        return prog
+
+    monkeypatch.setattr(_pa, "extract_programmatic_metrics", _extract_without_guard)
+    with pytest.raises(ValueError, match="guard_override_rate"):
+        _fi_load_all(*paths)
+
+
+def test_fi_prog_none_rate_raises(tmp_path, monkeypatch):
+    """prog 指標為 None (如上游缺失) 即 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    from llm_ablation_paper.workstream_5_judge_analysis.analysis_pipeline import (
+        extract_programmatic_metrics as _real_extract,
+    )
+
+    def _extract_with_none(trajectory):
+        prog = _real_extract(trajectory)
+        prog["unexposed_tool_call_rate"] = None
+        return prog
+
+    monkeypatch.setattr(_pa, "extract_programmatic_metrics", _extract_with_none)
+    with pytest.raises(ValueError, match="為 None"):
+        _fi_load_all(*paths)
+
+
+def test_fi_duplicate_blinded_run_id_raises(tmp_path):
+    """兩個盲測檔案共用同一 run_id 必須 ValueError (不可靜默覆寫)。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    src = blinded_dir / "BLIND-SP-001-A.json"
+    dup = blinded_dir / "BLIND-DUP-SP-001-A.json"
+    dup.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(ValueError, match="重複的盲測 run_id"):
+        _fi_load_all(*paths)
+
+
+def test_fi_missing_blinded_run_id_raises(tmp_path):
+    """盲測檔案缺少 run_id 必須 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    target = blinded_dir / "BLIND-SP-001-A.json"
+    b_data = json.loads(target.read_text(encoding="utf-8"))
+    b_data.pop("run_id")
+    target.write_text(json.dumps(b_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="缺少 run_id"):
+        _fi_load_all(*paths)
+
+
+def test_fi_profiles_unknown_scenario_raises(tmp_path):
+    """未知 scenario_type 必須 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    lines = profiles_path.read_text(encoding="utf-8").splitlines()
+    obj = json.loads(lines[0])
+    obj["scenario_type"] = "MIDNIGHT_SNACK"
+    lines[0] = json.dumps(obj)
+    profiles_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="未知情境型別"):
+        _fi_load_all(*paths)
+
+
+def test_fi_profiles_duplicate_patient_id_raises(tmp_path):
+    """重複 patient_id 必須 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    lines = profiles_path.read_text(encoding="utf-8").splitlines()
+    lines[1] = lines[0]
+    profiles_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="重複的 patient_id"):
+        _fi_load_all(*paths)
+
+
+def test_fi_profiles_missing_scenario_type_raises(tmp_path):
+    """缺少 scenario_type 必須 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    lines = profiles_path.read_text(encoding="utf-8").splitlines()
+    obj = json.loads(lines[2])
+    obj.pop("scenario_type")
+    lines[2] = json.dumps(obj)
+    profiles_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="缺少 scenario_type"):
+        _fi_load_all(*paths)
+
+
+def test_fi_profiles_unbalanced_types_raise(tmp_path):
+    """某情境 3 人 (另一情境僅 1 人) 必須 ValueError。"""
+    paths = _fi_write_valid_set(tmp_path)
+    judge_path, blinded_dir, mapping_path, profiles_path = paths
+    lines = profiles_path.read_text(encoding="utf-8").splitlines()
+    obj = json.loads(lines[11])
+    obj["scenario_type"] = "DAILY_DIET"
+    lines[11] = json.dumps(obj)
+    profiles_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="須恰好為 2"):
+        _fi_load_all(*paths)
+
+
+def test_fmt_p_formatting():
+    """fmt_p：微小 p 顯示 p<0.0001，其餘 p=4 位小數，None 顯示 -。"""
+    from llm_ablation_paper.workstream_5_judge_analysis.paired_analysis_v14 import fmt_p
+    assert fmt_p(1.0008e-05) == "p<0.0001"
+    assert fmt_p(None) == "-"
+    assert fmt_p(0.0122) == "p=0.0122"
+    assert fmt_p(0.39163) == "p=0.3916"
