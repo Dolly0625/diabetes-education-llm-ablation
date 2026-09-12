@@ -639,14 +639,26 @@ def run_blind_export(
                 f"Malformed config.json in {state_dir}: expected dict, got {type(state_cfg).__name__} (fail-closed)"
             )
 
-        if state_cfg.get("run_id") and state_cfg.get("run_id") != rp_run_id:
+        # 驗證 config.json：至少 run_id 與 condition 必須存在（非空）且與 roleplay_result 一致
+        cfg_rid = state_cfg.get("run_id")
+        if not cfg_rid:
             raise ValueError(
-                f"run_id mismatch between roleplay_result ({rp_run_id}) and config.json ({state_cfg.get('run_id')}) in {parent_run_dir} (fail-closed)"
+                f"Missing or empty run_id in config.json of {state_dir} (fail-closed)"
             )
-        if state_cfg.get("condition") and state_cfg.get("condition") != rp_data.get("condition"):
+        if cfg_rid != rp_run_id:
             raise ValueError(
-                f"condition mismatch between roleplay_result ({rp_data.get('condition')}) and config.json ({state_cfg.get('condition')}) in {parent_run_dir} (fail-closed)"
+                f"run_id mismatch between roleplay_result ({rp_run_id}) and config.json ({cfg_rid}) in {parent_run_dir} (fail-closed)"
             )
+        cfg_cond = state_cfg.get("condition")
+        if not cfg_cond:
+            raise ValueError(
+                f"Missing or empty condition in config.json of {state_dir} (fail-closed)"
+            )
+        if cfg_cond != rp_data.get("condition"):
+            raise ValueError(
+                f"condition mismatch between roleplay_result ({rp_data.get('condition')}) and config.json ({cfg_cond}) in {parent_run_dir} (fail-closed)"
+            )
+        # patient_id 不強制，但若存在且非空則必須一致
         if state_cfg.get("patient_id") and state_cfg.get("patient_id") != rp_data.get("patient_id"):
             raise ValueError(
                 f"patient_id mismatch between roleplay_result ({rp_data.get('patient_id')}) and config.json ({state_cfg.get('patient_id')}) in {parent_run_dir} (fail-closed)"
@@ -672,18 +684,28 @@ def run_blind_export(
                     f"Malformed trajectory line {line_no} in {state_dir}: expected dict, got {type(turn_obj).__name__} (fail-closed)"
                 )
 
-            # 驗證 run_id（若存在）
-            if turn_obj.get("run_id") is not None and turn_obj.get("run_id") != rp_run_id:
+            # 驗證 run_id（必須存在、非空，且與 roleplay_result 一致）
+            turn_rid = turn_obj.get("run_id")
+            if not turn_rid:
+                raise ValueError(
+                    f"Missing or empty run_id in trajectory turn {line_no} of {state_dir} (fail-closed)"
+                )
+            if turn_rid != rp_run_id:
                 raise ValueError(
                     f"Trajectory identity mismatch in turn {line_no} of {state_dir}: "
-                    f"turn run_id {turn_obj.get('run_id')!r} != roleplay_result run_id {rp_run_id!r} (fail-closed)"
+                    f"turn run_id {turn_rid!r} != roleplay_result run_id {rp_run_id!r} (fail-closed)"
                 )
 
-            # 驗證 condition（若存在）
-            if turn_obj.get("condition") is not None and turn_obj.get("condition") != rp_condition:
+            # 驗證 condition（必須存在、非空，且與 roleplay_result 一致）
+            turn_cond = turn_obj.get("condition")
+            if not turn_cond:
+                raise ValueError(
+                    f"Missing or empty condition in trajectory turn {line_no} of {state_dir} (fail-closed)"
+                )
+            if turn_cond != rp_condition:
                 raise ValueError(
                     f"Trajectory identity mismatch in turn {line_no} of {state_dir}: "
-                    f"turn condition {turn_obj.get('condition')!r} != roleplay_result condition {rp_condition!r} (fail-closed)"
+                    f"turn condition {turn_cond!r} != roleplay_result condition {rp_condition!r} (fail-closed)"
                 )
 
             # 驗證 patient_id 與 research_patient_id
