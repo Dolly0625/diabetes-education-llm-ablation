@@ -95,7 +95,10 @@ def _create_mock_run_dir(
     lines = []
     for idx in range(num_turns):
         turn_obj = {
+            "run_id": run_id,
+            "condition": condition,
             "turn_index": idx,
+            "patient_id": patient_id,
             "research_patient_id": patient_id,
             "user_message": f"第 {idx + 1} 句提問",
             "assistant_response": f"第 {idx + 1} 句衛教回答",
@@ -512,7 +515,10 @@ def test_blind_export_require_completed_and_filter_pilot_canary_error(tmp_path: 
     # 修改其 trajectory 讓 termination_reason 為 None
     inc_state = incomplete_dir / "WS4-BATCH-SP-003-A" / "isolated_state"
     inc_lines = [json.dumps({
+        "run_id": "WS4-BATCH-SP-003-A",
+        "condition": "A",
         "turn_index": 0,
+        "patient_id": "SP-003",
         "research_patient_id": "SP-003",
         "user_message": "血糖問題",
         "assistant_response": "回覆",
@@ -524,7 +530,13 @@ def test_blind_export_require_completed_and_filter_pilot_canary_error(tmp_path: 
     })]
     (inc_state / "trajectories.jsonl").write_text("\n".join(inc_lines) + "\n", encoding="utf-8")
     (incomplete_dir / "WS4-BATCH-SP-003-A" / "roleplay_result.json").write_text(
-        json.dumps({"termination_reason": None}), encoding="utf-8"
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-003-A",
+            "condition": "A",
+            "patient_id": "SP-003",
+            "termination_reason": None,
+        }),
+        encoding="utf-8",
     )
 
     with pytest.raises(ValueError, match="incomplete"):
@@ -636,10 +648,12 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
     )
     lines_early = [
         json.dumps({
+            "run_id": "WS4-BATCH-SP-001-A", "condition": "A",
             "turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-001",
             "enable_planner": False,
         }),
         json.dumps({
+            "run_id": "WS4-BATCH-SP-001-A", "condition": "A",
             "turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-001",
             "enable_planner": False,
         }),
@@ -679,6 +693,7 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
     )
     lines_max = [
         json.dumps({
+            "run_id": "WS4-BATCH-SP-002-B", "condition": "B",
             "turn_index": i, "user_message": f"q{i}", "assistant_response": f"a{i}",
             "research_patient_id": "SP-002",
         })
@@ -709,7 +724,17 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
             json.dumps({"run_id": "WS4-BATCH-SP-003-C", "condition": "C", "patient_id": "SP-003", "max_turns": 6}),
             encoding="utf-8",
         )
-        (s_bad / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+        lines_bad = [
+            json.dumps({
+                "run_id": "WS4-BATCH-SP-003-C", "condition": "C",
+                "turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-003",
+            }),
+            json.dumps({
+                "run_id": "WS4-BATCH-SP-003-C", "condition": "C",
+                "turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-003",
+            }),
+        ]
+        (s_bad / "trajectories.jsonl").write_text("\n".join(lines_bad) + "\n", encoding="utf-8")
         (run_bad / "roleplay_result.json").write_text(
             json.dumps({
                 "run_id": "WS4-BATCH-SP-003-C", "condition": "C", "patient_id": "SP-003",
@@ -729,7 +754,17 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
         json.dumps({"run_id": "WS4-BATCH-SP-004-D", "condition": "D", "patient_id": "SP-004", "max_turns": 6}),
         encoding="utf-8",
     )
-    (s_err / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+    lines_err = [
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-004-D", "condition": "D",
+            "turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-004",
+        }),
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-004-D", "condition": "D",
+            "turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-004",
+        }),
+    ]
+    (s_err / "trajectories.jsonl").write_text("\n".join(lines_err) + "\n", encoding="utf-8")
     (run_err / "roleplay_result.json").write_text(
         json.dumps({
             "run_id": "WS4-BATCH-SP-004-D", "condition": "D", "patient_id": "SP-004",
@@ -751,7 +786,10 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
         encoding="utf-8",
     )
     lines_nested = [
-        json.dumps({"turn_index": 0, "user_message": "q1", "assistant_response": "a1", "termination_reason": "ERROR"}),
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-005-A", "condition": "A", "patient_id": "SP-005", "research_patient_id": "SP-005",
+            "turn_index": 0, "user_message": "q1", "assistant_response": "a1", "termination_reason": "ERROR",
+        }),
     ]
     (s_nested / "trajectories.jsonl").write_text("\n".join(lines_nested) + "\n", encoding="utf-8")
     (run_nested / "roleplay_result.json").write_text(
@@ -774,7 +812,17 @@ def test_m42_blind_export_wiring_and_validation(tmp_path: Path):
         json.dumps({"run_id": "WS4-BATCH-SP-006-A", "condition": "A", "patient_id": "SP-006", "max_turns": 6}),
         encoding="utf-8",
     )
-    (s_mis / "trajectories.jsonl").write_text("\n".join(lines_early) + "\n", encoding="utf-8")
+    lines_mis = [
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-006-A", "condition": "A",
+            "turn_index": 0, "user_message": "q1", "assistant_response": "a1", "research_patient_id": "SP-006",
+        }),
+        json.dumps({
+            "run_id": "WS4-BATCH-SP-006-A", "condition": "A",
+            "turn_index": 1, "user_message": "q2", "assistant_response": "a2", "research_patient_id": "SP-006",
+        }),
+    ]
+    (s_mis / "trajectories.jsonl").write_text("\n".join(lines_mis) + "\n", encoding="utf-8")
     # run_id mismatch
     (run_mis / "roleplay_result.json").write_text(
         json.dumps({
@@ -894,8 +942,8 @@ def test_m42b_blind_export_hardening_adversarial(tmp_path: Path):
     # 8. turn_index 重複 -> 被拒
     b_dir8, _, s_dir8 = _setup_base_run("test_duplicate_turn_index")
     bad_lines8 = [
-        json.dumps({"turn_index": 0, "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
-        json.dumps({"turn_index": 0, "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
     ]
     (s_dir8 / "trajectories.jsonl").write_text("\n".join(bad_lines8) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Invalid turn_index sequence"):
@@ -904,8 +952,8 @@ def test_m42b_blind_export_hardening_adversarial(tmp_path: Path):
     # 9. turn_index 缺口 -> 被拒
     b_dir9, _, s_dir9 = _setup_base_run("test_gap_turn_index")
     bad_lines9 = [
-        json.dumps({"turn_index": 0, "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
-        json.dumps({"turn_index": 2, "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 2, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
     ]
     (s_dir9 / "trajectories.jsonl").write_text("\n".join(bad_lines9) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Invalid turn_index sequence"):
@@ -914,9 +962,29 @@ def test_m42b_blind_export_hardening_adversarial(tmp_path: Path):
     # 10. missing patient identity (patient_id 與 research_patient_id 均缺少) -> 被拒
     b_dir10, _, s_dir10 = _setup_base_run("test_missing_patient_identity")
     bad_lines10 = [
-        json.dumps({"turn_index": 0, "user_message": "q0", "assistant_response": "a0"}),
-        json.dumps({"turn_index": 1, "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
     ]
     (s_dir10 / "trajectories.jsonl").write_text("\n".join(bad_lines10) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Missing patient identity"):
         run_blind_export(raw_dir=b_dir10, mapping_file=map_file, output_dir=tmp_path / "out10")
+
+    # 11. (必修 3a) 某 turn 缺 run_id -> 被拒
+    b_dir11, _, s_dir11 = _setup_base_run("test_missing_turn_run_id")
+    bad_lines11 = [
+        json.dumps({"turn_index": 0, "condition": "A", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir11 / "trajectories.jsonl").write_text("\n".join(bad_lines11) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Missing or empty run_id"):
+        run_blind_export(raw_dir=b_dir11, mapping_file=map_file, output_dir=tmp_path / "out11")
+
+    # 12. (必修 3b) 某 turn 缺 condition -> 被拒
+    b_dir12, _, s_dir12 = _setup_base_run("test_missing_turn_condition")
+    bad_lines12 = [
+        json.dumps({"turn_index": 0, "run_id": "WS4-BATCH-SP-001-A", "patient_id": "SP-001", "user_message": "q0", "assistant_response": "a0"}),
+        json.dumps({"turn_index": 1, "run_id": "WS4-BATCH-SP-001-A", "condition": "A", "patient_id": "SP-001", "user_message": "q1", "assistant_response": "a1"}),
+    ]
+    (s_dir12 / "trajectories.jsonl").write_text("\n".join(bad_lines12) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Missing or empty condition"):
+        run_blind_export(raw_dir=b_dir12, mapping_file=map_file, output_dir=tmp_path / "out12")
