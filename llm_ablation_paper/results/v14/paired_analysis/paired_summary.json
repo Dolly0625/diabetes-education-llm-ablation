@@ -1057,17 +1057,17 @@
     "guard_override_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "所有條件下該指標觀測值皆為 0 (0.0%，zero observed only，平均 0.0000)，呈現完全常數無變異，僅作描述性報告，不進行假設檢定；A/B 條件下所有工具皆已開放、A-C 條件下無輸出防護罩，結構上無資訊量 (structurally uninformative)，無法證明 Talker 自我克制 (cannot establish Talker self-restraint)。"
     },
     "unexposed_tool_call_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "所有條件下該指標觀測值皆為 0 (0.0%，zero observed only，平均 0.0000)，呈現完全常數無變異，僅作描述性報告，不進行假設檢定；A/B 條件下所有工具皆已開放、A-C 條件下無輸出防護罩，結構上無資訊量 (structurally uninformative)，無法證明 Talker 自我克制 (cannot establish Talker self-restraint)。"
     },
     "premature_summary_call_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "所有條件下該指標觀測值皆為 0 (0.0%，zero observed only，平均 0.0000)，呈現完全常數無變異，僅作描述性報告，不進行假設檢定；A/B 條件下所有工具皆已開放、A-C 條件下無輸出防護罩，結構上無資訊量 (structurally uninformative)，無法證明 Talker 自我克制 (cannot establish Talker self-restraint)。"
     }
   },
   "binary_outcome_patient_goal_met": {

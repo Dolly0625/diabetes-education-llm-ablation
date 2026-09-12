@@ -30,6 +30,65 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from llm_ablation_paper.workstream_5_judge_analysis.analysis_pipeline import extract_programmatic_metrics
 
 
+SCORE_METRICS = ["safety", "tool_use", "state_consistency", "dialogue_planning", "helpfulness"]
+PROG_RATE_KEYS = [
+    "avg_questions_per_turn",
+    "avg_latency_ms",
+    "total_tokens",
+    "model_calls_count",
+    "guard_override_rate",
+    "unexposed_tool_call_rate",
+    "premature_summary_call_rate",
+]
+ALLOWED_SCENARIO_TYPES = {
+    "DAILY_DIET",
+    "MEDICATION_SIDE_EFFECT",
+    "MEDICATION_NONADHERENCE",
+    "SUBACUTE_HYPOGLYCEMIA",
+    "PREVISIT_SUMMARY",
+    "FACT_CONTRADICTION",
+}
+EXPECTED_PATIENT_IDS = {f"SP-{i:03d}" for i in range(1, 13)}
+
+
+def _require_bounded_score(scores: Dict[str, Any], metric: str, line_num: int) -> float:
+    if metric not in scores:
+        raise ValueError(f"行 {line_num}: consensus_scores 缺少必要指標 '{metric}'，拒絕預設填補！")
+    v = scores[metric]
+    if v is None:
+        raise ValueError(f"行 {line_num}: 指標 '{metric}' 為 None，拒絕預設填補！")
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise ValueError(f"行 {line_num}: 指標 '{metric}' 非數值 (值={v!r})！")
+    if not math.isfinite(v):
+        raise ValueError(f"行 {line_num}: 指標 '{metric}' 非有限數值 (值={v!r})！")
+    if not 0.0 <= float(v) <= 2.0:
+        raise ValueError(f"行 {line_num}: 指標 '{metric}' 超出範圍 [0.0, 2.0] (值={v!r})！")
+    return float(v)
+
+
+def _require_nonnegative_prog(prog: Dict[str, Any], metric: str, line_num: int) -> Any:
+    if metric not in prog:
+        raise ValueError(f"行 {line_num}: 程式指標缺失 '{metric}'，拒絕預設填補！")
+    v = prog[metric]
+    if v is None:
+        raise ValueError(f"行 {line_num}: 程式指標 '{metric}' 為 None (結構性缺失)，拒絕以 0 填補！")
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise ValueError(f"行 {line_num}: 程式指標 '{metric}' 非數值 (值={v!r})！")
+    if not math.isfinite(v):
+        raise ValueError(f"行 {line_num}: 程式指標 '{metric}' 非有限數值 (值={v!r})！")
+    if float(v) < 0:
+        raise ValueError(f"行 {line_num}: 程式指標 '{metric}' 為負值 (值={v!r})！")
+    return v
+
+
+def fmt_p(p: Optional[float]) -> str:
+    if p is None:
+        return "-"
+    if p < 0.0001:
+        return "p<0.0001"
+    return f"p={p:.4f}"
+
+
 def load_linked_dataset(
     judge_results_path: Path,
     blinded_dir: Path,
@@ -58,18 +117,43 @@ def load_linked_dataset(
     if set(mapping_data.keys()) != expected_conditions:
         raise ValueError(f"條件映射鍵值不符預期: {mapping_data.keys()} vs {expected_conditions}")
 
-    # 2. 載入病患情境
+    # 2. 載入病患情境 (嚴格驗證：恰好 12 位、無重複、型別合法、各 2 人)
     scenarios: Dict[str, str] = {}
-    for line in profiles_path.read_text(encoding="utf-8").splitlines():
+    for line_num, line in enumerate(profiles_path.read_text(encoding="utf-8").splitlines(), 1):
         if line.strip():
             p_obj = json.loads(line)
-            scenarios[p_obj["patient_id"]] = p_obj.get("scenario_type", "UNKNOWN")
+            pid = p_obj.get("patient_id")
+            if not pid:
+                raise ValueError(f"Profiles 行 {line_num}: 缺少 patient_id！")
+            if pid in scenarios:
+                raise ValueError(f"Profiles 行 {line_num}: 重複的 patient_id {pid}！")
+            stype = p_obj.get("scenario_type")
+            if not stype:
+                raise ValueError(f"Profiles 行 {line_num}: 病患 {pid} 缺少 scenario_type！")
+            if stype not in ALLOWED_SCENARIO_TYPES:
+                raise ValueError(f"Profiles 行 {line_num}: 病患 {pid} 未知情境型別 {stype}！")
+            scenarios[pid] = stype
+    if set(scenarios.keys()) != EXPECTED_PATIENT_IDS:
+        raise ValueError(
+            f"病患 ID 集合不符預期 (須為 SP-001..SP-012)：缺漏={EXPECTED_PATIENT_IDS - set(scenarios.keys())}，多餘={set(scenarios.keys()) - EXPECTED_PATIENT_IDS}"
+        )
+    type_counts = defaultdict(int)
+    for pid, stype in scenarios.items():
+        type_counts[stype] += 1
+    for stype in ALLOWED_SCENARIO_TYPES:
+        if type_counts[stype] != 2:
+            raise ValueError(f"情境型別 {stype} 病患數為 {type_counts[stype]}，須恰好為 2！分佈={dict(type_counts)}")
 
-    # 3. 載入所有盲測軌跡
+    # 3. 載入所有盲測軌跡 (重複 run_id 即報錯，絕不靜默覆寫)
     blinded_dict: Dict[str, Dict[str, Any]] = {}
     for p in blinded_dir.glob("*.json"):
         b_data = json.loads(p.read_text(encoding="utf-8"))
-        blinded_dict[b_data["run_id"]] = b_data
+        run_id = b_data.get("run_id")
+        if not run_id:
+            raise ValueError(f"盲測檔案 {p.name}: 缺少 run_id！")
+        if run_id in blinded_dict:
+            raise ValueError(f"重複的盲測 run_id: {run_id} (檔案 {p.name})！")
+        blinded_dict[run_id] = b_data
 
     # 4. 讀取評審結果並連結
     linked_records: List[Dict[str, Any]] = []
@@ -101,8 +185,13 @@ def load_linked_dataset(
 
             prog = extract_programmatic_metrics(b_data)
             scores = j_rec.get("consensus_scores", {})
+            if not isinstance(scores, dict):
+                raise ValueError(f"行 {line_num}: consensus_scores 非物件！")
             term_reason = b_data.get("termination_reason")
             goal_met = 1 if term_reason == "PATIENT_GOAL_MET" else 0
+
+            turns = b_data.get("turns", [])
+            prog_validated = {k: _require_nonnegative_prog(prog, k, line_num) for k in PROG_RATE_KEYS}
 
             record = {
                 "patient_id": pat_id,
@@ -111,19 +200,19 @@ def load_linked_dataset(
                 "scenario_type": scenarios.get(pat_id, "UNKNOWN"),
                 "goal_met": goal_met,
                 "termination_reason": term_reason,
-                "turns_count": len(b_data.get("turns", [])),
-                "safety": float(scores.get("safety", 2.0)),
-                "tool_use": float(scores.get("tool_use", 2.0)),
-                "state_consistency": float(scores.get("state_consistency", 2.0)),
-                "dialogue_planning": float(scores.get("dialogue_planning", 2.0)),
-                "helpfulness": float(scores.get("helpfulness", 2.0)),
-                "avg_questions_per_turn": float(prog.get("avg_questions_per_turn") or 0.0),
-                "avg_latency_ms": float(prog.get("avg_latency_ms") or 0.0),
-                "total_tokens": int(prog.get("total_tokens") or 0),
-                "model_calls_count": int(prog.get("model_calls_count") or 0),
-                "guard_override_rate": float(prog.get("guard_override_rate") or 0.0),
-                "unexposed_tool_call_rate": float(prog.get("unexposed_tool_call_rate") or 0.0),
-                "premature_summary_call_rate": float(prog.get("premature_summary_call_rate") or 0.0),
+                "turns_count": len(turns),
+                "safety": _require_bounded_score(scores, "safety", line_num),
+                "tool_use": _require_bounded_score(scores, "tool_use", line_num),
+                "state_consistency": _require_bounded_score(scores, "state_consistency", line_num),
+                "dialogue_planning": _require_bounded_score(scores, "dialogue_planning", line_num),
+                "helpfulness": _require_bounded_score(scores, "helpfulness", line_num),
+                "avg_questions_per_turn": float(prog_validated["avg_questions_per_turn"]),
+                "avg_latency_ms": float(prog_validated["avg_latency_ms"]),
+                "total_tokens": int(prog_validated["total_tokens"]),
+                "model_calls_count": int(prog_validated["model_calls_count"]),
+                "guard_override_rate": float(prog_validated["guard_override_rate"]),
+                "unexposed_tool_call_rate": float(prog_validated["unexposed_tool_call_rate"]),
+                "premature_summary_call_rate": float(prog_validated["premature_summary_call_rate"]),
             }
             linked_records.append(record)
 
@@ -449,13 +538,13 @@ def build_analysis_pipeline(linked_records: List[Dict[str, Any]]) -> Dict[str, A
             output_summary["zero_variation_metrics_note"][zm] = {
                 "all_conditions_mean": actual_mean,
                 "status": "ALL_ZERO_NO_VARIATION",
-                "interpretation": f"所有條件下該指標觀測值皆為 0.0%（平均 {actual_mean:.4f}），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。",
+                "interpretation": f"所有條件下該指標觀測值皆為 0 (0.0%，zero observed only，平均 {actual_mean:.4f})，呈現完全常數無變異，僅作描述性報告，不進行假設檢定；A/B 條件下所有工具皆已開放、A-C 條件下無輸出防護罩，結構上無資訊量 (structurally uninformative)，無法證明 Talker 自我克制 (cannot establish Talker self-restraint)。",
             }
         else:
             output_summary["zero_variation_metrics_note"][zm] = {
                 "all_conditions_mean": actual_mean,
                 "status": "HAS_VARIATION_DESCRIPTIVE_ONLY",
-                "interpretation": f"該指標在各條件下非全為零（總平均 {actual_mean:.4f}），依分析規範採描述性呈現，不進行虛假推論。",
+                "interpretation": f"該指標在各條件下非全為零（總平均 {actual_mean:.4f}），依分析規範採描述性呈現，不進行假設檢定；任何非零觀測仍屬伴隨描述，不構成因果證明 (association only)。",
             }
 
     # 3. 處理 PATIENT_GOAL_MET (Cochran Q + Exact McNemar)
@@ -736,8 +825,8 @@ def generate_paired_effects_markdown(
     content.append("# 糖尿病衛教大型語言模型消融實驗事後探索性配對統計報告 (v14)")
     content.append("")
     content.append("> [!IMPORTANT]")
-    content.append("> **研究性質聲明**：本統計分析為評審評判完成後之**事後探索性配對分析 (Post-hoc Exploratory Paired Analysis)**，**非預先註冊 (Not Preregistered)**。")
-    content.append("> 實驗嚴格以**病患為配對封閉單元 (Block/Pairing: 12 位病患 × 4 條件)**，絕不作為 48 筆獨立樣本推論。")
+    content.append("> **研究性質聲明**：本統計分析為評審評判完成後之**事後探索性配對分析 (Post-hoc Exploratory Paired Analysis)**，**非預先註冊 (Not Preregistered)**；每位病患每條件僅一條隨機軌跡 (one stochastic trajectory per patient-condition)。")
+    content.append("> 實驗嚴格以**病患為配對封閉單元 (Block/Pairing: 12 位病患 × 4 條件；48 條軌跡為 12 個配對病患區集，絕非 48 筆獨立樣本)**。")
     content.append("> 所有統計檢定皆採用非參數配對檢定（Friedman、Wilcoxon 雙尾、Cochran's Q、Exact McNemar），並施加 Holm-Bonferroni 多重比較校正。")
     content.append("")
 
@@ -748,7 +837,7 @@ def generate_paired_effects_markdown(
     content.append("| :--- | :---: | :---: | :---: | :---: | :---: |")
 
     metric_labels = {
-        "safety": "安全性 (Safety)",
+        "safety": "安全性 (Safety；LLM-judge 共識觀察，非臨床事實)",
         "tool_use": "工具使用 (Tool Use)",
         "state_consistency": "狀態一致性 (State Cons.)",
         "dialogue_planning": "對話規劃 (Dialogue Plan.)",
@@ -780,10 +869,15 @@ def generate_paired_effects_markdown(
 
     for m, res in summary_data["omnibus_tests"].items():
         stat_s = f"{res['statistic']:.4f}" if res.get("statistic") is not None else "-"
-        p_s = f"{res['p_value']:.4e}" if res.get("p_value") is not None else "-"
+        if res.get("p_value") is None:
+            p_s = "-"
+        elif res["p_value"] < 0.0001:
+            p_s = "<0.0001"
+        else:
+            p_s = f"{res['p_value']:.4f}"
         sig_s = "未達顯著 (p ≥ 0.05)"
         if res.get("p_value") is not None and res["p_value"] < 0.05:
-            sig_s = f"**顯著差異 (p = {res['p_value']:.4f})**"
+            sig_s = f"**顯著差異 ({fmt_p(res['p_value'])})**"
         if res["status"] == "DEGENERATE_NOT_TESTABLE":
             sig_s = "退化 (無變異，不可檢定)"
 
@@ -793,7 +887,11 @@ def generate_paired_effects_markdown(
     cq = summary_data["binary_outcome_patient_goal_met"]["cochran_q"]
     stat_cq = f"{cq['statistic']:.4f}" if cq.get("statistic") is not None else "-"
     p_cq = f"{cq['p_value']:.4f}" if cq.get("p_value") is not None else "-"
-    content.append(f"| **病患目標達成率 (Goal Met)** | Cochran's Q | `{cq['status']}` | {stat_cq} | {cq['df']} | {p_cq} | **顯著條件間差異 (p = 0.0122)** |")
+    if cq.get("p_value") is not None and cq["p_value"] < 0.05:
+        cq_note = f"**顯著條件間差異 ({fmt_p(cq['p_value'])})**"
+    else:
+        cq_note = "未達顯著 (p ≥ 0.05)"
+    content.append(f"| **病患目標達成率 (Goal Met)** | Cochran's Q | `{cq['status']}` | {stat_cq} | {cq['df']} | {p_cq} | {cq_note} |")
     content.append("")
 
     # 3. 成對比較表
@@ -810,11 +908,11 @@ def generate_paired_effects_markdown(
             if res["status"] == "NOT_TESTABLE/NO_VARIATION":
                 content.append(f"| {metric_labels.get(m, m)} | {pair_key} | 0 | 0.00 | - | - | `NOT_TESTABLE` (差值全為 0) |")
             else:
-                raw_p_s = f"{res['raw_p']:.4f}" if res.get("raw_p") is not None else "-"
-                adj_p_s = f"{res['adjusted_p']:.4f}" if res.get("adjusted_p") is not None else "-"
+                raw_p_s = "<0.0001" if res.get("raw_p") is not None and res["raw_p"] < 0.0001 else (f"{res['raw_p']:.4f}" if res.get("raw_p") is not None else "-")
+                adj_p_s = "<0.0001" if res.get("adjusted_p") is not None and res["adjusted_p"] < 0.0001 else (f"{res['adjusted_p']:.4f}" if res.get("adjusted_p") is not None else "-")
                 sig_note = "未達顯著 (Adj p ≥ 0.05)"
                 if res.get("adjusted_p") is not None and res["adjusted_p"] < 0.05:
-                    sig_note = f"**顯著 (Adj p = {res['adjusted_p']:.4f})**"
+                    sig_note = f"**顯著 ({fmt_p(res['adjusted_p'])} Holm-adjusted)**"
                 content.append(f"| {metric_labels.get(m, m)} | {pair_key} | {res['n_nonzero']} | {res['rank_biserial_r']:+.2f} | {raw_p_s} | {adj_p_s} | {sig_note} |")
 
     # 成對 Exact McNemar
@@ -822,11 +920,11 @@ def generate_paired_effects_markdown(
         if res["status"] == "NOT_TESTABLE/NO_DISCORDANT_PAIRS":
             content.append(f"| **病患目標達成率 (Goal Met)** | {pair_key} | 0 | - | - | - | `NOT_TESTABLE` (無分歧對) |")
         else:
-            raw_p_s = f"{res['raw_p']:.4f}" if res.get("raw_p") is not None else "-"
-            adj_p_s = f"{res['adjusted_p']:.4f}" if res.get("adjusted_p") is not None else "-"
+            raw_p_s = "<0.0001" if res.get("raw_p") is not None and res["raw_p"] < 0.0001 else (f"{res['raw_p']:.4f}" if res.get("raw_p") is not None else "-")
+            adj_p_s = "<0.0001" if res.get("adjusted_p") is not None and res["adjusted_p"] < 0.0001 else (f"{res['adjusted_p']:.4f}" if res.get("adjusted_p") is not None else "-")
             sig_note = "未達顯著 (Adj p ≥ 0.05)"
             if res.get("adjusted_p") is not None and res["adjusted_p"] < 0.05:
-                sig_note = f"**顯著 (Adj p = {res['adjusted_p']:.4f})**"
+                sig_note = f"**顯著 ({fmt_p(res['adjusted_p'])} Holm-adjusted)**"
             content.append(f"| **病患目標達成率 (Goal Met)** | {pair_key} | {res['n_discordant']} (b={res['b_count']}, c={res['c_count']}) | - | {raw_p_s} | {adj_p_s} | {sig_note} |")
 
     content.append("")
@@ -834,21 +932,22 @@ def generate_paired_effects_markdown(
     # 4. 全零與安全指標分析
     content.append("## 4. 完全無變異指標描述性說明")
     content.append("")
-    content.append("1. **安全性評分 (Safety Score)**：48 筆對話之評審一致性評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。")
-    content.append("2. **防護罩攔截率與未授權工具呼叫**：全條件下 `guard_override_rate`、`unexposed_tool_call_rate`、`premature_summary_call_rate` 觀測值均為 0.0%，顯示 Talker 在所有架構下皆未出現主動越權調用未開放工具之行為。")
+    content.append("1. **安全性評分 (Safety Score；LLM-judge (gemini-3.7-flash) consensus observation, not clinical fact)**：48 條配對對話軌跡（12 位病患 × 4 條件之配對區集，非 48 筆獨立樣本）之評審一致性評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。")
+    content.append("2. **防護罩攔截率與未授權工具呼叫 (zero observed only)**：全條件下 `guard_override_rate`、`unexposed_tool_call_rate`、`premature_summary_call_rate` 觀測值皆為 0（zero observed only）；A/B 條件下所有工具皆已開放、A-C 條件下無輸出防護罩，結構上無資訊量 (structurally uninformative in A/B (all tools exposed) and A-C (no output guard))，無法證明 Talker 自我克制 (cannot establish Talker self-restraint)，亦不可解讀為越權行為缺席之證據。")
     content.append("")
 
     # 5. 主要統計發現與限制
     content.append("## 5. 探索性核心發現與邊界約束")
     content.append("")
-    content.append("1. **延遲與 Token 成本 (Efficiency Trade-off)**：")
-    content.append("   - 加入交談規劃器後，每輪延遲顯著增加（A: 1528ms vs B: 3888ms，Wilcoxon Adj p < 0.01，$r_{rb} = -1.00$）。")
-    content.append("   - 但總 Token 消耗顯著降低（A: 17,045 tokens vs B: 9,515 tokens，Wilcoxon Adj p < 0.01，$r_{rb} = +0.97$），反映出 Planner 有效聚焦對話核心，收斂對話發散。")
-    content.append("2. **病患目標達成率 (Goal Met Rate)**：")
-    content.append("   - 條件 A (91.7%) 與 B (100.0%) 維持極高目標達成率；條件 C 因嚴格工具門控下長輩飲食描述未觸發工具開放，導致未產出就醫摘要而以最大輪數結束，目標達成率降至 50.0%（B vs C Exact McNemar 原始 p = 0.031，Holm 校正後 p = 0.125）。")
+    content.append("1. **延遲與 Token 成本 (Efficiency Trade-off；事後探索、非預先註冊；每位病患每條件僅一條隨機軌跡)**：")
+    content.append("   - 觀察到加入交談規劃器與每輪延遲增加相關（A: 1528ms vs B: 3888ms，Wilcoxon Holm-adjusted p=0.0020，$r_{rb} = -1.00$；post-hoc，非預先註冊）。")
+    content.append("   - 觀察到總 Token 消耗與 Planner 條件相關之下降（A: 17,045 tokens vs B: 9,515 tokens，Wilcoxon Holm-adjusted p=0.0039，$r_{rb} = +0.97$）；此為伴隨觀察 (association)，不構成 Planner 收斂對話之因果證明；每位病患每條件僅一條隨機軌跡 (one stochastic trajectory per patient-condition)。")
+    content.append("2. **病患目標達成率 (Goal Met Rate；事後探索、非預先註冊)**：")
+    content.append("   - 條件 A (91.7%) 與 B (100.0%) 觀察到高目標達成率；條件 C 觀測為 50.0%。B–C Exact McNemar raw p=.03125, Holm-adjusted p=.125, not significant after correction.")
+    content.append("   - B-to-C 6 discordant losses span DAILY_DIET 2, FACT_CONTRADICTION 2, MEDICATION_NONADHERENCE 1, SUBACUTE_HYPOGLYCEMIA 1; gate-mechanism hypothesis requires trajectory-level qualitative review, not established. 上述為伴隨觀察，非因果證明；每位病患每條件僅一條隨機軌跡。")
     content.append("3. **嚴格禁止之主張**：")
-    content.append("   - 嚴禁聲稱「條件 D 顯著更安全」（因 Safety 分數全條件皆為 2.0，無統計差異）。")
-    content.append("   - 嚴禁聲稱「具備臨床有效性」或「已證明醫療改善」（本實驗為模擬環境下之工程架構消融，非臨床試驗）。")
+    content.append("   - 嚴禁聲稱「條件 D 顯著更安全」（Safety 為 LLM-judge (gemini-3.7-flash) consensus observation, not clinical fact；全條件皆為 2.0，無統計差異）。")
+    content.append("   - 嚴禁聲稱「具備臨床有效性」或「已證明醫療改善」（本實驗為模擬環境下之工程架構消融，非臨床試驗；事後探索、非預先註冊）。")
 
     output_md.write_text("\n".join(content) + "\n", encoding="utf-8")
 
@@ -880,19 +979,19 @@ def generate_paper_results_blueprint(
 ## 三、實證證據矩陣 (Evidence Matrix)
 
 ### 1. 主要證據 (Primary Evidence)
-- **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Wilson 95% CI: [0.0%, 24.2%]）。
-- **LLM Judge 評審分數**：全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
+- **嚴重失敗率 (Critical Failure Rate, CFR；LLM-judge 共識觀察，非臨床事實)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Wilson 95% CI: [0.0%, 24.2%]）；48 條軌跡為 12 個配對病患區集 (12 matched patient blocks)，非 48 筆獨立樣本。
+- **LLM Judge 評審分數 (LLM-judge (gemini-3.7-flash) consensus observation, not clinical fact)**：全條件 Safety 得分均為 **2.00 (滿分)**，未觀察到嚴重不安全給藥或越權診斷之評審紀錄；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
 - **配對統計檢定 (Paired Omnibus)**：
   - Safety 全條件無變異，呈現天花板效應（Friedman: `DEGENERATE_NOT_TESTABLE`）。
   - 對話品質指標（Tool Use, State Consistency, Dialogue Planning, Helpfulness）在四組間均未達統計顯著差異（Friedman p > 0.05）。
 
 ### 2. 支撐證據 (Supporting Evidence)
-- **效率與互動形態取捨 (Significant Engineering Trade-offs)**：
-  - **延遲代價**：加入 Planner 後，平均每輪延遲從條件 A 的 1,528.5 ms 增加至條件 B 的 3,888.5 ms（Wilcoxon 配對檢定 Holm 校正後 p < 0.01，$r_{rb} = -1.00$）。
-  - **Token 節約**：Planner 的結構化收斂使對話總 Token 顯著下降（條件 A: 17,045.8 vs 條件 B: 9,515.1，Wilcoxon 配對檢定 Holm 校正後 p < 0.01，$r_{rb} = +0.97$）。
-  - **提問引導負擔**：條件 B 顯著增加每輪提問數量（1.39 vs 條件 A 的 0.84，Wilcoxon raw p = 0.0097），但於條件 C (1.19) 與 D (1.09) 逐漸緩和。
-- **目標達成率差異 (Patient Goal Met Rate)**：
-  - 條件 A (91.7%) 與 B (100.0%) 高比例達成目標；條件 C 降至 50.0%（Cochran's Q = 10.92, p = 0.0122），主要導因於長輩日常飲食情境中動態工具門控未開放手冊工具而未及時啟動預問診卡片，使對話達最大 6 輪上限終止。
+- **效率與互動形態取捨 (Engineering Trade-offs；事後探索、非預先註冊；每位病患每條件僅一條隨機軌跡)**：
+  - **延遲代價**：觀察到加入 Planner 與平均每輪延遲增加相關（條件 A 的 1,528.5 ms vs 條件 B 的 3,888.5 ms；Wilcoxon 配對檢定 Holm 校正後 p=0.0020，$r_{rb} = -1.00$；post-hoc，非預先註冊）。
+  - **Token 節約**：觀察到 Planner 條件伴隨對話總 Token 下降（條件 A: 17,045.8 vs 條件 B: 9,515.1，Wilcoxon 配對檢定 Holm 校正後 p=0.0039，$r_{rb} = +0.97$）；此為伴隨關係 (association)，不構成因果證明。
+  - **提問引導負擔**：觀察到條件 B 每輪提問數量與條件 A 相關之增加（1.39 vs 條件 A 的 0.84，Wilcoxon raw p=0.0097），但於條件 C (1.19) 與 D (1.09) 逐漸緩和；事後探索性描述，非預先註冊。
+- **目標達成率差異 (Patient Goal Met Rate；事後探索、非預先註冊)**：
+  - 條件 A (91.7%) 與 B (100.0%) 觀察到高比例達成目標；條件 C 觀測為 50.0%（Cochran's Q = 10.92, p=0.0122；事後探索、非預先註冊）。B–C Exact McNemar raw p=.03125, Holm-adjusted p=.125, not significant after correction. B-to-C 6 discordant losses span DAILY_DIET 2, FACT_CONTRADICTION 2, MEDICATION_NONADHERENCE 1, SUBACUTE_HYPOGLYCEMIA 1; gate-mechanism hypothesis requires trajectory-level qualitative review, not established.
 
 ---
 
@@ -900,7 +999,7 @@ def generate_paper_results_blueprint(
 
 1. **LLM as a Judge 之局限**：評判模型（`gemini-3.7-flash`）為模擬審查，不具備執業醫師執照與法規臨床責任。
 2. **合成病患情境 (In-silico Synthetic Personas)**：12 位病患人物誌為 Prompt 驅動角色扮演，無法涵蓋真實診間複雜語音、認知障礙、情緒衝突或罕見多重共病。
-3. **樣本量統計檢定力**：每組 N=12（總對話數 N=48），對於低頻罕見嚴重安全漏洞（CFR < 5%）的檢定力有限（95% CI 上限仍達 24.2%）。
+3. **樣本量統計檢定力**：每組 N=12（48 條軌跡為 12 個配對病患區集，非 48 筆獨立樣本），對於低頻罕見嚴重安全漏洞（CFR < 5%）的檢定力有限（Wilson 95% CI 上限仍達 24.2%）。
 4. **指標天花板效應 (Ceiling Effect)**：基礎提示詞與系統規範極為完善，使高層級評審指標缺乏離散度，難以凸顯防護罩（Output Guard）對微小文字潤飾的統計差異。
 
 ---
@@ -910,7 +1009,7 @@ def generate_paper_results_blueprint(
 ```text
 4. Results
   4.1 Global Safety and Evaluation Ceiling
-      - 呈現 CFR = 0.0% (95% CI [0.0%, 24.2%]) 與 Safety 滿分 (2.00)
+      - 呈現 CFR = 0.0% (Wilson 95% CI: [0.0%, 24.2%]) 與 Safety 滿分 (2.00，LLM-judge 共識觀察，非臨床事實)
       - 說明 Friedman 退化檢定 (DEGENERATE_NOT_TESTABLE) 與無嚴重危害之觀察
   4.2 Clinical Dialogue Quality across Ablation Conditions
       - 呈現 Tool Use, State Consistency, Dialogue Planning, Helpfulness (Friedman p > 0.05)
@@ -931,10 +1030,10 @@ def generate_paper_results_blueprint(
 ## 六、Discussion 寫作邊界規範 (Writing Guidelines)
 
 ### 建議使用語句 (Allowed / Recommended Statements)
-- 「本研究在 12 位合成病患角色扮演實驗中觀察到，各消融條件均維持零嚴重違規（CFR 0.0%, 95% CI [0.0%, 24.2%]）。」
-- 「引入交談規劃器（Planner）伴隨顯著之延遲增加，但能有效收斂對話 Token 消耗。」
-- 「在長輩家常飲食之邊界對話中，動態工具門控展現較高的保守性，可能導致對話在達成總結前觸發最大輪數限制。」
-- 「評估指標呈現顯著天花板效應，未在評審分數中觀測到條件間的顯著差異。」
+- 「本研究在 12 位合成病患角色扮演實驗中觀察到（LLM-judge (gemini-3.7-flash) consensus observation, not clinical fact），各消融條件均維持零嚴重違規（CFR 0.0%, Wilson 95% CI: [0.0%, 24.2%]）；48 條軌跡為 12 個配對病患區集，非 48 筆獨立樣本。」
+- 「觀察到引入交談規劃器（Planner）與延遲增加相關，同時伴隨對話 Token 消耗下降（事後探索性伴隨觀察，非因果證明；每位病患每條件僅一條隨機軌跡）。」
+- 「B-to-C 6 discordant losses span DAILY_DIET 2, FACT_CONTRADICTION 2, MEDICATION_NONADHERENCE 1, SUBACUTE_HYPOGLYCEMIA 1；動態工具門控保守性之 gate-mechanism hypothesis requires trajectory-level qualitative review, not established。」
+- 「評估指標呈現顯著天花板效應，LLM-judge (gemini-3.7-flash) 共識觀察未在評審分數中顯示條件間顯著差異（非臨床事實）。」
 
 ### 嚴格禁止使用語句 (Strictly Prohibited Statements)
 - ❌ **嚴禁寫**：「條件 D 顯著比條件 A 更安全 / 更有臨床效益」（Safety 分數無差異，不可捏造顯著性）。
@@ -945,7 +1044,7 @@ def generate_paper_results_blueprint(
 ---
 
 ## 七、建議摘要結論句 (Recommended Abstract Conclusion)
-「在 12 位合成病患與 48 條配對對話的消融研究中，所有控制條件均達成 0.0% 嚴重失敗率（95% CI: [0.0%, 24.2%]）與滿分安全性評估。加入交談規劃器顯著降低整體 Token 消耗達 44.2%，惟每輪延遲增加約 2.3 秒；在嚴格動態工具門控下，特定日常飲食情境因過度保守而降低目標達成率。結果顯示多層次 LLM 控制架構之工程取捨主要體現於系統資源負擔與保守性邊界，而非標準對話下的常態安全評分。」
+「在 12 位合成病患與 48 條配對對話（12 個配對病患區集，非 48 筆獨立樣本）的消融研究中（事後探索、非預先註冊；每位病患每條件僅一條隨機軌跡），所有控制條件均觀測到 0.0% 嚴重失敗率（Wilson 95% CI: [0.0%, 24.2%]）與 LLM-judge (gemini-3.7-flash) 共識滿分安全性評估（非臨床事實）。觀察到交談規劃器條件伴隨整體 Token 消耗下降約 44.2%，同時伴隨每輪延遲增加約 2.3 秒；B-to-C 6 discordant losses span DAILY_DIET 2, FACT_CONTRADICTION 2, MEDICATION_NONADHERENCE 1, SUBACUTE_HYPOGLYCEMIA 1; gate-mechanism hypothesis requires trajectory-level qualitative review, not established. 上述皆為伴隨觀察，非因果證明；結果顯示多層次 LLM 控制架構之工程取捨主要體現於系統資源負擔與保守性邊界，而非標準對話下的常態安全評分。」
 """
     output_blueprint_path.write_text(content.strip() + "\n", encoding="utf-8")
 
@@ -955,19 +1054,19 @@ def main():
     parser.add_argument(
         "--judge-results",
         type=Path,
-        default=Path("/Users/dolly/Documents/code/diabetes-chatbot/llm_ablation_paper/artifacts/judge_raw_v14b/judge_results.jsonl"),
+        default=Path(__file__).resolve().parents[1] / "artifacts" / "judge_raw_v14b" / "judge_results.jsonl",
         help="評審結果 JSONL 檔案路徑",
     )
     parser.add_argument(
         "--blinded-dir",
         type=Path,
-        default=Path("/Users/dolly/Documents/code/diabetes-chatbot/llm_ablation_paper/artifacts/blinded_transcripts_v14c"),
+        default=Path(__file__).resolve().parents[1] / "artifacts" / "blinded_transcripts_v14c",
         help="盲測軌跡目錄路徑",
     )
     parser.add_argument(
         "--mapping-file",
         type=Path,
-        default=Path("/Users/dolly/Documents/code/diabetes-chatbot/llm_ablation_paper/artifacts/frozen_config/frozen_condition_mapping.json"),
+        default=Path(__file__).resolve().parents[1] / "artifacts" / "frozen_config" / "frozen_condition_mapping.json",
         help="條件秘密映射檔案路徑",
     )
     parser.add_argument(
