@@ -1057,17 +1057,17 @@
     "guard_override_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
     },
     "unexposed_tool_call_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
     },
     "premature_summary_call_rate": {
       "all_conditions_mean": 0.0,
       "status": "ALL_ZERO_NO_VARIATION",
-      "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
+      "interpretation": "所有條件下該指標觀測值皆為 0.0%（平均 0.0000），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。"
     }
   },
   "binary_outcome_patient_goal_met": {

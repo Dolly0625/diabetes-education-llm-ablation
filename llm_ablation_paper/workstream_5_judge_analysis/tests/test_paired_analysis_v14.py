@@ -266,3 +266,91 @@ def test_formal_output_secret_and_privacy_scanning():
         for pattern, desc in forbidden_patterns:
             matches = pattern.findall(content)
             assert not matches, f"檔案 {p.name} 偵測到機密或內部敏感字串: {desc}, 匹配項: {matches[:3]}"
+
+
+def test_ci_label_and_wilson_score_consistency():
+    """驗證 M5 產物與 RUN_REPORT.md 完全不含 Clopper/Pearson 字串，且 CFR 之 CI 與 Wilson 計算一致。"""
+    from llm_ablation_paper.workstream_5_judge_analysis.analysis_pipeline import calculate_wilson_score_interval
+
+    run_report_path = REPO_ROOT / "llm_ablation_paper" / "results" / "v14" / "RUN_REPORT.md"
+    assert run_report_path.exists()
+
+    # 1. 檢查所有 M5 文本產物與 RUN_REPORT.md 不含 Clopper 或 Pearson
+    files_to_check = [
+        run_report_path,
+        PAIRED_ANALYSIS_DIR / "PAPER_RESULTS_BLUEPRINT.md",
+        PAIRED_ANALYSIS_DIR / "paired_effects.md",
+        PAIRED_ANALYSIS_DIR / "paired_summary.json",
+        PAIRED_ANALYSIS_DIR / "paired_tests.csv",
+        PAIRED_ANALYSIS_DIR / "scenario_breakdown.csv",
+    ]
+
+    for fp in files_to_check:
+        if fp.exists():
+            text = fp.read_text(encoding="utf-8")
+            assert not re.search(r"Clopper|Pearson", text, re.IGNORECASE), (
+                f"檔案 {fp.name} 仍包含 Clopper 或 Pearson 字串，應更正為 Wilson 95% CI！"
+            )
+
+    # 2. 驗證 Wilson 95% CI 計算 0/12 的數值為 [0.0, 0.2425] (≈ [0.0%, 24.2%])
+    ci_lower, ci_upper = calculate_wilson_score_interval(0, 12)
+    assert ci_lower == 0.0
+    assert ci_upper == pytest.approx(0.2425, abs=1e-4)
+
+    # 驗證 RUN_REPORT.md 與 BLUEPRINT 中正確標示 24.2%
+    rr_text = run_report_path.read_text(encoding="utf-8")
+    assert "Wilson 95% CI" in rr_text
+    assert "24.2%" in rr_text
+
+    bp_text = (PAIRED_ANALYSIS_DIR / "PAPER_RESULTS_BLUEPRINT.md").read_text(encoding="utf-8")
+    assert "Wilson 95% CI: [0.0%, 24.2%]" in bp_text
+
+
+def test_zero_variation_metrics_strictness():
+    """驗證 zero_variation_metrics_note 嚴格化邏輯：全零檢測、非零改一般描述、非有限值 fail-closed。"""
+    from llm_ablation_paper.workstream_5_judge_analysis.paired_analysis_v14 import build_analysis_pipeline
+
+    summary_path = PAIRED_ANALYSIS_DIR / "paired_summary.json"
+    paired_data = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    # 1. 驗證正式產物中的全零指標
+    zero_notes = paired_data["zero_variation_metrics_note"]
+    for zm in ["guard_override_rate", "unexposed_tool_call_rate", "premature_summary_call_rate"]:
+        assert zm in zero_notes
+        assert zero_notes[zm]["status"] == "ALL_ZERO_NO_VARIATION"
+        assert zero_notes[zm]["all_conditions_mean"] == 0.0
+        assert "0.0%" in zero_notes[zm]["interpretation"]
+
+    # 2. 驗證 binary_outcome_patient_goal_met 的 rates.total 等於 12 (即 len(patients))
+    rates = paired_data["binary_outcome_patient_goal_met"]["rates"]
+    for c in ["A", "B", "C", "D"]:
+        assert rates[c]["total"] == 12
+
+    # 3. 測試非有限值 (NaN / Inf) 時拋出 ValueError (Fail-Closed)
+    mock_records = []
+    for i in range(1, 13):
+        pid = f"SP-{i:03d}"
+        for c in ["A", "B", "C", "D"]:
+            mock_records.append({
+                "patient_id": pid,
+                "condition": c,
+                "blinded_run_id": f"BLIND-{pid}-{c}",
+                "scenario_type": "DAILY_DIET",
+                "goal_met": 1,
+                "turns_count": 4,
+                "safety": 2.0,
+                "tool_use": 2.0,
+                "state_consistency": 2.0,
+                "dialogue_planning": 2.0,
+                "helpfulness": 2.0,
+                "avg_questions_per_turn": 1.0,
+                "avg_latency_ms": 1000.0,
+                "total_tokens": 5000,
+                "model_calls_count": 4,
+                "guard_override_rate": 0.0,
+                "unexposed_tool_call_rate": 0.0,
+                "premature_summary_call_rate": float("nan"),
+            })
+
+    with pytest.raises(ValueError, match="包含非有限數值"):
+        build_analysis_pipeline(mock_records)

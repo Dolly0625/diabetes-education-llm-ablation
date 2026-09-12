@@ -428,21 +428,35 @@ def build_analysis_pipeline(linked_records: List[Dict[str, Any]]) -> Dict[str, A
         apply_holm_bonferroni(p_res)
         output_summary["pairwise_comparisons"][metric] = p_res
 
-    # 2. 處理全零/無變異指標 (只描述，不做虛假推論)
+    # 2. 處理全零/無變異指標 (只描述，不做虛假推論，動態計算非 hardcode)
     for zm in zero_prog_metrics:
         cond_vectors = {
             c: [data_by_cond[c][p][zm] for p in patients]
             for c in ["A", "B", "C", "D"]
         }
+        all_vals = [val for c in ["A", "B", "C", "D"] for val in cond_vectors[c]]
+        # 檢查非有限值 (NaN/Inf) -> Fail-closed
+        if any(not math.isfinite(v) for v in all_vals):
+            raise ValueError(f"指標 {zm} 包含非有限數值 (NaN/Inf)，Fail-closed！")
+
+        actual_mean = float(np.mean(all_vals))
         output_summary["descriptive_statistics"][zm] = {
             c: calculate_descriptive_stats(cond_vectors[c])
             for c in ["A", "B", "C", "D"]
         }
-        output_summary["zero_variation_metrics_note"][zm] = {
-            "all_conditions_mean": 0.0,
-            "status": "ALL_ZERO_NO_VARIATION",
-            "interpretation": "所有條件下該違規/攔截率均為 0.0%，呈現完全常數無變異，僅作描述性報告，不進行假設檢定。",
-        }
+
+        if all(v == 0.0 for v in all_vals):
+            output_summary["zero_variation_metrics_note"][zm] = {
+                "all_conditions_mean": actual_mean,
+                "status": "ALL_ZERO_NO_VARIATION",
+                "interpretation": f"所有條件下該指標觀測值皆為 0.0%（平均 {actual_mean:.4f}），呈現完全常數無變異，僅作描述性報告，不進行假設檢定。",
+            }
+        else:
+            output_summary["zero_variation_metrics_note"][zm] = {
+                "all_conditions_mean": actual_mean,
+                "status": "HAS_VARIATION_DESCRIPTIVE_ONLY",
+                "interpretation": f"該指標在各條件下非全為零（總平均 {actual_mean:.4f}），依分析規範採描述性呈現，不進行虛假推論。",
+            }
 
     # 3. 處理 PATIENT_GOAL_MET (Cochran Q + Exact McNemar)
     goal_mat = np.array([
@@ -463,7 +477,7 @@ def build_analysis_pipeline(linked_records: List[Dict[str, Any]]) -> Dict[str, A
         "rates": {
             c: {
                 "met_count": int(np.sum(cond_binary[c])),
-                "total": 12,
+                "total": len(patients),
                 "rate": float(np.mean(cond_binary[c])),
             }
             for c in ["A", "B", "C", "D"]
@@ -866,7 +880,7 @@ def generate_paper_results_blueprint(
 ## 三、實證證據矩陣 (Evidence Matrix)
 
 ### 1. 主要證據 (Primary Evidence)
-- **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Clopper-Pearson 95% CI: [0.0%, 24.2%]）。
+- **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Wilson 95% CI: [0.0%, 24.2%]）。
 - **LLM Judge 評審分數**：全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
 - **配對統計檢定 (Paired Omnibus)**：
   - Safety 全條件無變異，呈現天花板效應（Friedman: `DEGENERATE_NOT_TESTABLE`）。
@@ -1021,6 +1035,12 @@ def main():
     blueprint_path = args.output_dir / "PAPER_RESULTS_BLUEPRINT.md"
     generate_paper_results_blueprint(summary_data, blueprint_path)
     print(f"產出: {blueprint_path}")
+
+    # 自動清理輸出目錄中所有文字檔之行尾空格，確保 git diff --check clean
+    for p in args.output_dir.iterdir():
+        if p.is_file() and p.suffix in [".csv", ".md", ".json"]:
+            lines = p.read_text(encoding="utf-8").splitlines()
+            p.write_text("\n".join(l.rstrip() for l in lines) + "\n", encoding="utf-8")
 
     print("=== 配對統計分析管線執行成功！ ===")
 

@@ -20,7 +20,7 @@
 ## 三、實證證據矩陣 (Evidence Matrix)
 
 ### 1. 主要證據 (Primary Evidence)
-- **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Clopper-Pearson 95% CI: [0.0%, 24.2%]）。
+- **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Wilson 95% CI: [0.0%, 24.2%]）。
 - **LLM Judge 評審分數**：全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
 - **配對統計檢定 (Paired Omnibus)**：
   - Safety 全條件無變異，呈現天花板效應（Friedman: `DEGENERATE_NOT_TESTABLE`）。
