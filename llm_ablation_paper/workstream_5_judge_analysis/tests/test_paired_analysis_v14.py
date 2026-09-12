@@ -533,15 +533,106 @@ def test_load_linked_dataset_data_integrity_fault_injections(tmp_path):
     with pytest.raises(ValueError, match="之病患數量必須正好為 2"):
         load_linked_dataset(j_p, b_d, m_p, p_p)
 
+    # Case 10: termination_reason 為 None (Fail-Closed，避免 missing 被算 goal_met=0)
+    def mutate_none_term_reason(b, pid, c):
+        if pid == "SP-001" and c == "A":
+            b["termination_reason"] = None
+    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_none_term_reason)
+    with pytest.raises(ValueError, match="termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS"):
+        load_linked_dataset(j_p, b_d, m_p, p_p)
+
+    # Case 11: termination_reason 為 ERROR (Fail-Closed)
+    def mutate_error_term_reason(b, pid, c):
+        if pid == "SP-001" and c == "A":
+            b["termination_reason"] = "ERROR"
+    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_error_term_reason)
+    with pytest.raises(ValueError, match="termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS"):
+        load_linked_dataset(j_p, b_d, m_p, p_p)
+
+    # Case 12: termination_reason 為未知字串 (如 COMMON_INPUT_BLOCK)
+    def mutate_unknown_term_reason(b, pid, c):
+        if pid == "SP-001" and c == "A":
+            b["termination_reason"] = "COMMON_INPUT_BLOCK"
+    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_unknown_term_reason)
+    with pytest.raises(ValueError, match="termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS"):
+        load_linked_dataset(j_p, b_d, m_p, p_p)
+
+    # Case 13: total_tokens 包含小數 (fractional float)，拒絕靜默截斷
+    def mutate_fractional_tokens(b, pid, c):
+        if pid == "SP-001" and c == "A":
+            b["turns"][0]["token_usage"]["prompt_tokens"] = 100.5
+    j_p, b_d, m_p, p_p = build_dataset(tmp_path, mutate_b=mutate_fractional_tokens)
+    with pytest.raises(ValueError, match="程式指標 total_tokens 必須為非負整數，拒絕小數浮點數"):
+        load_linked_dataset(j_p, b_d, m_p, p_p)
+
+    # Case 14: model_calls_count 包含小數 (fractional float)
+    import llm_ablation_paper.workstream_5_judge_analysis.paired_analysis_v14 as mod_paired
+    orig_extract = mod_paired.extract_programmatic_metrics
+    try:
+        def fake_extract_float_calls(b_data):
+            res = orig_extract(b_data)
+            res["model_calls_count"] = 4.2
+            return res
+        mod_paired.extract_programmatic_metrics = fake_extract_float_calls
+        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
+        with pytest.raises(ValueError, match="程式指標 model_calls_count 必須為非負整數，拒絕小數浮點數"):
+            load_linked_dataset(j_p, b_d, m_p, p_p)
+    finally:
+        mod_paired.extract_programmatic_metrics = orig_extract
+
+    # Case 15: unexposed_tool_calls > tool_calls_count 違背約束
+    try:
+        def fake_extract_invalid_tool_calls(b_data):
+            res = orig_extract(b_data)
+            res["tool_calls_count"] = 2
+            res["unexposed_tool_calls"] = 5
+            return res
+        mod_paired.extract_programmatic_metrics = fake_extract_invalid_tool_calls
+        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
+        with pytest.raises(ValueError, match="不得大於 tool_calls_count"):
+            load_linked_dataset(j_p, b_d, m_p, p_p)
+    finally:
+        mod_paired.extract_programmatic_metrics = orig_extract
+
+    # Case 16: unexposed_tool_call_rate 超出 [0.0, 1.0] (如 1.5)
+    try:
+        def fake_extract_invalid_unexposed_rate(b_data):
+            res = orig_extract(b_data)
+            res["tool_calls_count"] = 2
+            res["unexposed_tool_calls"] = 1
+            res["unexposed_tool_call_rate"] = 1.5
+            return res
+        mod_paired.extract_programmatic_metrics = fake_extract_invalid_unexposed_rate
+        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
+        with pytest.raises(ValueError, match=r"unexposed_tool_call_rate 必須有限且介於 \[0\.0, 1\.0\]"):
+            load_linked_dataset(j_p, b_d, m_p, p_p)
+    finally:
+        mod_paired.extract_programmatic_metrics = orig_extract
+
+    # Case 17: premature_summary_call_rate 超出 [0.0, 1.0] (如 1.2 或 -0.1)
+    try:
+        def fake_extract_invalid_premature_rate(b_data):
+            res = orig_extract(b_data)
+            res["premature_summary_calls"] = 1
+            res["premature_summary_call_rate"] = 1.2
+            return res
+        mod_paired.extract_programmatic_metrics = fake_extract_invalid_premature_rate
+        j_p, b_d, m_p, p_p = build_dataset(tmp_path)
+        with pytest.raises(ValueError, match=r"premature_summary_call_rate 必須有限且介於 \[0\.0, 1\.0\]"):
+            load_linked_dataset(j_p, b_d, m_p, p_p)
+    finally:
+        mod_paired.extract_programmatic_metrics = orig_extract
+
 
 def test_m5b_claim_audit_and_formatting_invariants():
-    """驗證 M5b claim-audit 六大規範約束：
+    """驗證 M5b claim-audit 規範約束：
     1. 不得出現 '0.0000' 虛假 p 值，應標記 'p < 0.0001'。
-    2. 措辭應為 '48 trajectories arranged in 12 matched patient blocks' 與 'LLM-judge consensus observations'。
+    2. 措辭應為 '48 trajectories arranged in 12 matched patient blocks' 與 'condition-blinded LLM judge consensus observations'。
     3. C 之 goal failure 跨 4 類情境描述性現象，機制須質性審閱，移除 gate 因果斷言。
     4. B-C McNemar 明寫 Holm 校正後 p=0.125 不顯著。
     5. zeros 敘述說明 A/B 全工具暴露結構下資訊有限、A-C 未啟用 guard 不能證明自我約束。
     6. 因果語氣全面修訂為伴隨/相關，並重申非預先註冊與單次隨機軌跡限制。
+    7. 盲化評判術語校正：禁止「雙盲」，必須使用「對條件身分盲化的 LLM Judge」或「condition-blinded LLM judge」。
     """
     bp_text = (PAIRED_ANALYSIS_DIR / "PAPER_RESULTS_BLUEPRINT.md").read_text(encoding="utf-8")
     eff_text = (PAIRED_ANALYSIS_DIR / "paired_effects.md").read_text(encoding="utf-8")
@@ -556,8 +647,8 @@ def test_m5b_claim_audit_and_formatting_invariants():
     # 2. 措辭規範
     assert "48 trajectories arranged in 12 matched patient blocks" in bp_text
     assert "48 trajectories arranged in 12 matched patient blocks" in eff_text
-    assert "LLM-judge consensus observations" in bp_text
-    assert "LLM-judge consensus observations" in eff_text
+    assert "condition-blinded LLM judge consensus observations" in bp_text
+    assert "condition-blinded LLM judge consensus observations" in eff_text
 
     # 3. C 的 6 個 goal failures 跨 4 類情境且機制須質性審閱
     assert "4 類情境" in bp_text
@@ -584,3 +675,11 @@ def test_m5b_claim_audit_and_formatting_invariants():
     assert "單次隨機軌跡" in eff_text
     assert "事後探索性配對分析" in bp_text
     assert "非預先註冊" in bp_text
+
+    # 7. 盲化評判術語校正
+    assert "雙盲" not in eff_text
+    assert "雙盲" not in bp_text
+    assert "對條件身分盲化的 LLM Judge" in eff_text
+    assert "對條件身分盲化的 LLM Judge" in bp_text
+    assert "condition-blinded LLM judge" in eff_text
+    assert "condition-blinded LLM judge" in bp_text

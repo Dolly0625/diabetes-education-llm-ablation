@@ -54,6 +54,12 @@ VALID_SCENARIO_TYPES = {
     "FACT_CONTRADICTION",
 }
 
+VALID_TERMINATION_REASONS = {
+    "PATIENT_GOAL_MET",
+    "MAX_TURNS",
+}
+
+
 
 def load_linked_dataset(
     judge_results_path: Path,
@@ -199,7 +205,13 @@ def load_linked_dataset(
                     raise ValueError(f"行 {line_num}: 程式指標 {pm} 不得為 NaN/Inf，實得 {p_float}")
                 if p_float < 0.0:
                     raise ValueError(f"行 {line_num}: 程式指標 {pm} 必須為非負數值，實得 {p_float}")
-                parsed_prog[pm] = int(p_val) if pm in ["total_tokens", "model_calls_count"] else p_float
+                if pm in ["total_tokens", "model_calls_count"]:
+                    # 必須是非負整數，拒絕 fractional float，不可 int 靜默截斷
+                    if isinstance(p_val, float) and not p_val.is_integer():
+                        raise ValueError(f"行 {line_num}: 程式指標 {pm} 必須為非負整數，拒絕小數浮點數 ({p_val})")
+                    parsed_prog[pm] = int(p_val)
+                else:
+                    parsed_prog[pm] = p_float
 
             # 驗證 output_guard_triggered 與衍生之 guard_override_rate
             if "output_guard_triggered" not in prog or prog["output_guard_triggered"] is None:
@@ -208,8 +220,10 @@ def load_linked_dataset(
             if not isinstance(guard_trig, bool):
                 raise ValueError(f"行 {line_num}: output_guard_triggered 必須為布林值，實得 {type(guard_trig).__name__}")
             guard_override_rate = 1.0 if guard_trig else 0.0
+            if guard_override_rate < 0.0 or guard_override_rate > 1.0:
+                raise ValueError(f"行 {line_num}: guard_override_rate 超出合法範圍 [0.0, 1.0]，實得 {guard_override_rate}")
 
-            # 驗證工具呼叫與 unexposed_tool_call_rate
+            # 驗證工具呼叫與 unexposed_tool_call_rate (約束: unexposed_tool_calls <= tool_calls_count)
             if "tool_calls_count" not in prog or prog["tool_calls_count"] is None:
                 raise ValueError(f"行 {line_num}: 程式指標缺少 tool_calls_count")
             if "unexposed_tool_calls" not in prog or prog["unexposed_tool_calls"] is None:
@@ -220,6 +234,8 @@ def load_linked_dataset(
                 raise ValueError(f"行 {line_num}: tool_calls_count 必須為非負整數，實得 {t_calls}")
             if isinstance(u_calls, bool) or not isinstance(u_calls, int) or u_calls < 0:
                 raise ValueError(f"行 {line_num}: unexposed_tool_calls 必須為非負整數，實得 {u_calls}")
+            if u_calls > t_calls:
+                raise ValueError(f"行 {line_num}: unexposed_tool_calls ({u_calls}) 不得大於 tool_calls_count ({t_calls})")
 
             if t_calls == 0:
                 unexposed_rate = 0.0
@@ -228,8 +244,8 @@ def load_linked_dataset(
                 if raw_u_rate is None or isinstance(raw_u_rate, bool) or not isinstance(raw_u_rate, (int, float)):
                     raise ValueError(f"行 {line_num}: 當 tool_calls_count > 0 時 unexposed_tool_call_rate 必須為數值")
                 f_u_rate = float(raw_u_rate)
-                if not math.isfinite(f_u_rate) or f_u_rate < 0.0:
-                    raise ValueError(f"行 {line_num}: unexposed_tool_call_rate 必須有限且非負")
+                if not math.isfinite(f_u_rate) or f_u_rate < 0.0 or f_u_rate > 1.0:
+                    raise ValueError(f"行 {line_num}: unexposed_tool_call_rate 必須有限且介於 [0.0, 1.0]，實得 {f_u_rate}")
                 unexposed_rate = f_u_rate
 
             # 驗證 premature_summary_calls 與 premature_summary_call_rate
@@ -248,11 +264,15 @@ def load_linked_dataset(
                 if isinstance(raw_p_rate, bool) or not isinstance(raw_p_rate, (int, float)):
                     raise ValueError(f"行 {line_num}: premature_summary_call_rate 必須為數值型態")
                 f_p_rate = float(raw_p_rate)
-                if not math.isfinite(f_p_rate) or f_p_rate < 0.0:
-                    raise ValueError(f"行 {line_num}: premature_summary_call_rate 必須有限且非負")
+                if not math.isfinite(f_p_rate) or f_p_rate < 0.0 or f_p_rate > 1.0:
+                    raise ValueError(f"行 {line_num}: premature_summary_call_rate 必須有限且介於 [0.0, 1.0]，實得 {f_p_rate}")
                 premature_rate = f_p_rate
 
             term_reason = b_data.get("termination_reason")
+            if term_reason not in VALID_TERMINATION_REASONS:
+                raise ValueError(
+                    f"行 {line_num}: termination_reason 僅接受 PATIENT_GOAL_MET 或 MAX_TURNS，實得 {term_reason}"
+                )
             goal_met = 1 if term_reason == "PATIENT_GOAL_MET" else 0
 
             record = {
@@ -1000,7 +1020,7 @@ def generate_paired_effects_markdown(
     # 4. 全零與安全指標分析
     content.append("## 4. 完全無變異指標描述性說明")
     content.append("")
-    content.append("1. **安全性評分 (Safety Score)**：在基於雙盲 LLM-judge 共識之觀測 (LLM-judge consensus observations) 下，以 12 位病患配對組塊編排之 48 條對話軌跡 (48 trajectories arranged in 12 matched patient blocks) 之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。")
+    content.append("1. **安全性評分 (Safety Score)**：在基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 下，以 12 位病患配對組塊編排之 48 條對話軌跡 (48 trajectories arranged in 12 matched patient blocks) 之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。")
     content.append("2. **未暴露工具與防護罩指標之結構限制**：")
     content.append("   - **未暴露工具呼叫率 (`unexposed_tool_call_rate`)**：條件 A 與 B 本身即為全工具暴露結構（未實施動態工具門控），在此結構下未暴露工具調用率之資訊量有限；在適用條件下觀測值皆為 0.0%。")
     content.append("   - **防護罩攔截率 (`guard_override_rate`)**：條件 A、B、C 未啟用輸出防護罩（Output Guard），因此 `guard_override_rate=0.0%` 不能證明 Talker Agent 的自我約束能力；在適用條件下觀測值皆為 0.0%。")
@@ -1054,7 +1074,7 @@ def generate_paper_results_blueprint(
 
 ### 1. 主要證據 (Primary Evidence)
 - **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Wilson 95% CI: [0.0%, 24.2%]）。
-- **LLM Judge 評審分數**：在基於雙盲評審之共識觀測 (LLM-judge consensus observations) 下，全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
+- **LLM Judge 評審分數**：在基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 下，全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
 - **配對統計檢定 (Paired Omnibus)**：
   - Safety 全條件無變異，呈現天花板效應（Friedman: `DEGENERATE_NOT_TESTABLE`）。
   - 對話品質指標（Tool Use, State Consistency, Dialogue Planning, Helpfulness）在四組間均未達統計顯著差異（Friedman p ≥ 0.05）。
@@ -1072,9 +1092,8 @@ def generate_paper_results_blueprint(
 ---
 
 ## 四、研究限制與威脅分析 (Study Limitations)
-
 1. **研究設計性質與因果邊界**：本分析為事後探索性配對分析 (Post-hoc Exploratory Paired Analysis)，**非預先註冊 (Not Preregistered)**；每病患每條件僅採單次隨機軌跡 (single random trajectory per condition)，所有發現皆屬關聯性描述，嚴禁作因果推論。
-2. **LLM as a Judge 之局限**：評判模型（`gemini-3.7-flash`）為雙盲共識模擬審查 (LLM-judge consensus observations)，不具備執業醫師執照與法規臨床責任。
+2. **LLM as a Judge 之局限**：評判模型（`gemini-3.7-flash`）為對條件身分盲化的 LLM Judge 共識模擬審查 (condition-blinded LLM judge consensus observations)，不具備執業醫師執照與法規臨床責任。
 3. **合成病患情境 (In-silico Synthetic Personas)**：12 位病患人物誌為 Prompt 驅動角色扮演，無法涵蓋真實診間複雜語音、認知障礙、情緒衝突或罕見多重共病。
 4. **樣本量統計檢定力**：每組 N=12（共計 48 trajectories arranged in 12 matched patient blocks），對於低頻罕見嚴重安全漏洞（CFR < 5%）的檢定力有限（95% CI 上限仍達 24.2%）。
 5. **指標天花板效應與結構限制**：
@@ -1127,7 +1146,7 @@ def generate_paper_results_blueprint(
 ---
 
 ## 七、建議摘要結論句 (Recommended Abstract Conclusion)
-「在 12 位合成病患與 48 trajectories arranged in 12 matched patient blocks 的消融研究中，基於雙盲 LLM-judge 共識之觀測 (LLM-judge consensus observations) 顯示所有控制條件均達成 0.0% 嚴重失敗率（Wilson 95% CI: [0.0%, 24.2%]）與滿分安全性評估。引入交談規劃器伴隨整體 Token 消耗降低 44.2%，惟每輪延遲增加約 2.3 秒；條件 C 伴隨較低之目標達成率（6 筆未達成案例分佈跨 4 類情境，具體機制須逐軌跡質性審閱判定；成對比較經 Holm 校正後未達顯著）。本研究為事後探索性配對分析（非預先註冊），結果顯示多層次 LLM 控制架構之工程取捨主要體現於系統資源負擔與保守性邊界，而非標準對話下的常態安全評分。」
+「在 12 位合成病患與 48 trajectories arranged in 12 matched patient blocks 的消融研究中，基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 顯示所有控制條件均達成 0.0% 嚴重失敗率（Wilson 95% CI: [0.0%, 24.2%]）與滿分安全性評估。引入交談規劃器伴隨整體 Token 消耗降低 44.2%，惟每輪延遲增加約 2.3 秒；條件 C 伴隨較低之目標達成率（6 筆未達成案例分佈跨 4 類情境，具體機制須逐軌跡質性審閱判定；成對比較經 Holm 校正後未達顯著）。本研究為事後探索性配對分析（非預先註冊），結果顯示多層次 LLM 控制架構之工程取捨主要體現於系統資源負擔與保守性邊界，而非標準對話下的常態安全評分。」
 """
     output_blueprint_path.write_text(content.strip() + "\n", encoding="utf-8")
 

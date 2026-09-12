@@ -21,7 +21,7 @@
 
 ### 1. 主要證據 (Primary Evidence)
 - **嚴重失敗率 (Critical Failure Rate, CFR)**：所有條件 (A/B/C/D) 觀測 CFR 均為 **0.0%**（N=12/組，Wilson 95% CI: [0.0%, 24.2%]）。
-- **LLM Judge 評審分數**：在基於雙盲評審之共識觀測 (LLM-judge consensus observations) 下，全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
+- **LLM Judge 評審分數**：在基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 下，全條件 Safety 得分均為 **2.00 (滿分)**，無嚴重不安全給藥或越權診斷；Dialogue Planning 與 Helpfulness 亦維持在 1.75 - 2.00 高分區間。
 - **配對統計檢定 (Paired Omnibus)**：
   - Safety 全條件無變異，呈現天花板效應（Friedman: `DEGENERATE_NOT_TESTABLE`）。
   - 對話品質指標（Tool Use, State Consistency, Dialogue Planning, Helpfulness）在四組間均未達統計顯著差異（Friedman p ≥ 0.05）。
@@ -39,9 +39,8 @@
 ---
 
 ## 四、研究限制與威脅分析 (Study Limitations)
-
 1. **研究設計性質與因果邊界**：本分析為事後探索性配對分析 (Post-hoc Exploratory Paired Analysis)，**非預先註冊 (Not Preregistered)**；每病患每條件僅採單次隨機軌跡 (single random trajectory per condition)，所有發現皆屬關聯性描述，嚴禁作因果推論。
-2. **LLM as a Judge 之局限**：評判模型（`gemini-3.7-flash`）為雙盲共識模擬審查 (LLM-judge consensus observations)，不具備執業醫師執照與法規臨床責任。
+2. **LLM as a Judge 之局限**：評判模型（`gemini-3.7-flash`）為對條件身分盲化的 LLM Judge 共識模擬審查 (condition-blinded LLM judge consensus observations)，不具備執業醫師執照與法規臨床責任。
 3. **合成病患情境 (In-silico Synthetic Personas)**：12 位病患人物誌為 Prompt 驅動角色扮演，無法涵蓋真實診間複雜語音、認知障礙、情緒衝突或罕見多重共病。
 4. **樣本量統計檢定力**：每組 N=12（共計 48 trajectories arranged in 12 matched patient blocks），對於低頻罕見嚴重安全漏洞（CFR < 5%）的檢定力有限（95% CI 上限仍達 24.2%）。
 5. **指標天花板效應與結構限制**：
@@ -94,4 +93,4 @@
 ---
 
 ## 七、建議摘要結論句 (Recommended Abstract Conclusion)
-「在 12 位合成病患與 48 trajectories arranged in 12 matched patient blocks 的消融研究中，基於雙盲 LLM-judge 共識之觀測 (LLM-judge consensus observations) 顯示所有控制條件均達成 0.0% 嚴重失敗率（Wilson 95% CI: [0.0%, 24.2%]）與滿分安全性評估。引入交談規劃器伴隨整體 Token 消耗降低 44.2%，惟每輪延遲增加約 2.3 秒；條件 C 伴隨較低之目標達成率（6 筆未達成案例分佈跨 4 類情境，具體機制須逐軌跡質性審閱判定；成對比較經 Holm 校正後未達顯著）。本研究為事後探索性配對分析（非預先註冊），結果顯示多層次 LLM 控制架構之工程取捨主要體現於系統資源負擔與保守性邊界，而非標準對話下的常態安全評分。」
+「在 12 位合成病患與 48 trajectories arranged in 12 matched patient blocks 的消融研究中，基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 顯示所有控制條件均達成 0.0% 嚴重失敗率（Wilson 95% CI: [0.0%, 24.2%]）與滿分安全性評估。引入交談規劃器伴隨整體 Token 消耗降低 44.2%，惟每輪延遲增加約 2.3 秒；條件 C 伴隨較低之目標達成率（6 筆未達成案例分佈跨 4 類情境，具體機制須逐軌跡質性審閱判定；成對比較經 Holm 校正後未達顯著）。本研究為事後探索性配對分析（非預先註冊），結果顯示多層次 LLM 控制架構之工程取捨主要體現於系統資源負擔與保守性邊界，而非標準對話下的常態安全評分。」

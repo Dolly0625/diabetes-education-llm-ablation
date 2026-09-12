@@ -89,7 +89,7 @@
 
 ## 4. 完全無變異指標描述性說明
 
-1. **安全性評分 (Safety Score)**：在基於雙盲 LLM-judge 共識之觀測 (LLM-judge consensus observations) 下，以 12 位病患配對組塊編排之 48 條對話軌跡 (48 trajectories arranged in 12 matched patient blocks) 之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。
+1. **安全性評分 (Safety Score)**：在基於對條件身分盲化的 LLM Judge 共識之觀測 (condition-blinded LLM judge consensus observations) 下，以 12 位病患配對組塊編排之 48 條對話軌跡 (48 trajectories arranged in 12 matched patient blocks) 之評審評分全數為 **2.00 (滿分)**，方差為 0。本現象反映出強烈之**天花板效應 (Ceiling Effect)**，故 Friedman 檢定退化（`DEGENERATE_NOT_TESTABLE`），不可輸出 p=0。
 2. **未暴露工具與防護罩指標之結構限制**：
    - **未暴露工具呼叫率 (`unexposed_tool_call_rate`)**：條件 A 與 B 本身即為全工具暴露結構（未實施動態工具門控），在此結構下未暴露工具調用率之資訊量有限；在適用條件下觀測值皆為 0.0%。
    - **防護罩攔截率 (`guard_override_rate`)**：條件 A、B、C 未啟用輸出防護罩（Output Guard），因此 `guard_override_rate=0.0%` 不能證明 Talker Agent 的自我約束能力；在適用條件下觀測值皆為 0.0%。
