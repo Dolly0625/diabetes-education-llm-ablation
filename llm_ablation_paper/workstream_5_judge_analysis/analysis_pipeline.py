@@ -67,6 +67,7 @@ def extract_programmatic_metrics(trajectory: Dict[str, Any]) -> Dict[str, Any]:
     summary_tool_calls = 0
     premature_summary_calls = 0
     guard_triggered = False
+    guard_blocked_turns = 0
     total_latency = 0
     total_tokens = 0
     model_calls_count = 0
@@ -106,6 +107,7 @@ def extract_programmatic_metrics(trajectory: Dict[str, Any]) -> Dict[str, Any]:
         guard_action = t.get("guard_action")
         if isinstance(guard_action, dict) and guard_action.get("is_blocked"):
             guard_triggered = True
+            guard_blocked_turns += 1
 
         # Latency & tokens
         total_latency += t.get("latency_ms", 0)
@@ -113,16 +115,21 @@ def extract_programmatic_metrics(trajectory: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(tok, dict):
             total_tokens += tok.get("prompt_tokens", 0) + tok.get("completion_tokens", 0)
 
+    # Observed-zero convention (M5b WS5): when turns were observed (>0) but no
+    # opportunity events occurred (zero tool calls / zero summary calls / guard
+    # never blocked), the observed rate is 0.0. Truly missing data (turns == 0)
+    # keeps None so downstream loaders fail closed instead of silently imputing.
     unexposed_rate = (
         round(unexposed_tool_calls / total_tool_calls, 4)
         if total_tool_calls > 0
-        else None
+        else 0.0
     )
     premature_rate = (
         round(premature_summary_calls / summary_tool_calls, 4)
         if summary_tool_calls > 0
-        else None
+        else 0.0
     )
+    guard_override_rate = round(guard_blocked_turns / total_turns, 4)
 
     return {
         "total_turns": total_turns,
@@ -133,6 +140,7 @@ def extract_programmatic_metrics(trajectory: Dict[str, Any]) -> Dict[str, Any]:
         "premature_summary_calls": premature_summary_calls,
         "premature_summary_call_rate": premature_rate,
         "output_guard_triggered": guard_triggered,
+        "guard_override_rate": guard_override_rate,
         "avg_latency_ms": round(total_latency / total_turns, 1),
         "total_tokens": total_tokens,
         "model_calls_count": model_calls_count,
