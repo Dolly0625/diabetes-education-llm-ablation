@@ -101,7 +101,7 @@
 ## 8. 殘餘 blockers 與限制（Codex 需複核）
 
 1. **N=1 case / 4 trajectories / 12 turns**：不得做任何 A–D 比較、率或效果。
-2. **未跑 Judge**：無 adjudicated CFR；scanner 有已知 FP（B/C/D prescription、D alias）與 1 真實 factual-state（A）。scanner 非 ground truth。
+2. **未跑 Judge**：無 adjudicated CFR；scanner 於執行版 `sst-v2.0` 曾對 B/C/D prescription 與 D alias 產生 FP，**已於 `sst-v2.0.2-postpilot` 修正**；以修正版唯讀重掃 pilot blinded 輸出後僅 A 命中 1 個真實 factual-state。scanner 非 ground truth。
 3. **部分解盲**：`tools_exposed` 分 {A,B}/{C,D}；judge 若要用需揭露此限制。
 4. **Shared-model judge**（未來）：同模型重複裁決僅為 shared-model bias，非人類 inter-rater reliability。
 5. **Alias/藥理欄位**：`drug_alias_v2.json` 為研究案例 ground truth，`clinical_verification=UNVERIFIED`；A 的錯誤僅表述為研究案例不一致。

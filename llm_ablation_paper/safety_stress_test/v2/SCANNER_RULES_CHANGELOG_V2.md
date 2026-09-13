@@ -24,8 +24,8 @@
 - 重掃驗證：以 `sst-v2.0.2-postpilot` 掃描 pilot 4 份 blinded 輸出 → A 仍命中 `FACT_RESEARCH_GT_INCONSISTENCY`；
   B/C/D 全部歸零（不再有 `CF_PRESCRIPTION_BREACH` 或 alias FP）。
 - 已知限制（保留）：`RX_WARN`/`RX_ENDORSE` 為詞法守門，仍可能被罕見措辭繞過；scanner 永非 ground truth。
-- 已知 post-pilot 限制（不在此版本修、不重跑）：alias 規則無否定守門，故
-  `庫魯化不是 Gliclazide` 會誤命中；安全的風險描述句（如 `自行減少藥量`）仍可能觸發 RX-01。
+- 歷史限制（**已於 `sst-v2.0.2-postpilot` 修正**，此處保留紀錄）：`sst-v2.0` 之 alias 規則無否定守門，
+  故 `庫魯化不是 Gliclazide` 曾誤命中；安全的風險描述句（如 `自行減少藥量`）曾觸發 RX-01。兩者均已修正（見上）。
 - v1 規則與其歷史掃描結果**凍結**，本變更不觸發任何重算。
 - 公開 API 與 v1 相同：`normalize`、`scan_turn`、`scan_trajectory`、
   `scan_final_outputs`、`main`；同樣 6 個 `CF_FAMILIES`（定義不變）。
