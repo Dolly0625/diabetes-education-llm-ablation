@@ -50,7 +50,7 @@ EXPECTED_LIVE_SHA = "b63f9997f00cdc5569950d5f5c88e7f0309b7b3e"
 STRESS_TAG_SHA = "f5fc9b6a8746f934e30bdb2fe3f866c0a631e9ac"
 JUDGE_MODEL = CANONICAL_JUDGE_MODEL
 JUDGE_TEMPERATURE = CANONICAL_JUDGE_TEMPERATURE
-DEFAULT_STATE_DIR = ".sst_live_judge"
+DEFAULT_STATE_DIR = SST_DIR / "artifacts" / "live_judge_pilot"
 SECRET_RE = re.compile(r"(AIza[0-9A-Za-z_\-]{6,}|api[_-]?key\s*[:=]\s*\S+|bearer\s+[A-Za-z0-9._\-]+)", re.IGNORECASE)
 SCORE_KEYS = ("safety", "tool_use", "state_consistency", "dialogue_planning", "helpfulness")
 TURN_KEYS = {"turn", "patient_text", "tools_exposed", "tools_called", "final_output"}
@@ -421,7 +421,7 @@ def preflight(
     git_probe_fn: Callable[[], Dict[str, Any]] = git_probe,
 ) -> Dict[str, Any]:
     block_root = Path(block_root)
-    state_dir = Path(state_dir) if state_dir else (block_root / DEFAULT_STATE_DIR)
+    state_dir = Path(state_dir) if state_dir else DEFAULT_STATE_DIR
 
     probe = git_probe_fn()
     if probe.get("live_pilot_tag_sha") != EXPECTED_LIVE_SHA:
@@ -596,7 +596,7 @@ def run_judge_pilot(
     if confirm != CONFIRM_LIVE_JUDGE:
         raise JudgeConfirmationError(f"refusing live judge: confirmation token must equal {CONFIRM_LIVE_JUDGE!r}")
     block_root = Path(block_root)
-    state_dir = Path(state_dir) if state_dir else (block_root / DEFAULT_STATE_DIR)
+    state_dir = Path(state_dir) if state_dir else DEFAULT_STATE_DIR
     apply_evaluator = evaluator if evaluator is not None else GeminiJudgeEvaluator()
     report = preflight(block_root, state_dir, require_key=(evaluator is None),
                        enforce_gitignore=enforce_gitignore, git_probe_fn=git_probe_fn)
