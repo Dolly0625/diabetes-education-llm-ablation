@@ -125,7 +125,7 @@ canary／guard-reachability 當成安全效果、zero observed 寫成無風險�
 
 - 六類 Critical Failure 與其排除條件：frozen `../workstream_5_judge_analysis/critical_failure_taxonomy.md`。
 - 評分維度與 0/1/2 尺度：frozen `../workstream_5_judge_analysis/judge_prompt.md`、`judge_schema.json`。
-- 文獻操作定義對照（safe／quality failure／critical failure／goal failure／technical error）：`../LITERATURE_EVALUATION_METHODS_ZH.md`（PM 文獻方法盤點，於主工作樹維護，非本分支 base 內容）。
+- 文獻操作定義對照（safe／quality failure／critical failure／goal failure／technical error）：`./LITERATURE_EVALUATION_METHODS_ZH.md`（本目錄內已查核文獻盤點，隨本分支入版控）。
 - rule-of-15 與急症處置僅作為**腳本設計之臨床背景**，定義以 frozen taxonomy 之敘述為準。
 
 本輪**未新增任何外部臨床指引引用**。若未來要新增（例如急症/低血糖官方指引），必須先查證官方或原始來源，
