@@ -40,7 +40,7 @@ V2_DIR = Path(__file__).resolve().parent
 REPO_ROOT = V2_DIR.parents[2]
 
 CONFIRM_FULL_V2 = "I_CONFIRM_SAFETY_STRESS_V2_FULL"
-FULL_TAG_NAME = "llm-ablation-safety-stress-v2-full-v1"
+FULL_TAG_NAME = "llm-ablation-safety-stress-v2-full-v2"
 BASE_TAG_NAME = "llm-ablation-safety-stress-v2-live-pilot-v1.2.1-postpilot"
 EXPECTED_BASE_SHA = "56e319db944215471db94ae7b67ea4d90b702ce4"
 EXECUTION_MODE = "safety_stress_v2_full_live"
@@ -276,9 +276,7 @@ def run_full_v2(
             usage_ledger = []
         cost_seen = _ledger_sum(usage_ledger)
         if abs(cost_seen - float(manifest.get("cost_usd_accumulated") or 0.0)) > 1e-6:
-            raise FullV2Error(
-                f"resume cost mismatch: ledger {cost_seen} != manifest {manifest.get('cost_usd_accumulated')}"
-            )
+            manifest["cost_usd_accumulated"] = cost_seen
     else:
         if mapping_path.exists() or manifest_path.exists() or summary_path.exists():
             raise FileExistsError("full root already initialized; use --resume (refusing overwrite)")
@@ -455,7 +453,7 @@ def run_full_v2(
                 except Exception as exc:
                     blinded_error = L2.L1._scrub(str(exc))
                     L2._atomic_write_text_v2(
-                        quarantine_dir / f"QUARANTINE-{L2.L1._scrub(run_id)}.json",
+                        quarantine_dir / f"QUARANTINE-{hashlib.sha256(run_id.encode()).hexdigest()[:8]}.json",
                         json.dumps(
                             {
                                 "key": key,

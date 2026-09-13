@@ -25,6 +25,26 @@ def _valid(blinded_id, cf=False):
     }
 
 
+
+
+SHA = "a" * 40
+
+
+def _probe(**overrides):
+    probe = {
+        "head": SHA,
+        "dirty": False,
+        "live_tag": JRV2.JUDGE_TAG_NAME,
+        "live_tag_exists": True,
+        "live_tag_annotated": True,
+        "live_tag_sha": SHA,
+        "base_is_ancestor": True,
+        "changed_vs_base": ["llm_ablation_paper/safety_stress_test/v2/judge_runner_v2.py"],
+    }
+    probe.update(overrides)
+    return probe
+
+
 class FakeEvaluator:
     def __init__(self, cf=False, usage=(10, 5)):
         self.usage_ledger = []
@@ -66,20 +86,20 @@ def _canary_row(expected_cf):
 
 def test_wrong_confirmation_fails_closed(tmp_path):
     with pytest.raises(JRV2.JudgeV2Error):
-        JRV2.run_judge_v2(tmp_path, tmp_path / "state", confirm="WRONG", evaluator=FakeEvaluator())
+        JRV2.run_judge_v2(tmp_path, tmp_path / "state", confirm="WRONG", evaluator=FakeEvaluator(), enforce_gitignore=False, git_probe_fn=lambda: _probe())
 
 
 def test_canary_gate_passes(monkeypatch):
     monkeypatch.setattr(JRV2, "load_canaries", lambda path=JRV2.CANARY_PATH: [_canary_row(False)])
     ev = FakeEvaluator(cf=False)
-    results = JRV2.run_canary_gate(ev, [])
+    results = JRV2.run_canary_gate(ev)
     assert results[0]["passed"] and results[0]["got_cf"] is False
 
 
 def test_canary_mismatch_blocks(monkeypatch):
     monkeypatch.setattr(JRV2, "load_canaries", lambda path=JRV2.CANARY_PATH: [_canary_row(True)])
     with pytest.raises(JRV2.JudgeV2Error):
-        JRV2.run_canary_gate(FakeEvaluator(cf=False), [])
+        JRV2.run_canary_gate(FakeEvaluator(cf=False))
 
 
 def test_full_judge_two_runs_and_resume(tmp_path, monkeypatch):
@@ -87,13 +107,13 @@ def test_full_judge_two_runs_and_resume(tmp_path, monkeypatch):
     block = tmp_path / "block"
     _mk_block(block)
     ev = FakeEvaluator(cf=False, usage=(10, 5))
-    summary = JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=ev)
+    summary = JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=ev, enforce_gitignore=False, git_probe_fn=lambda: _probe())
     assert summary["n_trajectories"] == 92
     assert summary["n_judge_calls"] == 1 + 92 * 2
     assert summary["evaluator_model_runs_same_model"] is True
     ledger_before = len(summary["judged"])
     ev2 = FakeEvaluator(cf=False, usage=(10, 5))
-    summary2 = JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=ev2, resume=True)
+    summary2 = JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=ev2, resume=True, enforce_gitignore=False, git_probe_fn=lambda: _probe())
     assert summary2["n_judge_calls"] == summary["n_judge_calls"]
     assert ev2.usage_ledger == []
     assert len(summary2["judged"]) == ledger_before
@@ -105,11 +125,11 @@ def test_cost_cap_blocks(tmp_path, monkeypatch):
     _mk_block(block)
     ev = FakeEvaluator(cf=False, usage=(20_000_000, 20_000_000))
     with pytest.raises(JRV2.JudgeV2Error):
-        JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=ev)
+        JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=ev, enforce_gitignore=False, git_probe_fn=lambda: _probe())
 
 
 def test_requires_92_blinded(tmp_path):
     block = tmp_path / "block"
     _mk_block(block, n=3)
     with pytest.raises(JRV2.JudgeV2Error):
-        JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=FakeEvaluator())
+        JRV2.run_judge_v2(block, tmp_path / "state", confirm=JRV2.CONFIRM_JUDGE_V2, evaluator=FakeEvaluator(), enforce_gitignore=False, git_probe_fn=lambda: _probe())
