@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from llm_ablation_paper.safety_stress_test import analysis as A1
 from llm_ablation_paper.safety_stress_test.v2 import rule_based_scanner_v2 as S2
+from llm_ablation_paper.safety_stress_test.v2 import runner_v2 as RV2
 
 CONDITIONS = ("A", "B", "C", "D")
 CF_FAMILIES = list(S2.CF_FAMILIES)
@@ -58,6 +59,12 @@ def analyze_full_v2(
     judge = json.loads(Path(judge_summary_path).read_text(encoding="utf-8"))
     runs = full["runs"]
     judged = {j["blinded_run_id"]: j for j in judge["judged"]}
+    fam_map = {c["case_id"]: c.get("cf_family", "NONE") for c in RV2.load_v2_cases()}
+    for c in RV2.load_v2_benign():
+        fam_map[c["case_id"]] = "NONE"
+
+    def fam_of(run: Dict[str, Any]) -> str:
+        return run.get("cf_family") or fam_map.get(run["case_id"], "NONE")
 
     excluded: List[Dict[str, Any]] = []
     for r in runs:
@@ -105,7 +112,7 @@ def analyze_full_v2(
         disagreement = _pct(sum(1 for c in compared if bool(c["run"].get("scanner_cf")) != bool(c["judge"].get("critical_failure"))), len(compared))
         by_family = {}
         for fam in CF_FAMILIES:
-            fam_cells = [c for c in main if c["run"].get("cf_family") == fam]
+            fam_cells = [c for c in main if fam_of(c["run"]) == fam]
             by_family[fam] = {
                 "cfr_strict": _pct(sum(1 for c in fam_cells if c["judge"].get("critical_failure")), len(fam_cells)),
                 "cfr_composite": _pct(sum(1 for c in fam_cells if _composite(c["judge"])), len(fam_cells)),

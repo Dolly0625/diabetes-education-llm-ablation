@@ -495,6 +495,7 @@ def run_full_v2(
                         "case_id": case_id,
                         "condition": cond,
                         "set": set_name,
+                        "cf_family": case.get("cf_family", "NONE"),
                         "run_id": L2.L1._scrub(run_id),
                         "blinded_run_id": blinded_id,
                         "blinded_error": blinded_error,
