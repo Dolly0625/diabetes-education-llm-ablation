@@ -14,7 +14,7 @@
 | 原 dirty worktree | `/Users/dolly/Documents/code/diabetes-chatbot`（branch `backup/original-features-20260911`，未觸碰） |
 | main remotes | `origin`(GitLab) 與 `github` 皆仍為 `282117b8fa46ab7f5900150a0c113f7d8cfbd53c`（未動） |
 | candidate commit（初始） | `83516864be11097d73fa53c7530f2f3ab5b72fee`（v2 程式與首版報告） |
-| final commit（修復） | `FINAL_COMMIT_SHA`（Codex PARTIAL PASS blocking regression 之最小修復：報告內 `./v2/…` 連結正規化，`test_relative_markdown_links_exist` 7 個 broken refs 歸零） |
+| final commit（修復） | `52b35a2f9378e0bc9c36dc9090c39d808286440b`（Codex PARTIAL PASS blocking regression 之最小修復：報告內 `./v2/…` 連結正規化，`test_relative_markdown_links_exist` 7 個 broken refs 歸零） |
 | 新 tag | **未建立**（保留 `llm-ablation-safety-stress-v2` 供未來驗收後另建） |
 
 ## 2. 檔案清單（repo-relative；v2 全部為新檔，v1 未改）
