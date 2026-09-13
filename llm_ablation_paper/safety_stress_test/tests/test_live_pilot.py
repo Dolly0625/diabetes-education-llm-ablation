@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import stat
 from pathlib import Path
@@ -285,10 +286,88 @@ def test_resume_after_group_and_turn_interrupt(tmp_path):
     by_cond = {r["condition"]: r for r in summary["runs"]}
     assert by_cond["A"]["n_turns"] == 3
     assert by_cond["A"]["termination_reason"] == "MAX_TURNS"
+    assert by_cond["A"]["resume_applied"] is True
+    assert by_cond["A"]["skipped_completed"] is False
+    for c in ("B", "C", "D"):
+        assert by_cond[c]["resume_applied"] is False
+        assert by_cond[c]["skipped_completed"] is False
     assert all(r["termination_reason"] == "MAX_TURNS" for r in summary["runs"])
     assert summary["completed"] is True
     assert len(A.load_records(a_state)) == 3
     assert len(list((tmp_path / "blinded").glob("*.json"))) == 4
+
+
+def test_fully_completed_resume_marks_skipped(tmp_path):
+    L.run_live_pilot(
+        "SAFETY-RX-01",
+        tmp_path,
+        confirm=L.CONFIRM_LIVE_PILOT,
+        client_factory=L.offline_safe_client_factory,
+        enforce_gitignore=False,
+        git_probe_fn=_git_ready,
+    )
+    manifest1 = json.loads((tmp_path / "pilot_manifest.json").read_text(encoding="utf-8"))
+    summary = L.run_live_pilot(
+        "SAFETY-RX-01",
+        tmp_path,
+        confirm=L.CONFIRM_LIVE_PILOT,
+        client_factory=L.offline_safe_client_factory,
+        enforce_gitignore=False,
+        git_probe_fn=_git_ready,
+        resume=True,
+    )
+    manifest2 = json.loads((tmp_path / "pilot_manifest.json").read_text(encoding="utf-8"))
+    assert manifest2["runs"] == manifest1["runs"]
+    assert all(r["skipped_completed"] is True for r in summary["runs"])
+    assert all(r["resume_applied"] is False for r in summary["runs"])
+    assert summary["completed"] is True
+
+
+def test_new_run_rejects_stale_runs_only_root(tmp_path):
+    (tmp_path / "runs" / "STALE").mkdir(parents=True)
+    (tmp_path / "runs" / "STALE" / "junk.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        L.run_live_pilot(
+            "SAFETY-RX-01",
+            tmp_path,
+            confirm=L.CONFIRM_LIVE_PILOT,
+            client_factory=L.offline_safe_client_factory,
+            enforce_gitignore=False,
+            git_probe_fn=_git_ready,
+        )
+
+
+def test_resume_rejects_bad_private_file_mode(tmp_path):
+    _first_interrupted(tmp_path)
+    os.chmod(tmp_path / "condition_mapping.json", 0o644)
+    with pytest.raises(L.LivePilotError):
+        L.run_live_pilot(
+            "SAFETY-RX-01",
+            tmp_path,
+            confirm=L.CONFIRM_LIVE_PILOT,
+            client_factory=L.offline_safe_client_factory,
+            enforce_gitignore=False,
+            git_probe_fn=_git_ready,
+            resume=True,
+        )
+
+
+def test_resume_rejects_symlinked_manifest(tmp_path):
+    _first_interrupted(tmp_path)
+    manifest = tmp_path / "pilot_manifest.json"
+    real = tmp_path / "manifest_real.json"
+    manifest.rename(real)
+    manifest.symlink_to(real)
+    with pytest.raises(L.LivePilotError):
+        L.run_live_pilot(
+            "SAFETY-RX-01",
+            tmp_path,
+            confirm=L.CONFIRM_LIVE_PILOT,
+            client_factory=L.offline_safe_client_factory,
+            enforce_gitignore=False,
+            git_probe_fn=_git_ready,
+            resume=True,
+        )
 
 
 def test_non_resume_existing_root_fails_closed(tmp_path):

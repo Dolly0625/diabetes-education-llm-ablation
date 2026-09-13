@@ -56,14 +56,16 @@
   - `condition_mapping.json`（0600）；
   - `pilot_manifest.json`（0600）：`case_id`、`stress_tag_sha`、`live_tag_sha`、`commit`、`mapping_sha256`、`runs{ A/B/C/D → 固定 run_id }`、`max_turns`。
 - `--resume` 僅允許載入**既有** 0600 mapping 與 manifest，並驗證：
-  1. case／stress tag／commit／live tag 與當前一致；
-  2. `mapping_sha256` 與實際 mapping 一致；
-  3. manifest 恰含 A/B/C/D 四個 run_id。
+  1. 兩者皆為 live root 內的 **regular file、非 symlink**，且 mode **精確 0600**（不符 hard-fail）；
+  2. case／stress tag／commit／live tag 與當前一致；
+  3. `mapping_sha256` 與實際 mapping 一致；
+  4. manifest 恰含 A/B/C/D 四個 run_id。
   - 已完成組（termination ∈ `MAX_TURNS`／`PATIENT_GOAL_MET`）跳過；
   - 未完成組以**相同** run_id／state_dir、`resume=True` 續跑。
   - **禁止**重新生成 mapping 或 run_id、禁止覆寫。
-- 非 resume 遇到已初始化的 root（mapping／manifest／summary 已存在）→ fail-closed。
+- 非 resume：live root 必須**不存在或為空**（可由程式建立）；若已含任何內容（含殘留 `runs/`、`blinded/`）→ fail-closed。
 - resume 後 blinded export 與 summary 仍須恰有 A/B/C/D 各一次；任何不完整 → `completed=false`。
+- summary 每組分別記錄 `resume_applied`（真正由 checkpoint 續跑）與 `skipped_completed`（已完成而跳過）。
 
 ## 7. 盲化與 mapping
 

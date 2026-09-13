@@ -276,6 +276,29 @@ def _scan_blinded(text: str, mapping: Dict[str, str], raw_run_id: str) -> None:
         raise LivePilotError(f"blinded payload leakage: {sorted(set(hits))}")
 
 
+def _effective_termination(records: List[Dict[str, Any]]) -> str:
+    """Normalise persisted records: a run that consumed all max_turns is complete."""
+    term = A.classify_termination({"termination_reason": None}, records)
+    if term == "INCOMPLETE" and len(records) >= LIVE_MAX_TURNS:
+        return "MAX_TURNS"
+    return term
+
+
+def _assert_private_file(path: Path, root: Path, mode: int = 0o600) -> None:
+    p = Path(path)
+    if p.is_symlink():
+        raise LivePilotError(f"private file must not be a symlink: {p}")
+    if not p.exists() or not p.is_file():
+        raise LivePilotError(f"private file missing or not a regular file: {p}")
+    resolved = p.resolve()
+    root_resolved = Path(root).resolve()
+    if resolved != root_resolved and not str(resolved).startswith(str(root_resolved) + os.sep):
+        raise LivePilotError(f"private file escapes live root: {resolved}")
+    actual = stat.S_IMODE(p.stat().st_mode)
+    if actual != mode:
+        raise LivePilotError(f"private file mode {oct(actual)} != {oct(mode)}: {p}")
+
+
 def _mapping_sha(mapping: Dict[str, str]) -> str:
     return hashlib.sha256(json.dumps(mapping, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -321,6 +344,11 @@ def run_live_pilot(
     )
     if report.get("preflight") != "PASS":
         raise LivePreflightError(f"live pilot blocked: {report.get('preflight')}/{report.get('reason')}")
+    if not resume:
+        if root.exists() and any(root.iterdir()):
+            raise FileExistsError(f"live root must be absent or empty for a new run: {root}")
+    elif not root.exists():
+        raise LivePilotError(f"resume requires an existing live root: {root}")
     root.mkdir(parents=True, exist_ok=True)
     os.chmod(root, 0o700)
 
@@ -339,6 +367,8 @@ def run_live_pilot(
     if resume:
         if not mapping_path.exists() or not manifest_path.exists():
             raise LivePilotError("resume requires existing 0600 mapping + pilot manifest; none found")
+        _assert_private_file(mapping_path, root, 0o600)
+        _assert_private_file(manifest_path, root, 0o600)
         mapping = validate_condition_mapping(json.loads(mapping_path.read_text(encoding="utf-8")))
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("case_id") != case_id:
@@ -386,10 +416,10 @@ def run_live_pilot(
         run_id = run_ids[cond]
         config = build_live_config(cond, run_id)
         state_dir = _assert_under_root(root / "runs" / run_id / "isolated_state", root)
-        existing_records = A.load_records(state_dir)
-        already_done = resume and A.classify_termination(
-            {"termination_reason": None}, existing_records
-        ) in A.COMPLETED_TERMINATIONS
+        state_exists = state_dir.exists()
+        existing_records = A.load_records(state_dir) if state_exists else []
+        already_done = resume and state_exists and _effective_termination(existing_records) in A.COMPLETED_TERMINATIONS
+        resume_applied = bool(resume and state_exists and not already_done)
         if already_done:
             records = existing_records
         else:
@@ -409,12 +439,12 @@ def run_live_pilot(
                 state_dir=state_dir,
                 run_id=run_id,
                 timeout=timeout,
-                resume=bool(resume and state_dir.exists() and not already_done),
+                resume=resume_applied,
                 research_patient_id=case_id,
                 artifacts_dir=state_dir,
                 **kwargs,
             )
-        termination = A.classify_termination({"termination_reason": None}, records)
+        termination = _effective_termination(records)
         blinded_id = None
         blinded_error = None
         try:
@@ -445,7 +475,8 @@ def run_live_pilot(
                 "termination_reason": termination,
                 "token_usage": _token_usage_total(records),
                 "technical_error": _technical_error(records),
-                "resumed": bool(already_done),
+                "resume_applied": resume_applied,
+                "skipped_completed": bool(already_done),
             }
         )
         if _interrupt_after_groups is not None and (idx + 1) >= _interrupt_after_groups:
