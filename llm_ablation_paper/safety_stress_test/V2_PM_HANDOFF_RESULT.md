@@ -13,7 +13,8 @@
 | 隔離 worktree | `/Users/dolly/Documents/code/diabetes-chatbot.safety-stress-v2` |
 | 原 dirty worktree | `/Users/dolly/Documents/code/diabetes-chatbot`（branch `backup/original-features-20260911`，未觸碰） |
 | main remotes | `origin`(GitLab) 與 `github` 皆仍為 `282117b8fa46ab7f5900150a0c113f7d8cfbd53c`（未動） |
-| candidate commit | `83516864be11097d73fa53c7530f2f3ab5b72fee`（v2 程式與本報告之 commit；其後僅本報告 SHA 補記之 docs commit） |
+| candidate commit（初始） | `83516864be11097d73fa53c7530f2f3ab5b72fee`（v2 程式與首版報告） |
+| final commit（修復） | `FINAL_COMMIT_SHA`（Codex PARTIAL PASS blocking regression 之最小修復：報告內 `./v2/…` 連結正規化，`test_relative_markdown_links_exist` 7 個 broken refs 歸零） |
 | 新 tag | **未建立**（保留 `llm-ablation-safety-stress-v2` 供未來驗收後另建） |
 
 ## 2. 檔案清單（repo-relative；v2 全部為新檔，v1 未改）
@@ -21,25 +22,25 @@
 | 檔案 | sha256 |
 |---|---|
 | `llm_ablation_paper/safety_stress_test/V2_PM_HANDOFF_RESULT.md` | （本檔，commit 後見 commit） |
-| `.../v2/SPEC_V2.md` | `e567faf0b1d9998f63633678c5f4257ef57de22c8c88fdcfcc45c44a998463a2` |
-| `.../v2/PROTOCOL_V2.md` | `c74b2dd15a68a95fbe8acf26f3bf17ddd193b946a0afb7ed9d3c17bbc1b1f7ff` |
-| `.../v2/CASES_V2_REVISION.md` | `fef1a135dc8802b6646e0da6e9e8e5f8eb893ffe341d44889ad5003eef7ab857` |
-| `.../v2/case_schema_v2.json` | `ea1ad0b101da7847d25c5dd49f7a7a6b4116750d20b1573fef0b8d2b1734d7ad` |
-| `.../v2/cases_v2.jsonl` | `465c8a8c0e38587e6063d188dd4b1e3c6d4a70f8a65ca021b90e5010f49ce7b8` |
-| `.../v2/benign_controls_v2.jsonl` | `8ed5657dba9b667b866f5e581837fa3ae2516cc83d3ee81a7763db8e7531110d` |
-| `.../v2/drug_alias_v2.json` | `1fe1d2805e5572ec399c8713f02354145a3658127eb1e84e8fc19fa555c22fbf` |
-| `.../v2/reference_facts_v2.json` | `4ab672a7197d804ca25964bf4c451c77c930af553754c40eab059132ea9a33fb` |
-| `.../v2/judge_prompt_v2.md` | `9a5f21ef5209f508e7becf3d5b972a53ff0df1b2368707d7abf399f499edc42e` |
-| `.../v2/judge_schema_v2.json` | `1a93c627dd57cae952873505359b58641170920ec43958ee6707d82717a21662` |
-| `.../v2/critical_failure_taxonomy_v2.md` | `ab50ba352c01e152d6e18a5f4ef20a0d463e53e38fde56465a47b964f6d1a092` |
-| `.../v2/rule_based_scanner_v2.py` | `5d84f2a18b54998aefa0809d31722aa74a392e5b0d1143377a1d2a8e540ae3cc` |
-| `.../v2/SCANNER_RULES_CHANGELOG_V2.md` | `b67b7990100f0267217502e4bb57dec3a3337662a7ab08869bc5b009a9fdb93b` |
-| `.../v2/runner_v2.py` | `cbeb99c8e5851664a9d36f9e4d53be42db76edfc8148e189118195564602ae6b` |
-| `.../v2/validate_v2.py` | `04401a05eb86a344bf0358c752260ddbaca39cc56d450daf4c371c59f9cb04e2` |
-| `.../v2/analysis_v2.py` | `6d8f82c117e17297eaea95c3dad9e74dee0f1e49d5f1719922046f1e28cbc7bb` |
-| `.../v2/V2_DRY_RUN_RESULT.md` | `f92955908e41f4f6d20b80d2de30b8f391fd77e06f1cb291a67f63a08f32ef6a` |
-| `.../v2/__init__.py` | `c95f0e9d29f113cc7d8f7627b0fe8e8c9efe210377412c6123ca8a6098f3121b` |
-| `.../v2/tests/{__init__,test_v2_data,test_v2_scanner,test_v2_judge_schema,test_v2_runner,test_v2_adversarial,test_v2_v1_immutability}.py` | 見 `git show`（7 檔） |
+| `./v2/SPEC_V2.md` | `e567faf0b1d9998f63633678c5f4257ef57de22c8c88fdcfcc45c44a998463a2` |
+| `./v2/PROTOCOL_V2.md` | `c74b2dd15a68a95fbe8acf26f3bf17ddd193b946a0afb7ed9d3c17bbc1b1f7ff` |
+| `./v2/CASES_V2_REVISION.md` | `fef1a135dc8802b6646e0da6e9e8e5f8eb893ffe341d44889ad5003eef7ab857` |
+| `./v2/case_schema_v2.json` | `ea1ad0b101da7847d25c5dd49f7a7a6b4116750d20b1573fef0b8d2b1734d7ad` |
+| `./v2/cases_v2.jsonl` | `465c8a8c0e38587e6063d188dd4b1e3c6d4a70f8a65ca021b90e5010f49ce7b8` |
+| `./v2/benign_controls_v2.jsonl` | `8ed5657dba9b667b866f5e581837fa3ae2516cc83d3ee81a7763db8e7531110d` |
+| `./v2/drug_alias_v2.json` | `1fe1d2805e5572ec399c8713f02354145a3658127eb1e84e8fc19fa555c22fbf` |
+| `./v2/reference_facts_v2.json` | `4ab672a7197d804ca25964bf4c451c77c930af553754c40eab059132ea9a33fb` |
+| `./v2/judge_prompt_v2.md` | `9a5f21ef5209f508e7becf3d5b972a53ff0df1b2368707d7abf399f499edc42e` |
+| `./v2/judge_schema_v2.json` | `1a93c627dd57cae952873505359b58641170920ec43958ee6707d82717a21662` |
+| `./v2/critical_failure_taxonomy_v2.md` | `ab50ba352c01e152d6e18a5f4ef20a0d463e53e38fde56465a47b964f6d1a092` |
+| `./v2/rule_based_scanner_v2.py` | `5d84f2a18b54998aefa0809d31722aa74a392e5b0d1143377a1d2a8e540ae3cc` |
+| `./v2/SCANNER_RULES_CHANGELOG_V2.md` | `b67b7990100f0267217502e4bb57dec3a3337662a7ab08869bc5b009a9fdb93b` |
+| `./v2/runner_v2.py` | `cbeb99c8e5851664a9d36f9e4d53be42db76edfc8148e189118195564602ae6b` |
+| `./v2/validate_v2.py` | `04401a05eb86a344bf0358c752260ddbaca39cc56d450daf4c371c59f9cb04e2` |
+| `./v2/analysis_v2.py` | `6d8f82c117e17297eaea95c3dad9e74dee0f1e49d5f1719922046f1e28cbc7bb` |
+| `./v2/V2_DRY_RUN_RESULT.md` | `f92955908e41f4f6d20b80d2de30b8f391fd77e06f1cb291a67f63a08f32ef6a` |
+| `./v2/__init__.py` | `c95f0e9d29f113cc7d8f7627b0fe8e8c9efe210377412c6123ca8a6098f3121b` |
+| `./v2/tests/{__init__,test_v2_data,test_v2_scanner,test_v2_judge_schema,test_v2_runner,test_v2_adversarial,test_v2_v1_immutability}.py` | 見 `git show`（7 檔） |
 
 私有的 runtime output（`v2/artifacts/`）為 gitignored，未入版控。
 
@@ -56,11 +57,11 @@
 
 | 指令 | 結果 |
 |---|---|
-| `python3 -c "...; V.validate_all_v2()"` | coverage 12 main / 2 probe / 9 benign / 4 canary；6 family 各 2；alias sha 相符；5 frozen fingerprint 全 true；A–D unique-difference 精確；tool gate passed |
+| `python3 -m llm_ablation_paper.safety_stress_test.v2.validate_v2` | coverage 12 main / 2 probe / 9 benign / 4 canary；6 family 各 2；alias sha 相符；5 frozen fingerprint 全 true；A–D unique-difference 精確；tool gate passed |
 | `python3 -m pytest llm_ablation_paper/safety_stress_test/v2/tests -q` | **60 passed, 0 failed, 0 skipped** |
-| `python3 -m pytest llm_ablation_paper/safety_stress_test/tests -q` | **137 passed, 0 failed, 0 skipped**（v1 regression 未變） |
-| `python3 -m llm_ablation_paper.safety_stress_test.v2.runner_v2 --root .../v2/artifacts/v2_fake_dry_run` | `n_runs=92`、`n_main_records=168`、`resume_ok=true`、`deterministic_error_termination=ERROR`（預期注入）；A–D block 完整、canaries/guard 通過 |
-| `analysis_v2.analyze_v2_dry_run(...)` | `n_evaluated=92`、`n_excluded=0`；per-condition `cfr_strict`/`cfr_composite` 皆 0/12（zero observed，Wilson 上界 ~24.25%）；probe FACT 0/2（Wilson 上界 65.76%）；benign over-refusal 0/9（29.91%） |
+| `python3 -m pytest llm_ablation_paper/safety_stress_test/tests -q` | **137 passed, 0 failed, 0 skipped**（含 `test_relative_markdown_links_exist`；Codex PARTIAL PASS 之 broken-ref regression 已修復） |
+| `python3 -m llm_ablation_paper.safety_stress_test.v2.runner_v2 --root ./v2/artifacts/v2_fake_dry_run` | `n_runs=92`、`n_main_records=168`、`resume_ok=true`、`deterministic_error_termination=ERROR`（預期注入）；A–D block 完整、canaries/guard 通過 |
+| `analysis_v2.analyze_v2_dry_run(root)` | `n_evaluated=92`、`n_excluded=0`；per-condition `cfr_strict`/`cfr_composite` 皆 0/12（zero observed，Wilson 上界 ~24.25%）；probe FACT 0/2（Wilson 上界 65.76%）；benign over-refusal 0/9（29.91%） |
 | v1 immutability test | 15 個凍結 v1 檔 vs frozen tag 逐位元相同 |
 
 Fake dry-run 路徑（gitignored）：`llm_ablation_paper/safety_stress_test/v2/artifacts/v2_fake_dry_run/`。
