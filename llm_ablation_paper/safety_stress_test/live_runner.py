@@ -167,6 +167,10 @@ def preflight(
     assert_live_scope(case)
 
     probe = git_probe_fn()
+    if probe.get("stress_tag_sha") != STRESS_TAG_SHA:
+        raise LivePreflightError(
+            f"stress tag {STRESS_TAG_NAME!r} peeled to {probe.get('stress_tag_sha')!r} != {STRESS_TAG_SHA}"
+        )
     if probe["dirty"]:
         raise LivePreflightError("worktree is dirty; refusing live pilot")
     outside = [p for p in probe.get("changed_vs_tag", []) if not p.startswith("llm_ablation_paper/safety_stress_test/")]
@@ -272,6 +276,24 @@ def _scan_blinded(text: str, mapping: Dict[str, str], raw_run_id: str) -> None:
         raise LivePilotError(f"blinded payload leakage: {sorted(set(hits))}")
 
 
+def _mapping_sha(mapping: Dict[str, str]) -> str:
+    return hashlib.sha256(json.dumps(mapping, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _atomic_write_text(path: Path, text: str, mode: int = 0o600) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+    os.chmod(path, mode)
+
+
+class _TestInterrupt(Exception):
+    pass
+
+
 def run_live_pilot(
     case_id: str = "SAFETY-RX-01",
     root: Optional[Path] = None,
@@ -282,6 +304,8 @@ def run_live_pilot(
     resume: bool = False,
     enforce_gitignore: bool = True,
     git_probe_fn: Callable[[], Dict[str, Any]] = git_probe,
+    _interrupt_after_groups: Optional[int] = None,
+    _test_only_first_messages: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     if confirm != CONFIRM_LIVE_PILOT:
         raise ConfirmationError(
@@ -298,6 +322,7 @@ def run_live_pilot(
     if report.get("preflight") != "PASS":
         raise LivePreflightError(f"live pilot blocked: {report.get('preflight')}/{report.get('reason')}")
     root.mkdir(parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
 
     if client_factory is None:
         resolve_provider_credentials(dict(PROVIDER_CONFIG))
@@ -307,46 +332,88 @@ def run_live_pilot(
     if timeout is None:
         timeout = float(spec["subprocess_timeout_seconds"])
 
-    mapping = validate_condition_mapping(generate_random_condition_mapping())
-    mapping_path = _assert_under_root(root / "condition_mapping.json", root)
-    if mapping_path.exists():
-        raise FileExistsError(f"mapping already exists, refusing overwrite: {mapping_path}")
-    mapping_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(mapping_path.parent, 0o700)
-    except Exception:
-        pass
-    fd = os.open(str(mapping_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(mapping, fh, ensure_ascii=False, indent=2)
-    os.chmod(mapping_path, 0o600)
+    mapping_path = root / "condition_mapping.json"
+    manifest_path = root / "pilot_manifest.json"
+    summary_path = root / "live_pilot_summary.json"
 
-    run_summaries: List[Dict[str, Any]] = []
+    if resume:
+        if not mapping_path.exists() or not manifest_path.exists():
+            raise LivePilotError("resume requires existing 0600 mapping + pilot manifest; none found")
+        mapping = validate_condition_mapping(json.loads(mapping_path.read_text(encoding="utf-8")))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("case_id") != case_id:
+            raise LivePilotError("manifest case_id mismatch on resume")
+        if manifest.get("stress_tag_sha") != STRESS_TAG_SHA:
+            raise LivePilotError("manifest stress tag mismatch on resume")
+        if manifest.get("commit") != report.get("head"):
+            raise LivePilotError("manifest commit != current HEAD on resume")
+        if manifest.get("live_tag_sha") != report.get("live_tag_sha"):
+            raise LivePilotError("manifest live tag mismatch on resume")
+        if _mapping_sha(mapping) != manifest.get("mapping_sha256"):
+            raise LivePilotError("mapping SHA mismatch on resume; refusing")
+        run_ids = manifest.get("runs", {})
+        if set(run_ids.keys()) != set(R.CONDITIONS):
+            raise LivePilotError("manifest must contain exactly A/B/C/D run_ids")
+    else:
+        if mapping_path.exists() or manifest_path.exists() or summary_path.exists():
+            raise FileExistsError("live root already initialized; use --resume (refusing overwrite)")
+        mapping = validate_condition_mapping(generate_random_condition_mapping())
+        run_ids = {
+            cond: f"LIVE-{case_id}-{cond}-{hashlib.sha256(os.urandom(8)).hexdigest()[:6]}"
+            for cond in R.CONDITIONS
+        }
+        _atomic_write_text(mapping_path, json.dumps(mapping, ensure_ascii=False, indent=2), 0o600)
+        manifest = {
+            "execution_mode": EXECUTION_MODE,
+            "case_id": case_id,
+            "stress_tag": STRESS_TAG_NAME,
+            "stress_tag_sha": STRESS_TAG_SHA,
+            "live_tag": LIVE_PILOT_TAG_NAME,
+            "live_tag_sha": report.get("live_tag_sha", ""),
+            "commit": report.get("head", EXPECTED_HEAD),
+            "max_turns": LIVE_MAX_TURNS,
+            "mapping_mode": "LIVE_RANDOM_OPAQUE",
+            "mapping_sha256": _mapping_sha(mapping),
+            "runs": run_ids,
+        }
+        _atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
+
     blinded_dir = _assert_under_root(root / "blinded", root)
     blinded_dir.mkdir(parents=True, exist_ok=True)
+    run_summaries: List[Dict[str, Any]] = []
 
-    for cond in R.CONDITIONS:
-        run_id = f"LIVE-{case_id}-{cond}-{hashlib.sha256(os.urandom(8)).hexdigest()[:6]}"
+    for idx, cond in enumerate(R.CONDITIONS):
+        run_id = run_ids[cond]
         config = build_live_config(cond, run_id)
         state_dir = _assert_under_root(root / "runs" / run_id / "isolated_state", root)
-        clear_session_cache()
-        kwargs: Dict[str, Any] = {}
-        if client_factory is not None:
-            kwargs["client_factory"] = client_factory
+        existing_records = A.load_records(state_dir)
+        already_done = resume and A.classify_termination(
+            {"termination_reason": None}, existing_records
+        ) in A.COMPLETED_TERMINATIONS
+        if already_done:
+            records = existing_records
         else:
-            kwargs["provider_config"] = dict(PROVIDER_CONFIG)
-        records = run_trajectory_subprocess(
-            config=config,
-            patient_id=f"live_{case_id.lower()}_{cond.lower()}",
-            messages=list(case["pressure_turns"]),
-            state_dir=state_dir,
-            run_id=run_id,
-            timeout=timeout,
-            resume=resume,
-            research_patient_id=case_id,
-            artifacts_dir=state_dir,
-            **kwargs,
-        )
+            clear_session_cache()
+            kwargs: Dict[str, Any] = {}
+            if client_factory is not None:
+                kwargs["client_factory"] = client_factory
+            else:
+                kwargs["provider_config"] = dict(PROVIDER_CONFIG)
+            messages = list(case["pressure_turns"])
+            if (not resume) and _test_only_first_messages is not None and idx == 0:
+                messages = list(_test_only_first_messages)
+            records = run_trajectory_subprocess(
+                config=config,
+                patient_id=f"live_{case_id.lower()}_{cond.lower()}",
+                messages=messages,
+                state_dir=state_dir,
+                run_id=run_id,
+                timeout=timeout,
+                resume=bool(resume and state_dir.exists() and not already_done),
+                research_patient_id=case_id,
+                artifacts_dir=state_dir,
+                **kwargs,
+            )
         termination = A.classify_termination({"termination_reason": None}, records)
         blinded_id = None
         blinded_error = None
@@ -357,8 +424,11 @@ def run_live_pilot(
             payload = build_judge_payload(blinded)
             assert_no_leakage(payload)
             _scan_blinded(json.dumps(payload, ensure_ascii=False), mapping, run_id)
-            blind_path = blinded_dir / f"{payload['blinded_run_id']}.json"
-            blind_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            _atomic_write_text(
+                blinded_dir / f"{payload['blinded_run_id']}.json",
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                0o644,
+            )
             blinded_id = payload["blinded_run_id"]
         except LivePilotError:
             raise
@@ -375,8 +445,11 @@ def run_live_pilot(
                 "termination_reason": termination,
                 "token_usage": _token_usage_total(records),
                 "technical_error": _technical_error(records),
+                "resumed": bool(already_done),
             }
         )
+        if _interrupt_after_groups is not None and (idx + 1) >= _interrupt_after_groups:
+            raise _TestInterrupt(f"test interrupt after {idx + 1} group(s)")
 
     completed = all(r["termination_reason"] in A.COMPLETED_TERMINATIONS for r in run_summaries)
     summary = {
@@ -389,6 +462,7 @@ def run_live_pilot(
         "live_tag": LIVE_PILOT_TAG_NAME,
         "live_tag_sha": report.get("live_tag_sha", ""),
         "stress_tag": STRESS_TAG_NAME,
+        "stress_tag_sha": STRESS_TAG_SHA,
         "commit": report.get("head", EXPECTED_HEAD),
         "model": spec["talker_model"],
         "temperature": spec["talker_temperature"],
@@ -396,16 +470,15 @@ def run_live_pilot(
         "max_turns": LIVE_MAX_TURNS,
         "n_conditions": len(R.CONDITIONS),
         "mapping_mode": "LIVE_RANDOM_OPAQUE",
-        "mapping_sha256": hashlib.sha256(json.dumps(mapping, sort_keys=True).encode()).hexdigest(),
+        "mapping_sha256": _mapping_sha(mapping),
+        "resume_used": resume,
         "runs": run_summaries,
         "n_completed": sum(1 for r in run_summaries if r["termination_reason"] in A.COMPLETED_TERMINATIONS),
         "completed": completed,
         "judge_used": False,
         "scanner_is_reviewer": False,
     }
-    summary_path = _assert_under_root(root / "live_pilot_summary.json", root)
-    scrubbed = _scrub(json.dumps(summary, ensure_ascii=False, indent=2))
-    summary_path.write_text(scrubbed, encoding="utf-8")
+    _atomic_write_text(summary_path, _scrub(json.dumps(summary, ensure_ascii=False, indent=2)), 0o600)
     return summary
 
 
@@ -417,7 +490,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--case-id", default="SAFETY-RX-01")
     parser.add_argument("--root", default=None)
     parser.add_argument("--confirm-live-pilot", default=None)
-    parser.add_argument("--timeout", type=float, default=None)
+    parser.add_argument("--resume", action="store_true")
     return parser
 
 
@@ -431,7 +504,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.case_id,
         Path(args.root) if args.root else None,
         confirm=args.confirm_live_pilot,
-        timeout=args.timeout,
+        resume=args.resume,
     )
     print(json.dumps({"completed": summary["completed"], "runs": summary["runs"]}, ensure_ascii=False, indent=2))
     return 0 if summary["completed"] else 3
