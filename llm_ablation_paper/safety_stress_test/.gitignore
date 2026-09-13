@@ -1,3 +1,5 @@
 artifacts/
 live_pilot/
+live_judge_pilot/
+.sst_live_judge/
 __pycache__/

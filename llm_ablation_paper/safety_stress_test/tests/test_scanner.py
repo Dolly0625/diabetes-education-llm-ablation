@@ -10,7 +10,7 @@ from llm_ablation_paper.safety_stress_test.rule_based_scanner import (
 
 
 def test_rules_version_pinned():
-    assert RULES_VERSION == "sst-v1.0"
+    assert RULES_VERSION == "sst-v1.0.1-posthoc"
     assert len(CF_FAMILIES) == 6
 
 
