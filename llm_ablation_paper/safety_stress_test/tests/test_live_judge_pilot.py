@@ -128,6 +128,15 @@ def _failing_canary_eval(payload, judge_run_id):
     return json.dumps(parsed, ensure_ascii=False), parsed
 
 
+class _FailingCanaryUsageEvaluator:
+    def __init__(self) -> None:
+        self.usage_ledger: list = []
+
+    def __call__(self, payload, judge_run_id):
+        self.usage_ledger.append({"judge_run_id": judge_run_id, "prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4})
+        return _failing_canary_eval(payload, judge_run_id)
+
+
 def _no_network(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("network access attempted")
@@ -217,10 +226,17 @@ def test_leakage_rejected(tmp_path):
 
 def test_canary_gate_blocks_before_judging(tmp_path):
     block = _make_block(tmp_path / "block")
+    state = tmp_path / "state"
     with pytest.raises(CanaryVerificationError):
-        J.run_judge_pilot(block, tmp_path / "state", confirm=J.CONFIRM_LIVE_JUDGE,
-                          evaluator=_failing_canary_eval, enforce_gitignore=False, git_probe_fn=_git_ready)
-    assert not (tmp_path / "state").exists()
+        J.run_judge_pilot(block, state, confirm=J.CONFIRM_LIVE_JUDGE,
+                          evaluator=_FailingCanaryUsageEvaluator(), enforce_gitignore=False, git_probe_fn=_git_ready)
+    assert state.exists()
+    ckpt = json.loads((state / "judge_checkpoint.json").read_text(encoding="utf-8"))
+    assert ckpt["canary_passed"] is False
+    assert ckpt["canary_error"]["type"] == "CanaryVerificationError"
+    assert ckpt["trajectories"] == {}
+    raw_dir = state / "raw"
+    assert (not raw_dir.exists()) or not list(raw_dir.glob("*.json"))
 
 
 def test_dual_runs_and_tiebreak(tmp_path):
@@ -407,3 +423,76 @@ def test_cli_has_no_secret_or_model_flags():
                         ("--timeout", "1"), ("--base-url", "http://evil")):
         with pytest.raises(SystemExit):
             parser.parse_args(["--live-judge", "--block-root", "x", flag, value])
+
+
+def test_no_duplicate_calls_per_phase(tmp_path):
+    block = _make_block(tmp_path / "block")
+    J.run_judge_pilot(block, tmp_path / "state", confirm=J.CONFIRM_LIVE_JUDGE,
+                      evaluator=_UsageEvaluator(), enforce_gitignore=False, git_probe_fn=_git_ready)
+    ledger = json.loads((tmp_path / "state" / "judge_checkpoint.json").read_text(encoding="utf-8"))["usage_ledger"]
+    canary = [c for c in ledger if c["stage"] == "canary"]
+    traj = [c for c in ledger if c["stage"] == "trajectory"]
+    assert len(canary) == 6
+    assert len(traj) == 8
+    keys = [(c["blinded_run_id"], c["phase"]) for c in traj]
+    assert len(set(keys)) == 8
+
+
+def test_same_model_semantics_flag(tmp_path):
+    block = _make_block(tmp_path / "block")
+    summary = J.run_judge_pilot(block, tmp_path / "state", confirm=J.CONFIRM_LIVE_JUDGE,
+                                evaluator=deterministic_fake_judge, enforce_gitignore=False, git_probe_fn=_git_ready)
+    assert summary["evaluator_model_runs_same_model"] is True
+    assert "repeated" in summary["evaluation_semantics"]
+
+
+def test_endpoint_error_does_not_echo_url(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    monkeypatch.setenv("GEMINI_BASE_URL", "https://user:AIzaSENTINELSECRET@generativelanguage.googleapis.com/v1?key=AIzaSENTINELSECRET")
+    with pytest.raises(J.JudgePreflightError) as exc:
+        J.assert_judge_provider_ready()
+    assert "AIzaSENTINELSECRET" not in str(exc.value)
+    monkeypatch.setenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1?x=1")
+    with pytest.raises(J.JudgePreflightError) as exc2:
+        J.assert_judge_provider_ready()
+    assert "x=1" not in str(exc2.value)
+
+
+class _SecretTrajectoryEvaluator:
+    def __init__(self) -> None:
+        self.usage_ledger: list = []
+
+    def __call__(self, payload, judge_run_id):
+        self.usage_ledger.append({"judge_run_id": judge_run_id, "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2})
+        if str(payload.get("blinded_run_id", "")).startswith("CANARY"):
+            return deterministic_fake_judge(payload, judge_run_id)
+        parsed = {"judge_run_id": judge_run_id, "blinded_run_id": payload["blinded_run_id"],
+                  "critical_failure": False, "failure_types": [], "scores": {k: 2 for k in J.SCORE_KEYS},
+                  "evidence": [{"turn": 1, "reason": "leak AIzaSECRETVALUE1234567890"}], "confidence": "HIGH"}
+        return "{}", parsed
+
+
+def test_secret_in_judge_output_fails_closed(tmp_path):
+    block = _make_block(tmp_path / "block")
+    state = tmp_path / "state"
+    with pytest.raises(J.JudgePilotError):
+        J.run_judge_pilot(block, state, confirm=J.CONFIRM_LIVE_JUDGE,
+                          evaluator=_SecretTrajectoryEvaluator(), enforce_gitignore=False, git_probe_fn=_git_ready)
+    assert "AIzaSECRETVALUE" not in (state / "judge_checkpoint.json").read_text(encoding="utf-8")
+
+
+def test_resume_after_canary_failure_preserves_usage(tmp_path):
+    block = _make_block(tmp_path / "block")
+    state = tmp_path / "state"
+    with pytest.raises(CanaryVerificationError):
+        J.run_judge_pilot(block, state, confirm=J.CONFIRM_LIVE_JUDGE,
+                          evaluator=_FailingCanaryUsageEvaluator(), enforce_gitignore=False, git_probe_fn=_git_ready)
+    before = json.loads((state / "judge_checkpoint.json").read_text(encoding="utf-8"))
+    assert before["canary_passed"] is False and before["usage_ledger"]
+    summary = J.run_judge_pilot(block, state, confirm=J.CONFIRM_LIVE_JUDGE,
+                                evaluator=deterministic_fake_judge, enforce_gitignore=False,
+                                git_probe_fn=_git_ready, resume=True)
+    after = json.loads((state / "judge_checkpoint.json").read_text(encoding="utf-8"))
+    assert after["canary_passed"] is True
+    assert len(after["usage_ledger"]) >= len(before["usage_ledger"])
+    assert summary["n_judged"] == 4

@@ -28,7 +28,8 @@
 
 - 模型固定 `gemini-3.7-flash`、temperature `0.0`（`CANONICAL_*`）；不可由 CLI 覆寫。
 - 僅 `GEMINI_API_KEY` 環境變數；endpoint hostname 精確 allowlist `generativelanguage.googleapis.com`。
-- 每軌跡雙獨立 Judge；`critical_failure` 不一致才第三次 tie-break（多數決）；failure_types 以 CF=true 多數決。
+- 每軌跡以**同模型兩次隔離重複裁決（repeated evaluations）**為之。因兩次皆同模型、同 prompt、temperature=0，**不構成**「兩位獨立評審」，**不具**真正 inter-rater independence；共享模型偏誤（shared model bias）無法排除，亦**不可**用來計算人類評審一致性。`critical_failure` 不一致時才啟動第三次 tie-break（**仍為同模型**）；failure_types 以 CF=true 多數決。
+- summary 標記 `evaluator_model_runs_same_model=true` 及 `evaluation_semantics`。
 - 每次呼叫保存 `raw`、strict schema `parsed`、`retry_history`、provider `usage`（prompt/completion/total），並聚合。
 
 ## 5. Canary 閘門

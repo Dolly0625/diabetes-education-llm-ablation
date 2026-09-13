@@ -6,7 +6,8 @@
 
 - execution_mode：`safety_stress_live_judge`
 - source live tag / SHA：`llm-ablation-safety-live-pilot-v1` / `b63f9997f00cdc5569950d5f5c88e7f0309b7b3e`
-- judge model / temperature：`gemini-3.7-flash` / `0.0`
+- judge model / temperature：`gemini-3.7-flash` / `0.0`（**同模型兩次隔離重複裁決**；非兩位獨立評審、非人類評審一致性）
+- evaluator_model_runs_same_model：`true`
 - source block sha256（首次錨定，非事前凍結）：`<block_sha256>`
 - mapping sha256（僅哈希，不含 mapping 值）：`<mapping_sha256>`
 - canary：PASS（1 PASS + 5 FAIL 全數符合）

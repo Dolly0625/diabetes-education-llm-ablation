@@ -127,15 +127,23 @@ def _assert_endpoint(endpoint: str) -> str:
 
     parsed = urllib.parse.urlparse(endpoint)
     if parsed.scheme != "https":
-        raise JudgePreflightError(f"judge endpoint must use https: {endpoint!r}")
+        raise JudgePreflightError("judge endpoint violates scheme policy (https required)")
     if parsed.username or parsed.password:
-        raise JudgePreflightError("judge endpoint must not contain userinfo")
+        raise JudgePreflightError("judge endpoint violates policy (userinfo not allowed)")
+    if parsed.query:
+        raise JudgePreflightError("judge endpoint violates policy (query not allowed)")
     if parsed.fragment:
-        raise JudgePreflightError("judge endpoint must not contain a fragment")
+        raise JudgePreflightError("judge endpoint violates policy (fragment not allowed)")
     host = (parsed.hostname or "").lower()
     if host != CANONICAL_GEMINI_HOST and not host.endswith("." + CANONICAL_GEMINI_HOST):
-        raise JudgePreflightError(f"unauthorized judge endpoint host: {host!r}")
+        raise JudgePreflightError("judge endpoint violates policy (host not allowed)")
     return host
+
+
+def _assert_no_secret(obj: Any) -> None:
+    dumped = json.dumps(obj, ensure_ascii=False)
+    if SECRET_RE.search(dumped):
+        raise JudgePilotError("secret-like content detected in judge output; refusing to persist (fail-closed)")
 
 
 def assert_judge_provider_ready() -> str:
@@ -520,6 +528,7 @@ def _judge_phase(state_dir, ckpt, blinded_id, phase, judge_run_id, payload, eval
         )
     finally:
         _save_checkpoint(state_dir, ckpt)
+    _assert_no_secret({"raw": raw, "parsed": parsed, "retry": retry})
     rec[phase] = {"raw": _scrub(raw), "parsed": parsed, "retry": retry}
     _scan_payload(json.dumps(rec[phase], ensure_ascii=False), raw_ids)
     L._atomic_write_text(state_dir / "raw" / f"{blinded_id}-{phase}.json",
@@ -562,7 +571,7 @@ def _judge_trajectory(state_dir, ckpt, blinded_id, payload, evaluator, backoffs,
 def render_judge_result_md(block: Dict[str, Any], judged: List[Dict[str, Any]], out_path: Path) -> None:
     lines = []
     lines.append("# Live Judge Pilot RESULT（探索性、非預先註冊）\n")
-    lines.append(f"> 對 `{block['summary'].get('case_id')}` 之同一病患 A/B/C/D 四份 blinded 軌跡進行雙獨立 Judge 評分。")
+    lines.append(f"> 對 `{block['summary'].get('case_id')}` 之同一病患 A/B/C/D 四份 blinded 軌跡進行**同模型兩次隔離重複裁決（repeated evaluations）**（非兩位獨立評審、非人類評審一致性）。")
     lines.append("> 單病例、探索性 pilot，**不是**論文效果結論，**不是**臨床驗證；關鍵字 scanner 不是 ground truth。\n")
     lines.append(f"- source live tag: `{LIVE_PILOT_TAG_NAME}` @ `{EXPECTED_LIVE_SHA}`")
     lines.append(f"- judge model: `{JUDGE_MODEL}` temperature `{JUDGE_TEMPERATURE}`")
@@ -604,21 +613,25 @@ def run_judge_pilot(
         raise JudgePreflightError(f"live judge blocked: {report.get('preflight')}/{report.get('reason')}")
 
     block = load_source_block(block_root)
+    ckpt = _load_or_init_checkpoint(state_dir, block, resume)
+    if not resume:
+        ckpt.setdefault("canary_passed", False)
+        _save_checkpoint(state_dir, ckpt)
     cursor_box = {"v": 0}
-    if resume:
-        ckpt = _load_or_init_checkpoint(state_dir, block, True)
-        if not ckpt.get("canary_passed"):
+    if not ckpt.get("canary_passed"):
+        try:
             verify_canaries(CANARY_PATH, apply_evaluator)
+        except Exception as exc:
             entries, cursor_box["v"] = _drain_usage(apply_evaluator, cursor_box["v"])
             _record_usage_calls(ckpt, entries, "canary", None, None)
-            ckpt["canary_passed"] = True
+            ckpt["canary_passed"] = False
+            ckpt["canary_error"] = {"type": type(exc).__name__, "message": sanitize_error_message(str(exc))}
             _save_checkpoint(state_dir, ckpt)
-    else:
-        verify_canaries(CANARY_PATH, apply_evaluator)
+            raise
         entries, cursor_box["v"] = _drain_usage(apply_evaluator, cursor_box["v"])
-        ckpt = _load_or_init_checkpoint(state_dir, block, False)
         _record_usage_calls(ckpt, entries, "canary", None, None)
         ckpt["canary_passed"] = True
+        ckpt.pop("canary_error", None)
         _save_checkpoint(state_dir, ckpt)
     raw_ids = list(block["raw_run_ids"])
     backoffs = backoffs if backoffs is not None else list(CANONICAL_RETRY_BACKOFFS)
@@ -635,6 +648,8 @@ def run_judge_pilot(
         "non_preregistered": True,
         "judge_model": JUDGE_MODEL,
         "judge_temperature": JUDGE_TEMPERATURE,
+        "evaluator_model_runs_same_model": True,
+        "evaluation_semantics": "repeated evaluations (same model, isolated calls); NOT independent human raters",
         "source_live_tag": LIVE_PILOT_TAG_NAME,
         "source_live_sha": EXPECTED_LIVE_SHA,
         "block_sha256": block["block_sha256"],
