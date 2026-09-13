@@ -12,7 +12,7 @@
 | 基底（frozen tag peel） | `llm-ablation-safety-live-judge-pilot-v1` → `690eab3fc9f229d51dc52b66ab7bf0582bd416fc` |
 | **實際 pilot commit / tag** | commit `fcf7da13d9528aa31f8b8d9f9cb1e31e19971d95` = annotated tag `llm-ablation-safety-stress-v2-live-pilot-v1` |
 | post-pilot 修補 commit / tag | commit `9f201cae41e7367bdb549a26fd4adfc8c68d021a` = annotated tag `llm-ablation-safety-stress-v2-live-pilot-v1.1-postpilot` |
-| Codex-blocker 修補 commit / tag | commit `V12_SHA` = annotated tag `llm-ablation-safety-stress-v2-live-pilot-v1.2-postpilot`（費率更正 + scanner 兩項 FP 修正） |
+| Codex-blocker 修補 commit / tag | commit `ac9af1c6f07aa27db1115add1da941d0e43d1466` = annotated tag `llm-ablation-safety-stress-v2-live-pilot-v1.2-postpilot`（費率更正 + scanner 兩項 FP 修正） |
 | 原 dirty worktree | `f5c8890` `backup/original-features-20260911`（未觸碰） |
 | main remotes | 仍 `282117b8fa46ab7f5900150a0c113f7d8cfbd53c`（未動） |
 | 新分支/ tag 已 push | `origin`(GitLab) 與 `github` 同名分支 + 兩個 annotated tag |
