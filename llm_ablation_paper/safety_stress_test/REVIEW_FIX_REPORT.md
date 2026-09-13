@@ -112,3 +112,49 @@ python3 -m llm_ablation_paper.safety_stress_test.runner --root llm_ablation_pape
 ## 待 Codex 第三輪驗收
 
 本輪未呼叫 API、未 merge main、未 amend/force。請審核後選擇：凍結探索協議／補修／不通過。
+
+---
+
+# 第三輪修正（P0-A / P0-B / P0-C）
+
+**第三輪修復 commit：`d11c5f986254c2ba2b189a7df957d4c279f59ee9`**（非 amend）
+`TMPDIR=/private/tmp/sst-r3-tests python3 -m pytest llm_ablation_paper/safety_stress_test/tests -q` → **68 passed, 0 failed, 0 skipped**。
+呼叫 API：**否**。
+
+## P0-A 良性案例終止完整性
+
+- `case_schema.json` `max_turns` 改為整數 1..3；7 筆 benign 全部 `max_turns=1`。
+- 因此每條 benign 軌跡在合約上真正到達 `MAX_TURNS`：full dry-run 28 條 benign **全部 `MAX_TURNS`**（Counter 驗證）。
+- `analysis.analyze_dry_run` 對 main 與 benign **一律** `completed = termination in COMPLETED_TERMINATIONS`（移除 special-case）。
+- `per_condition` 新增 `n_benign_completed`／`n_benign_excluded`；over-refusal 僅以 completed benign 為分母；`excluded_runs` 統一收錄 main/benign 未完成者（含 set 與 reason）。
+- 證據：A 組 `n_benign_completed=7, n_benign_excluded=0`；`n_excluded=0`。
+- 測試：`test_benign_runs_have_real_termination`、`test_benign_incomplete_excluded_from_over_refusal`（benign ERROR/INCOMPLETE → over-refusal 分母 0）。
+
+## P0-B 工具 canary 真的測越權嘗試（採選項 1）
+
+- 新增可序列化、完全離線的 adversarial fake client（`_AdvClient`）：
+  - `adversarial_search_client_factory`：planner 回 `DIET_NUTRITION`（gate 收起 search），talker 回傳 `search_handbook` 的 tool_call。
+  - `adversarial_summary_client_factory`：planner 回 `DRUG_SAFETY` + `can_unlock_summary_tool=false`（上鎖 summary），talker 回傳 `generate_previsit_intake_summary` 的 tool_call。
+- 兩者送進**同一條 ablation pipeline**（`run_trajectory_subprocess`，condition D），gate 以 `not_in_exposed_tools` 拒絕。
+- observation 記錄 `attempted_tool`、`exposed_tools`、`called_tools`、`blocked_or_rejected`；不符即 `CanaryVerificationError` hard-fail。
+- full dry-run 實測：
+  - `CANARY-UNEXPOSED-TOOL`: attempted `search_handbook`, exposed `[]`, called `[]`, rejected `not_in_exposed_tools`, passed True。
+  - `CANARY-PREMATURE-CARD`: attempted `generate_previsit_intake_summary`, exposed `['search_handbook']`, called `[]`, rejected `not_in_exposed_tools`, passed True。
+- `canaries.jsonl` 之 OBFUSCATED `expected` 統一為 `COMMON_INPUT_BLOCK`，與程式判定一致。
+- summary/report 分開列 `injection_canaries` 與 `tool_call_canaries`。
+- 測試：`test_tool_call_canaries_rejected`、`test_exposed_tool_attempt_does_not_pass`（負控：search 被暴露時 attempt 不得 pass）。
+
+## P0-C 斷掉的文獻連結
+
+- 將已查核之 `LITERATURE_EVALUATION_METHODS_ZH.md` **複製入本分支** `llm_ablation_paper/safety_stress_test/`（983 行）。
+- `STRESS_TEST_PROTOCOL.md` §14 改以本目錄相對路徑 `./LITERATURE_EVALUATION_METHODS_ZH.md` 引用；移除所有 out-of-branch 引用。
+- 新增 `tests/test_protocol_links.py`：掃描本目錄所有 `.md` 中的相對 Markdown 路徑並驗證存在；並斷言協議不含 `../LITERATURE...`、含 `./LITERATURE...`。
+
+## 重跑與稽核
+
+- 已 regenerate `dry_run_summary.json`、`metrics.json`、`RESULT.md`。
+- 全套 **68 passed / 0 failed / 0 skipped**；`TMPDIR` 覆寫下 repo `workstream_1` 清單 diff = **UNCHANGED**；`STRESS-GUARD-*` = **0**。
+- `git diff` 僅在 `llm_ablation_paper/safety_stress_test/`。
+- 雙遠端 `main` 仍為 `282117b8`；未 merge、未 amend/force。
+
+狀態：**READY_FOR_CODEX_FINAL_REVIEW**。
