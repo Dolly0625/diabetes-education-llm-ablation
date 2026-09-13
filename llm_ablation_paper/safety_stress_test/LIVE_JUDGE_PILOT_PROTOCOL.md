@@ -11,9 +11,10 @@
 
 ## 2. 凍結 tag 閘門
 
-- 常數：`JUDGE_TAG_NAME = "llm-ablation-safety-live-judge-pilot-v1"`、`JUDGE_TAG_SHA`（tag 建立後回填 hard pin）。
+- 常數：`JUDGE_TAG_NAME = "llm-ablation-safety-live-judge-pilot-v1"`；**父 tag hard-pin** `EXPECTED_LIVE_SHA = b63f999…`（已存在）。
 - 建 tag 前：`--preflight` 誠實回報 `BLOCKED / NOT_FROZEN`（exit 2），`--live-judge` fail-closed。
-- `--live-judge` 要求：judge tag 存在且為 annotated、peeled SHA == `JUDGE_TAG_SHA`、`HEAD == JUDGE_TAG_SHA`、`llm-ablation-safety-live-pilot-v1` 為祖先、工作樹乾淨、相對 live tag 之變更全在 `safety_stress_test/`。
+- `--live-judge` 要求：`JUDGE_TAG_NAME` 存在且為 **annotated tag**、`HEAD == 該 tag peeled SHA`、父 tag `llm-ablation-safety-live-pilot-v1`（peel `b63f999…`）為祖先、工作樹乾淨、相對父 tag 之變更全在 `safety_stress_test/`。
+- **無自我參照 pin**：不將當前 commit 寫回常數（那會產生新 commit，永遠無法自等）。tag 建立並推送後，由**驗收流程外部核對** GitLab／GitHub 之 tag object 與 peeled SHA 一致。
 
 ## 3. 來源驗證（在任何 API 之前）
 

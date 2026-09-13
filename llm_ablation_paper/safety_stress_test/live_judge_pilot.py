@@ -44,7 +44,6 @@ JUDGE_PROMPT_PATH = REPO_ROOT / "llm_ablation_paper" / "workstream_5_judge_analy
 
 CONFIRM_LIVE_JUDGE = "I_CONFIRM_SAFETY_STRESS_LIVE_JUDGE"
 JUDGE_TAG_NAME = "llm-ablation-safety-live-judge-pilot-v1"
-JUDGE_TAG_SHA = ""
 LIVE_PILOT_TAG_NAME = L.LIVE_PILOT_TAG_NAME
 EXPECTED_LIVE_SHA = "b63f9997f00cdc5569950d5f5c88e7f0309b7b3e"
 STRESS_TAG_SHA = "f5fc9b6a8746f934e30bdb2fe3f866c0a631e9ac"
@@ -448,13 +447,11 @@ def preflight(
 
     judge_tag_sha = probe.get("judge_tag_sha", "")
     judge_tag_type = probe.get("judge_tag_type", "")
-    if not judge_tag_sha or not JUDGE_TAG_SHA:
+    if not judge_tag_sha:
         status, reason = "BLOCKED", "NOT_FROZEN"
     elif judge_tag_type != "tag":
         status, reason = "BLOCKED", "JUDGE_TAG_NOT_ANNOTATED"
-    elif judge_tag_sha != JUDGE_TAG_SHA:
-        status, reason = "BLOCKED", "JUDGE_TAG_SHA_MISMATCH"
-    elif probe["head"] != JUDGE_TAG_SHA:
+    elif probe["head"] != judge_tag_sha:
         status, reason = "BLOCKED", "HEAD_NOT_JUDGE_TAG"
     elif not probe.get("live_is_ancestor"):
         status, reason = "BLOCKED", "LIVE_PILOT_TAG_NOT_ANCESTOR"

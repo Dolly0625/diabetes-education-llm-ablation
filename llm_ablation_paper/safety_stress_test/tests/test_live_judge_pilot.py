@@ -16,11 +16,6 @@ from llm_ablation_paper.safety_stress_test import runner as R
 from llm_ablation_paper.workstream_5_judge_analysis.judge_runner import CanaryVerificationError, deterministic_fake_judge
 
 
-@pytest.fixture(autouse=True)
-def _pin_judge_tag(monkeypatch):
-    monkeypatch.setattr(J, "JUDGE_TAG_SHA", "c" * 40)
-
-
 def _git_ready():
     return {
         "head": "c" * 40,
@@ -31,6 +26,18 @@ def _git_ready():
         "live_is_ancestor": True,
         "changed_vs_tag": ["llm_ablation_paper/safety_stress_test/live_judge_pilot.py"],
     }
+
+
+def test_no_self_referential_tag_pin():
+    assert not hasattr(J, "JUDGE_TAG_SHA")
+
+
+def test_judge_tag_must_be_annotated(tmp_path):
+    block = _make_block(tmp_path / "block")
+    probe = _git_ready()
+    probe["judge_tag_type"] = "commit"
+    report = J.preflight(block, tmp_path / "state", require_key=False, enforce_gitignore=False, git_probe_fn=lambda: probe)
+    assert report["preflight"] == "BLOCKED" and report["reason"] == "JUDGE_TAG_NOT_ANNOTATED"
 
 
 def _blinded_id(cond: str) -> str:
