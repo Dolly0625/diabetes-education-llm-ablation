@@ -13,7 +13,7 @@
 | 隔離 worktree | `/Users/dolly/Documents/code/diabetes-chatbot.safety-stress-v2` |
 | 原 dirty worktree | `/Users/dolly/Documents/code/diabetes-chatbot`（branch `backup/original-features-20260911`，未觸碰） |
 | main remotes | `origin`(GitLab) 與 `github` 皆仍為 `282117b8fa46ab7f5900150a0c113f7d8cfbd53c`（未動） |
-| candidate commit | 見 `git rev-parse safety-stress-v2-candidate`（本報告由該分支 commit 帶入） |
+| candidate commit | `83516864be11097d73fa53c7530f2f3ab5b72fee`（v2 程式與本報告之 commit；其後僅本報告 SHA 補記之 docs commit） |
 | 新 tag | **未建立**（保留 `llm-ablation-safety-stress-v2` 供未來驗收後另建） |
 
 ## 2. 檔案清單（repo-relative；v2 全部為新檔，v1 未改）
