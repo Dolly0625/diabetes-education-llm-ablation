@@ -184,3 +184,94 @@ def test_summary_contains_no_key_material(tmp_path):
     blob = "\n".join(p.read_text(encoding="utf-8") for p in root.rglob("*") if p.is_file())
     assert "AIza" not in blob
     assert os.environ.get("GEMINI_API_KEY", "\u0000") not in blob
+
+
+def test_scan_blinded_v2_rejects_condition_letter():
+    with pytest.raises(LV2.LiveV2Error):
+        LV2._scan_blinded_v2('{"blinded_run_id":"x","condition": "B"}', {"A": "COND-TEST-1"}, "run1")
+
+
+def test_subdir_modes_are_private(tmp_path):
+    root = tmp_path / "live"
+    LV2.run_live_pilot_v2(
+        "SAFETY-RX-01-v2",
+        root,
+        confirm=LV2.CONFIRM_LIVE_PILOT_V2,
+        client_factory=L1.offline_safe_client_factory,
+        enforce_gitignore=False,
+        git_probe_fn=lambda: _probe(),
+    )
+    for sub in ("blinded", "scanner_v2", "quarantine"):
+        assert stat.S_IMODE((root / sub).stat().st_mode) == 0o700, sub
+
+
+def test_resume_is_idempotent_no_double_charge(tmp_path):
+    root = tmp_path / "live"
+    first = LV2.run_live_pilot_v2(
+        "SAFETY-RX-01-v2",
+        root,
+        confirm=LV2.CONFIRM_LIVE_PILOT_V2,
+        client_factory=L1.offline_safe_client_factory,
+        enforce_gitignore=False,
+        git_probe_fn=lambda: _probe(),
+    )
+    ledger_before = json.loads((root / "v2_usage_ledger.json").read_text(encoding="utf-8"))
+    second = LV2.run_live_pilot_v2(
+        "SAFETY-RX-01-v2",
+        root,
+        confirm=LV2.CONFIRM_LIVE_PILOT_V2,
+        client_factory=L1.offline_safe_client_factory,
+        resume=True,
+        enforce_gitignore=False,
+        git_probe_fn=lambda: _probe(),
+    )
+    ledger_after = json.loads((root / "v2_usage_ledger.json").read_text(encoding="utf-8"))
+    assert len(ledger_after) == len(ledger_before) == 4
+    assert second["cost_usd_total"] == first["cost_usd_total"]
+    assert len(list((root / "blinded").glob("BLIND-*.json"))) == 4
+
+
+def test_ledger_tamper_on_resume_refused(tmp_path):
+    root = tmp_path / "live"
+    LV2.run_live_pilot_v2(
+        "SAFETY-RX-01-v2",
+        root,
+        confirm=LV2.CONFIRM_LIVE_PILOT_V2,
+        client_factory=L1.offline_safe_client_factory,
+        enforce_gitignore=False,
+        git_probe_fn=lambda: _probe(),
+    )
+    ledger = json.loads((root / "v2_usage_ledger.json").read_text(encoding="utf-8"))
+    ledger[0]["cost_usd"] = 9.99
+    p = root / "v2_usage_ledger.json"
+    p.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
+    os.chmod(p, 0o600)
+    with pytest.raises(LV2.LiveV2Error):
+        LV2.run_live_pilot_v2(
+            "SAFETY-RX-01-v2",
+            root,
+            confirm=LV2.CONFIRM_LIVE_PILOT_V2,
+            client_factory=L1.offline_safe_client_factory,
+            resume=True,
+            enforce_gitignore=False,
+            git_probe_fn=lambda: _probe(),
+        )
+
+
+def test_incomplete_trajectory_is_quarantined_not_exported(tmp_path):
+    root = tmp_path / "live"
+    summary = LV2.run_live_pilot_v2(
+        "SAFETY-RX-01-v2",
+        root,
+        confirm=LV2.CONFIRM_LIVE_PILOT_V2,
+        client_factory=L1.offline_safe_client_factory,
+        enforce_gitignore=False,
+        git_probe_fn=lambda: _probe(),
+        _test_only_first_messages=["只有一輪"],
+    )
+    assert summary["completed"] is False
+    cond_a = next(r for r in summary["runs"] if r["condition"] == "A")
+    assert cond_a["blinded_run_id"] is None
+    assert cond_a["termination_reason"] not in ("MAX_TURNS", "PATIENT_GOAL_MET")
+    assert len(list((root / "blinded").glob("BLIND-*.json"))) == 3
+    assert len(list((root / "quarantine").glob("QUARANTINE-*.json"))) == 1

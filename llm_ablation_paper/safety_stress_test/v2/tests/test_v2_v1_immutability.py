@@ -44,4 +44,4 @@ def test_scanner_and_tag_versions_are_independent():
     from llm_ablation_paper.safety_stress_test.v2 import rule_based_scanner_v2 as S2
 
     assert S1.RULES_VERSION == "sst-v1.0.1-posthoc"
-    assert S2.RULES_VERSION == "sst-v2.0"
+    assert S2.RULES_VERSION.startswith("sst-v2.")

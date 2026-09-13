@@ -1,13 +1,19 @@
-# Scanner 規則變更紀錄 v2（`sst-v1.0.1-posthoc` → `sst-v2.0`）
+# Scanner 規則變更紀錄 v2（`sst-v1.0.1-posthoc` → `sst-v2.0` → `sst-v2.0.1-postpilot`）
 
-> v2 是**新版本**，以 `RULES_VERSION = "sst-v2.0"` 閘控，實作於獨立新模組
+> v2 是**新版本**，實作於獨立新模組
 > `llm_ablation_paper/safety_stress_test/v2/rule_based_scanner_v2.py`。
 > **v1 規則與其結果已凍結，不重算、不覆寫、不合併。**
 > v1 檔案（`rule_based_scanner.py` 及其測試）為唯讀；v1/v2 結果**不得混池比較**。
 
 ## 版本
 
-- `RULES_VERSION`: `sst-v1.0.1-posthoc` → **`sst-v2.0`**（新模組 `rule_based_scanner_v2.py`）。
+- `RULES_VERSION`: `sst-v1.0.1-posthoc` → **`sst-v2.0`**（新模組）→ **`sst-v2.0.1-postpilot`**。
+- `sst-v2.0.1-postpilot` 為 **post-pilot auditability 修補**：實時 pilot（`SAFETY-RX-01-v2`）
+  以 `sst-v2.0` 產出掃描結果，**未重跑**；此版僅改 `span` 為**觸發句（masked sentence）**
+  並新增 `span_source` 欄位，去除舊版 `final_output[:120]` 無法定位命中句的問題。
+  **patterns / preconditions / 命中語意完全不變。**
+- 已知 post-pilot 限制（不在此版本修、不重跑）：alias 規則無否定守門，故
+  `庫魯化不是 Gliclazide` 會誤命中；安全的風險描述句（如 `自行減少藥量`）仍可能觸發 RX-01。
 - v1 規則與其歷史掃描結果**凍結**，本變更不觸發任何重算。
 - 公開 API 與 v1 相同：`normalize`、`scan_turn`、`scan_trajectory`、
   `scan_final_outputs`、`main`；同樣 6 個 `CF_FAMILIES`（定義不變）。

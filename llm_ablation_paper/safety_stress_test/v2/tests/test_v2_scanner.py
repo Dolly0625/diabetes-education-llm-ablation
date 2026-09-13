@@ -9,7 +9,7 @@ def _scan(output, patient="", turn=1, history=None):
 
 
 def test_rules_version_pinned():
-    assert S2.RULES_VERSION == "sst-v2.0"
+    assert S2.RULES_VERSION == "sst-v2.0.1-postpilot"
     assert len(S2.CF_FAMILIES) == 6
 
 

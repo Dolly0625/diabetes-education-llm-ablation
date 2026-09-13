@@ -2,7 +2,7 @@
 
 Scope: exactly one allow-listed v2 case (SAFETY-RX-01-v2) x A/B/C/D x fixed 3-turn
 script. NOT the formal 12x4 experiment, NOT clinical validation, NOT paper results.
-No LLM judge is invoked; a compatible blinded artifact is produced for later judging.
+No LLM judge is invoked; a judge-compatible blinded artifact is produced for later judging.
 
 Reuses (never forks) the v1 live runner helpers, the WS1 frozen harness
 (run_trajectory_subprocess / formal_ablation_config / to_blinded_contract_trajectory)
@@ -12,8 +12,11 @@ process environment. `--preflight` is fully offline.
 
 Hard guards:
   * Frozen model pins: talker/planner gemini-3.5-flash-lite (0.3 / 0.1); judge not used.
-  * Cost guard: estimated/actual hard cap COST_CAP_USD; missing usage is fail-closed.
+  * Cost guard: estimated/actual hard cap COST_CAP_USD; on the live path missing usage is
+    fail-closed (the mock/test client_factory path may record 0.0 and is test-only).
   * API key is read from the environment only and is never printed, persisted, or logged.
+  * Resume is idempotent: usage ledger is keyed by condition and reconciled with the
+    manifest; incomplete/empty runs are quarantined, never exported as judge-ready.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -66,6 +70,8 @@ ALLOWED_CHANGED_PREFIXES = (
     "llm_ablation_paper/safety_stress_test/V2_PM_HANDOFF_RESULT.md",
     "llm_ablation_paper/safety_stress_test/V2_LIVE_PILOT_RESULT.md",
 )
+CONDITION_LEAK_RE = re.compile(r"\bcondition[\s_-]*[abcd]\b", re.IGNORECASE)
+CONDITION_KEY_RE = re.compile(r"[\"']condition[\"']\s*:\s*[\"'][abcd][\"']", re.IGNORECASE)
 
 
 class LiveV2Error(RuntimeError):
@@ -110,10 +116,10 @@ def _tag_is_annotated(ref: str) -> bool:
         return False
 
 
-def git_probe_v2() -> Dict[str, Any]:
+def git_probe_v2(tag_name: str = LIVE_TAG_NAME_V2) -> Dict[str, Any]:
     head = _git(["rev-parse", "HEAD"])
     dirty = bool(_git(["status", "--porcelain"]))
-    live_tag_sha = _rev(LIVE_TAG_NAME_V2)
+    live_tag_sha = _rev(tag_name)
     base_tag_sha = _rev(BASE_TAG_NAME)
     try:
         _git(["merge-base", "--is-ancestor", BASE_TAG_NAME, "HEAD"])
@@ -127,8 +133,9 @@ def git_probe_v2() -> Dict[str, Any]:
     return {
         "head": head,
         "dirty": dirty,
-        "live_tag_exists": _tag_exists(LIVE_TAG_NAME_V2),
-        "live_tag_annotated": _tag_is_annotated(LIVE_TAG_NAME_V2),
+        "live_tag": tag_name,
+        "live_tag_exists": _tag_exists(tag_name),
+        "live_tag_annotated": _tag_is_annotated(tag_name),
         "live_tag_sha": live_tag_sha,
         "base_tag_sha": base_tag_sha,
         "base_is_ancestor": base_is_ancestor,
@@ -138,9 +145,49 @@ def git_probe_v2() -> Dict[str, Any]:
 
 def _assert_under_root(path: Path, root: Path) -> Path:
     resolved = Path(path).resolve()
-    if not str(resolved).startswith(str(Path(root).resolve()) + os.sep) and resolved != Path(root).resolve():
+    root_resolved = Path(root).resolve()
+    if resolved != root_resolved and not str(resolved).startswith(str(root_resolved) + os.sep):
         raise LiveV2PreflightError(f"output path escapes live root: {resolved}")
     return resolved
+
+
+def _mkdir_private(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+    return path
+
+
+def _atomic_write_text_v2(path: Path, text: str, mode: int = 0o600) -> None:
+    """Atomic write with a unique O_EXCL|O_NOFOLLOW temp file (no predictable-name symlink race)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".tmp-{os.getpid()}-{hashlib.sha256(os.urandom(8)).hexdigest()[:8]}")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    os.chmod(path, mode)
+
+
+def _assert_private_regular(path: Path, root: Path, mode: int = 0o600) -> None:
+    p = Path(path)
+    if p.is_symlink():
+        raise LiveV2Error(f"private file must not be a symlink: {p}")
+    if not p.exists() or not p.is_file():
+        raise LiveV2Error(f"private file missing or not a regular file: {p}")
+    resolved = p.resolve()
+    root_resolved = Path(root).resolve()
+    if resolved != root_resolved and not str(resolved).startswith(str(root_resolved) + os.sep):
+        raise LiveV2Error(f"private file escapes live root: {resolved}")
+    actual = stat.S_IMODE(p.stat().st_mode)
+    if actual != mode:
+        raise LiveV2Error(f"private file mode {oct(actual)} != {oct(mode)}: {p}")
 
 
 def assert_live_scope_v2(case: Dict[str, Any]) -> None:
@@ -160,7 +207,6 @@ def estimate_cost_usd(turns: int = 12, prompt_tokens_per_turn: int = 1200, compl
 
 
 def cost_usd(tokens: Dict[str, Any]) -> Optional[float]:
-    """Compute deterministic USD cost from an aggregated usage dict; None if usage missing."""
     prompt = tokens.get("prompt_tokens")
     completion = tokens.get("completion_tokens")
     if prompt is None and completion is None:
@@ -171,11 +217,22 @@ def cost_usd(tokens: Dict[str, Any]) -> Optional[float]:
 
 def _record_model_mismatch(records: List[Dict[str, Any]]) -> Optional[str]:
     for rec in records:
-        for key in ("model", "talker_model"):
-            value = rec.get(key)
-            if value and str(value) != FROZEN_TALKER_MODEL:
-                return str(value)
+        for key, value in rec.items():
+            if key == "model" or key.endswith("_model"):
+                if value and str(value) != FROZEN_TALKER_MODEL:
+                    return f"{key}={value}"
     return None
+
+
+def _effective_termination_v2(records: List[Dict[str, Any]]) -> str:
+    term = A1.classify_termination({"termination_reason": None}, records)
+    if term == "INCOMPLETE" and len(records) >= LIVE_MAX_TURNS:
+        return "MAX_TURNS"
+    return term
+
+
+def _load_state_records(state_dir: Path) -> List[Dict[str, Any]]:
+    return A1.load_records(state_dir) if state_dir.exists() else []
 
 
 def preflight(
@@ -184,16 +241,18 @@ def preflight(
     *,
     require_key: bool = True,
     enforce_gitignore: bool = True,
-    git_probe_fn: Callable[[], Dict[str, Any]] = git_probe_v2,
+    pilot_tag: str = LIVE_TAG_NAME_V2,
+    git_probe_fn: Optional[Callable[[], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Offline preflight: no network, no model call."""
     root = Path(root) if root else DEFAULT_LIVE_ROOT
+    probe_fn = git_probe_fn or (lambda: git_probe_v2(pilot_tag))
     case = next((c for c in RV2.load_v2_cases() if c["case_id"] == case_id), None)
     if case is None:
         raise LiveV2PreflightError(f"unknown v2 case_id: {case_id}")
     assert_live_scope_v2(case)
 
-    probe = git_probe_fn()
+    probe = probe_fn()
     if probe.get("base_tag_sha") != EXPECTED_BASE_SHA:
         raise LiveV2PreflightError(
             f"base tag {BASE_TAG_NAME!r} peeled to {probe.get('base_tag_sha')!r} != {EXPECTED_BASE_SHA}"
@@ -252,7 +311,7 @@ def preflight(
         "mode": "offline",
         "case_id": case_id,
         "head": probe["head"],
-        "live_tag": LIVE_TAG_NAME_V2,
+        "live_tag": pilot_tag,
         "live_tag_sha": probe["live_tag_sha"],
         "base_tag": BASE_TAG_NAME,
         "base_tag_sha": probe.get("base_tag_sha", ""),
@@ -275,6 +334,8 @@ def _scan_blinded_v2(text: str, mapping: Dict[str, str], raw_run_id: str) -> Non
     for token in ("enable_", "condition_secret", "raw_talker", "guard_action", "planner_state", raw_run_id.lower()):
         if token in lowered:
             hits.append(token)
+    if CONDITION_LEAK_RE.search(lowered) or CONDITION_KEY_RE.search(text):
+        hits.append("condition-letter")
     for secret in mapping.values():
         if secret and str(secret).lower() in lowered:
             hits.append("mapping-value")
@@ -282,8 +343,14 @@ def _scan_blinded_v2(text: str, mapping: Dict[str, str], raw_run_id: str) -> Non
         raise LiveV2Error(f"blinded payload leakage: {sorted(set(hits))}")
 
 
-def _usage_from_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-    return L1._token_usage_total(records)
+def _upsert_ledger(ledger: List[Dict[str, Any]], entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+    kept = [e for e in ledger if e.get("condition") != entry["condition"]]
+    kept.append(entry)
+    return sorted(kept, key=lambda e: list(RV2.CONDITIONS).index(e["condition"]))
+
+
+def _ledger_sum(ledger: List[Dict[str, Any]]) -> float:
+    return round(sum(float(e.get("cost_usd") or 0.0) for e in ledger), 9)
 
 
 def run_live_pilot_v2(
@@ -295,7 +362,8 @@ def run_live_pilot_v2(
     timeout: Optional[float] = None,
     resume: bool = False,
     enforce_gitignore: bool = True,
-    git_probe_fn: Callable[[], Dict[str, Any]] = git_probe_v2,
+    pilot_tag: str = LIVE_TAG_NAME_V2,
+    git_probe_fn: Optional[Callable[[], Dict[str, Any]]] = None,
     _test_only_first_messages: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     if confirm != CONFIRM_LIVE_PILOT_V2:
@@ -306,6 +374,7 @@ def run_live_pilot_v2(
         root,
         require_key=(client_factory is None),
         enforce_gitignore=enforce_gitignore,
+        pilot_tag=pilot_tag,
         git_probe_fn=git_probe_fn,
     )
     if report.get("preflight") != "PASS":
@@ -315,8 +384,7 @@ def run_live_pilot_v2(
             raise FileExistsError(f"live root must be absent or empty for a new run: {root}")
     elif not root.exists():
         raise LiveV2Error(f"resume requires an existing live root: {root}")
-    root.mkdir(parents=True, exist_ok=True)
-    os.chmod(root, 0o700)
+    _mkdir_private(root)
 
     if client_factory is None:
         resolve_provider_credentials(dict(PROVIDER_CONFIG))
@@ -333,8 +401,8 @@ def run_live_pilot_v2(
     usage_path = root / "v2_usage_ledger.json"
 
     if resume:
-        for p in (mapping_path, manifest_path):
-            L1._assert_private_file(p, root, 0o600)
+        _assert_private_regular(mapping_path, root, 0o600)
+        _assert_private_regular(manifest_path, root, 0o600)
         mapping = validate_condition_mapping(json.loads(mapping_path.read_text(encoding="utf-8")))
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("case_id") != case_id:
@@ -350,8 +418,22 @@ def run_live_pilot_v2(
         run_ids = manifest.get("runs", {})
         if set(run_ids.keys()) != set(RV2.CONDITIONS):
             raise LiveV2Error("manifest must contain exactly A/B/C/D run_ids")
-        usage_ledger = json.loads(usage_path.read_text(encoding="utf-8")) if usage_path.exists() else []
-        cost_seen = float(manifest.get("cost_usd_accumulated") or 0.0)
+        if usage_path.exists():
+            _assert_private_regular(usage_path, root, 0o600)
+            raw_ledger = json.loads(usage_path.read_text(encoding="utf-8"))
+            if not isinstance(raw_ledger, list):
+                raise LiveV2Error("usage ledger must be a JSON list on resume")
+            unknown = [e.get("condition") for e in raw_ledger if e.get("condition") not in RV2.CONDITIONS]
+            if unknown or len({e.get("condition") for e in raw_ledger}) != len(raw_ledger):
+                raise LiveV2Error(f"usage ledger has invalid/duplicate conditions: {unknown}")
+            usage_ledger = list(raw_ledger)
+        else:
+            usage_ledger = []
+        cost_seen = _ledger_sum(usage_ledger)
+        if abs(cost_seen - float(manifest.get("cost_usd_accumulated") or 0.0)) > 1e-6:
+            raise LiveV2Error(
+                f"resume cost mismatch: ledger {cost_seen} != manifest {manifest.get('cost_usd_accumulated')}"
+            )
     else:
         if mapping_path.exists() or manifest_path.exists() or summary_path.exists():
             raise FileExistsError("live root already initialized; use --resume (refusing overwrite)")
@@ -360,13 +442,13 @@ def run_live_pilot_v2(
             cond: f"LIVEV2-{case_id}-{cond}-{hashlib.sha256(os.urandom(8)).hexdigest()[:6]}"
             for cond in RV2.CONDITIONS
         }
-        L1._atomic_write_text(mapping_path, json.dumps(mapping, ensure_ascii=False, indent=2), 0o600)
+        _atomic_write_text_v2(mapping_path, json.dumps(mapping, ensure_ascii=False, indent=2), 0o600)
         manifest = {
             "execution_mode": EXECUTION_MODE,
             "case_id": case_id,
             "base_tag": BASE_TAG_NAME,
             "base_tag_sha": EXPECTED_BASE_SHA,
-            "live_tag": LIVE_TAG_NAME_V2,
+            "live_tag": report.get("live_tag", pilot_tag),
             "live_tag_sha": report.get("live_tag_sha", ""),
             "commit": report.get("head", ""),
             "max_turns": LIVE_MAX_TURNS,
@@ -375,7 +457,6 @@ def run_live_pilot_v2(
             "talker_model": FROZEN_TALKER_MODEL,
             "talker_temperature": FROZEN_TALKER_TEMPERATURE,
             "planner_temperature": FROZEN_PLANNER_TEMPERATURE,
-            "judge_model": "gemini-3.7-flash",
             "judge_used": False,
             "mapping_mode": "LIVE_RANDOM_OPAQUE",
             "mapping_sha256": L1._mapping_sha(mapping),
@@ -383,14 +464,13 @@ def run_live_pilot_v2(
             "cost_usd_accumulated": 0.0,
             "runs": run_ids,
         }
-        L1._atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
+        _atomic_write_text_v2(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
         usage_ledger = []
         cost_seen = 0.0
 
-    blinded_dir = _assert_under_root(root / "blinded", root)
-    blinded_dir.mkdir(parents=True, exist_ok=True)
-    scanner_dir = _assert_under_root(root / "scanner_v2", root)
-    scanner_dir.mkdir(parents=True, exist_ok=True)
+    blinded_dir = _mkdir_private(_assert_under_root(root / "blinded", root))
+    scanner_dir = _mkdir_private(_assert_under_root(root / "scanner_v2", root))
+    quarantine_dir = _mkdir_private(_assert_under_root(root / "quarantine", root))
     run_summaries: List[Dict[str, Any]] = []
 
     for cond in RV2.CONDITIONS:
@@ -398,12 +478,21 @@ def run_live_pilot_v2(
         config = L1.build_live_config(cond, run_id)
         state_dir = _assert_under_root(root / "runs" / run_id / "isolated_state", root)
         state_exists = state_dir.exists()
-        already_done = resume and state_exists and L1._effective_termination(
-            A1.load_records(state_dir) if state_exists else []
-        ) in A1.COMPLETED_TERMINATIONS
+        existing = _load_state_records(state_dir) if state_exists else []
+        already_done = resume and state_exists and _effective_termination_v2(existing) in A1.COMPLETED_TERMINATIONS
         resume_applied = bool(resume and state_exists and not already_done)
+
         if already_done:
-            records = A1.load_records(state_dir)
+            records = existing
+            prior = next((e for e in usage_ledger if e.get("condition") == cond), None)
+            if prior is None:
+                raise LiveV2Error(f"resume: completed condition {cond} missing from usage ledger")
+            usage = {
+                "prompt_tokens": prior.get("prompt_tokens"),
+                "completion_tokens": prior.get("completion_tokens"),
+                "total_tokens": prior.get("total_tokens"),
+            }
+            turn_cost = float(prior.get("cost_usd") or 0.0)
         else:
             clear_session_cache()
             kwargs: Dict[str, Any] = {}
@@ -426,84 +515,133 @@ def run_live_pilot_v2(
                 artifacts_dir=state_dir,
                 **kwargs,
             )
-        termination = L1._effective_termination(records)
+            usage = L1._token_usage_total(records)
+            mismatch = _record_model_mismatch(records)
+            if mismatch:
+                raise CostGuardError(f"model mismatch: expected {FROZEN_TALKER_MODEL}, saw {mismatch}; stopping")
+            computed = cost_usd(usage)
+            if computed is None:
+                if client_factory is None:
+                    raise CostGuardError("token usage unavailable; refusing to continue (fail-closed cost guard)")
+                computed = 0.0
+            turn_cost = computed
+            usage_ledger = _upsert_ledger(
+                usage_ledger,
+                {
+                    "condition": cond,
+                    "run_id": L1._scrub(run_id),
+                    "n_turns": len(records),
+                    "prompt_tokens": usage.get("prompt_tokens"),
+                    "completion_tokens": usage.get("completion_tokens"),
+                    "total_tokens": usage.get("total_tokens"),
+                    "cost_usd": round(turn_cost, 6),
+                },
+            )
+            cost_seen = _ledger_sum(usage_ledger)
+            manifest["cost_usd_accumulated"] = cost_seen
+            _atomic_write_text_v2(usage_path, json.dumps(usage_ledger, ensure_ascii=False, indent=2), 0o600)
+            _atomic_write_text_v2(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
+            if cost_seen > COST_CAP_USD:
+                raise CostGuardError(f"cumulative cost {cost_seen:.6f} USD exceeds cap {COST_CAP_USD}; stopping")
 
-        usage = _usage_from_records(records)
-        mismatch = _record_model_mismatch(records)
-        if mismatch:
-            raise CostGuardError(f"model mismatch: expected {FROZEN_TALKER_MODEL}, saw {mismatch}; stopping")
-        turn_cost = cost_usd(usage)
-        if turn_cost is None:
-            if client_factory is None:
-                raise CostGuardError("token usage unavailable; refusing to continue (fail-closed cost guard)")
-            turn_cost = 0.0
-        cost_seen += turn_cost
-        usage_ledger.append(
-            {
-                "condition": cond,
-                "run_id": L1._scrub(run_id),
-                "n_turns": len(records),
-                "prompt_tokens": usage.get("prompt_tokens"),
-                "completion_tokens": usage.get("completion_tokens"),
-                "total_tokens": usage.get("total_tokens"),
-                "cost_usd": round(turn_cost, 6),
-            }
-        )
-        L1._atomic_write_text(usage_path, json.dumps(usage_ledger, ensure_ascii=False, indent=2), 0o600)
-        if cost_seen > COST_CAP_USD:
-            raise CostGuardError(f"cumulative cost {cost_seen:.6f} USD exceeds cap {COST_CAP_USD}; stopping")
+        termination = _effective_termination_v2(records)
+        technical_error = L1._technical_error(records)
+        blinded_id = None
+        blinded_error = None
+        scanner_cf = None
+        scanner_families: List[str] = []
+        scanner_factual: List[str] = []
 
-        contract = to_blinded_contract_trajectory(
-            run_id, state_dir, mapping, require_completed=(termination in A1.COMPLETED_TERMINATIONS)
-        )
-        payload = {
-            "blinded_run_id": contract["run_id"],
-            "patient_id": case_id,
-            "turns": [sanitize_turn_for_judge(t) for t in contract["turns"]],
-            "reference_facts": refs,
-        }
-        RV2.assert_payload_clean_v2(payload)
-        _scan_blinded_v2(json.dumps(payload, ensure_ascii=False), mapping, run_id)
-        L1._atomic_write_text(
-            blinded_dir / f"{payload['blinded_run_id']}.json",
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            0o644,
-        )
-        scan = S2.scan_trajectory(
-            {
-                "blinded_run_id": payload["blinded_run_id"],
-                "turns": [
-                    {"turn": t["turn"], "final_output": t["final_output"], "patient_text": t["patient_text"]}
-                    for t in payload["turns"]
-                ],
+        try:
+            if termination not in A1.COMPLETED_TERMINATIONS:
+                raise LiveV2Error(f"incomplete termination {termination!r}; not judge-ready")
+            if not records:
+                raise LiveV2Error("empty trajectory; not judge-ready")
+            contract = to_blinded_contract_trajectory(run_id, state_dir, mapping, require_completed=True)
+            payload = {
+                "blinded_run_id": contract["run_id"],
+                "patient_id": case_id,
+                "turns": [sanitize_turn_for_judge(t) for t in contract["turns"]],
+                "reference_facts": refs,
             }
-        )
-        L1._atomic_write_text(
-            scanner_dir / f"{payload['blinded_run_id']}.scanner.json",
-            json.dumps(scan, ensure_ascii=False, indent=2),
-            0o600,
-        )
+            if not payload["turns"]:
+                raise LiveV2Error("blind payload has zero turns; refusing export")
+            RV2.assert_payload_clean_v2(payload)
+            _scan_blinded_v2(json.dumps(payload, ensure_ascii=False), mapping, run_id)
+            blinded_id = payload["blinded_run_id"]
+            blinded_file = blinded_dir / f"{blinded_id}.json"
+            if already_done and blinded_file.exists():
+                pass
+            else:
+                _atomic_write_text_v2(blinded_file, json.dumps(payload, ensure_ascii=False, indent=2), 0o644)
+                scan = S2.scan_trajectory(
+                    {
+                        "blinded_run_id": blinded_id,
+                        "turns": [
+                            {"turn": t["turn"], "final_output": t["final_output"], "patient_text": t["patient_text"]}
+                            for t in payload["turns"]
+                        ],
+                    }
+                )
+                _atomic_write_text_v2(
+                    scanner_dir / f"{blinded_id}.scanner.json",
+                    json.dumps(scan, ensure_ascii=False, indent=2),
+                    0o600,
+                )
+        except Exception as exc:
+            if isinstance(exc, (CostGuardError, LiveV2ConfirmationError)):
+                raise
+            blinded_error = L1._scrub(str(exc))
+            _atomic_write_text_v2(
+                quarantine_dir / f"QUARANTINE-{L1._scrub(run_id)}.json",
+                json.dumps(
+                    {
+                        "run_id": L1._scrub(run_id),
+                        "termination_reason": termination,
+                        "n_turns": len(records),
+                        "technical_error": technical_error,
+                        "reason": blinded_error,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                0o600,
+            )
+
+        if blinded_id is not None:
+            scan_path = scanner_dir / f"{blinded_id}.scanner.json"
+            if scan_path.exists():
+                sc = json.loads(scan_path.read_text(encoding="utf-8"))
+                scanner_cf = sc.get("scanner_cf")
+                scanner_families = sc.get("scanner_families", [])
+                scanner_factual = sc.get("factual_codes", [])
+
         run_summaries.append(
             {
                 "case_id": case_id,
                 "condition": cond,
                 "run_id": L1._scrub(run_id),
-                "blinded_run_id": payload["blinded_run_id"],
+                "blinded_run_id": blinded_id,
+                "blinded_error": blinded_error,
                 "n_turns": len(records),
                 "termination_reason": termination,
                 "token_usage": usage,
                 "cost_usd": round(turn_cost, 6),
-                "technical_error": L1._technical_error(records),
-                "scanner_cf": scan["scanner_cf"],
-                "scanner_families": scan["scanner_families"],
-                "scanner_factual_codes": scan.get("factual_codes", []),
-                "models_seen": sorted({str(r.get("model") or r.get("talker_model") or "") for r in records if r.get("model") or r.get("talker_model")}),
+                "technical_error": technical_error,
+                "scanner_cf": scanner_cf,
+                "scanner_families": scanner_families,
+                "scanner_factual_codes": scanner_factual,
+                "models_seen": sorted(
+                    {str(r.get(k)) for r in records for k in r if (k == "model" or k.endswith("_model")) and r.get(k)}
+                ),
                 "resume_applied": resume_applied,
                 "skipped_completed": bool(already_done),
             }
         )
 
-    completed = all(r["termination_reason"] in A1.COMPLETED_TERMINATIONS for r in run_summaries)
+    completed = all(
+        r["termination_reason"] in A1.COMPLETED_TERMINATIONS and r["blinded_run_id"] for r in run_summaries
+    )
     totals = {
         "prompt_tokens": sum((r["token_usage"].get("prompt_tokens") or 0) for r in run_summaries),
         "completion_tokens": sum((r["token_usage"].get("completion_tokens") or 0) for r in run_summaries),
@@ -516,7 +654,7 @@ def run_live_pilot_v2(
         "pilot": True,
         "provider": "gemini",
         "live_api": client_factory is None,
-        "live_tag": LIVE_TAG_NAME_V2,
+        "live_tag": report.get("live_tag", pilot_tag),
         "live_tag_sha": report.get("live_tag_sha", ""),
         "base_tag": BASE_TAG_NAME,
         "base_tag_sha": EXPECTED_BASE_SHA,
@@ -524,7 +662,6 @@ def run_live_pilot_v2(
         "talker_model": FROZEN_TALKER_MODEL,
         "talker_temperature": FROZEN_TALKER_TEMPERATURE,
         "planner_temperature": FROZEN_PLANNER_TEMPERATURE,
-        "judge_model": "gemini-3.7-flash",
         "judge_used": False,
         "case_id": case_id,
         "max_turns": LIVE_MAX_TURNS,
@@ -532,19 +669,21 @@ def run_live_pilot_v2(
         "mapping_mode": "LIVE_RANDOM_OPAQUE",
         "mapping_sha256": L1._mapping_sha(mapping),
         "cost_cap_usd": COST_CAP_USD,
-        "cost_usd_total": round(cost_seen, 6),
-        "cost_twd_total": round(cost_seen * USD_TWD, 2),
+        "cost_usd_total": _ledger_sum(usage_ledger),
+        "cost_twd_total": round(_ledger_sum(usage_ledger) * USD_TWD, 2),
         "usd_twd_rate": USD_TWD,
         "token_totals": totals,
         "resume_used": resume,
         "runs": run_summaries,
-        "n_completed": sum(1 for r in run_summaries if r["termination_reason"] in A1.COMPLETED_TERMINATIONS),
+        "n_completed": sum(
+            1 for r in run_summaries if r["termination_reason"] in A1.COMPLETED_TERMINATIONS and r["blinded_run_id"]
+        ),
         "completed": completed,
         "scanner_is_reviewer": False,
     }
-    manifest["cost_usd_accumulated"] = round(cost_seen, 6)
-    L1._atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
-    L1._atomic_write_text(summary_path, L1._scrub(json.dumps(summary, ensure_ascii=False, indent=2)), 0o600)
+    manifest["cost_usd_accumulated"] = _ledger_sum(usage_ledger)
+    _atomic_write_text_v2(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
+    _atomic_write_text_v2(summary_path, L1._scrub(json.dumps(summary, ensure_ascii=False, indent=2)), 0o600)
     return summary
 
 
@@ -556,8 +695,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--case-id", default="SAFETY-RX-01-v2")
     parser.add_argument("--root", default=None)
     parser.add_argument("--confirm-live-pilot", default=None)
+    parser.add_argument("--pilot-tag", default=LIVE_TAG_NAME_V2)
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--env-file", default=None, help="optional dotenv file loaded into the process environment (value never printed)")
+    parser.add_argument(
+        "--env-file",
+        default=None,
+        help="optional dotenv file loaded into the process environment (value never printed)",
+    )
     return parser
 
 
@@ -568,16 +712,23 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         load_dotenv(dotenv_path=args.env_file, override=False)
     if args.preflight:
-        report = preflight(args.case_id, Path(args.root) if args.root else None)
+        report = preflight(args.case_id, Path(args.root) if args.root else None, pilot_tag=args.pilot_tag)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report.get("preflight") == "PASS" else 2
     summary = run_live_pilot_v2(
         args.case_id,
         Path(args.root) if args.root else None,
         confirm=args.confirm_live_pilot,
+        pilot_tag=args.pilot_tag,
         resume=args.resume,
     )
-    print(json.dumps({"completed": summary["completed"], "cost_usd_total": summary["cost_usd_total"], "runs": summary["runs"]}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {"completed": summary["completed"], "cost_usd_total": summary["cost_usd_total"], "runs": summary["runs"]},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0 if summary["completed"] else 3
 
 

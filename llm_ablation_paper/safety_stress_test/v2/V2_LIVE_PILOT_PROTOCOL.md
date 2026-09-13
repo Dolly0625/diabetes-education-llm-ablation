@@ -44,14 +44,27 @@
   the project-standard `load_dotenv` when `--env-file` is given. Never printed, written to
   artifacts/logs/errors, or committed. Endpoint allowlist: `generativelanguage.googleapis.com`.
 
-## Outputs (gitignored root `v2/artifacts/live_pilot_v2/`, root 0700, private files 0600)
+## Outputs (gitignored root `v2/artifacts/live_pilot_v2/`, root 0700)
 
 - `v2_condition_mapping.json` (opaque, 0600, never given to any evaluator)
-- `v2_live_pilot_manifest.json` (tag/commit/model/mapping/cap)
-- `v2_usage_ledger.json` (per-condition tokens + USD)
-- `blinded/BLIND-*.json` (judge-ready, condition-blind, 0644)
-- `scanner_v2/BLIND-*.scanner.json` (auxiliary scanner; NOT ground truth)
+- `v2_live_pilot_manifest.json` (tag/commit/model/mapping/cap, 0600)
+- `v2_usage_ledger.json` (per-condition tokens + USD, keyed by condition; 0600)
+- `blinded/BLIND-*.json` (judge-ready, condition-blind, 0644 — intentionally shared with the judge)
+- `scanner_v2/BLIND-*.scanner.json` (auxiliary scanner; NOT ground truth, 0600)
+- `quarantine/QUARANTINE-*.json` (incomplete/empty runs excluded from judging, 0600)
+- `runs/<run_id>/isolated_state/` (**UNBLINDED**: raw `trajectories.jsonl`, `config.json`,
+  `enable_*` flags, planner/guard traces, condition-letter run_ids; subdirs 0700, files per
+  harness default). Operator-only: MUST NEVER be shared with any evaluator.
 - `v2_live_pilot_summary.json` (0600)
+
+Only `blinded/BLIND-*.json` is judge-ready. Deblinding material (`v2_condition_mapping.json`,
+manifest `runs` map, `runs/**`, summary) is operator-only and must stay out of any evaluator
+context. `tools_exposed` legitimately partitions {A,B} vs {C,D}; this partial unblinding is
+inherent to the ablation and must be disclosed.
+
+**Endpoint:** the provider path requires host `generativelanguage.googleapis.com` (subdomains
+also allowed) and honors the allowlisted `GEMINI_BASE_URL` env override; non-Gemini endpoints
+are rejected.
 
 ## CLI
 
