@@ -40,7 +40,7 @@ V2_DIR = Path(__file__).resolve().parent
 REPO_ROOT = V2_DIR.parents[2]
 
 CONFIRM_FULL_V2 = "I_CONFIRM_SAFETY_STRESS_V2_FULL"
-FULL_TAG_NAME = "llm-ablation-safety-stress-v2-full-v2"
+FULL_TAG_NAME = "llm-ablation-safety-stress-v2-full-v3"
 BASE_TAG_NAME = "llm-ablation-safety-stress-v2-live-pilot-v1.2.1-postpilot"
 EXPECTED_BASE_SHA = "56e319db944215471db94ae7b67ea4d90b702ce4"
 EXECUTION_MODE = "safety_stress_v2_full_live"
@@ -260,10 +260,17 @@ def run_full_v2(
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("base_tag_sha") != EXPECTED_BASE_SHA:
             raise FullV2Error("manifest base tag mismatch on resume")
-        if manifest.get("commit") != report.get("head"):
-            raise FullV2Error("manifest commit != current HEAD on resume")
-        if manifest.get("full_tag_sha") != report.get("full_tag_sha"):
-            raise FullV2Error("manifest full tag mismatch on resume")
+        rec_commit = manifest.get("commit", "")
+        if rec_commit != report.get("head"):
+            try:
+                L2._git(["merge-base", "--is-ancestor", rec_commit, "HEAD"])
+            except Exception:
+                raise FullV2Error("manifest commit is not an ancestor of HEAD on resume; refusing")
+            manifest["resumed_from_commit"] = rec_commit
+            manifest["resumed_from_full_tag_sha"] = manifest.get("full_tag_sha", "")
+            manifest["full_tag"] = pilot_tag
+            manifest["commit"] = report.get("head")
+            manifest["full_tag_sha"] = report.get("full_tag_sha")
         if L2.L1._mapping_sha(mapping) != manifest.get("mapping_sha256"):
             raise FullV2Error("mapping SHA mismatch on resume; refusing")
         if usage_path.exists():
@@ -361,25 +368,30 @@ def run_full_v2(
                         kwargs["client_factory"] = client_factory
                     else:
                         kwargs["provider_config"] = dict(L2.PROVIDER_CONFIG)
-                    records = run_trajectory_subprocess(
-                        config=config,
-                        patient_id=f"fullv2_{case_id.lower()}_{cond.lower()}",
-                        messages=list(case["pressure_turns"]),
-                        state_dir=state_dir,
-                        run_id=run_id,
-                        timeout=timeout,
-                        resume=resume_applied,
-                        research_patient_id=case_id,
-                        artifacts_dir=state_dir,
-                        **kwargs,
-                    )
+                    run_failed = None
+                    try:
+                        records = run_trajectory_subprocess(
+                            config=config,
+                            patient_id=f"fullv2_{case_id.lower()}_{cond.lower()}",
+                            messages=list(case["pressure_turns"]),
+                            state_dir=state_dir,
+                            run_id=run_id,
+                            timeout=timeout,
+                            resume=resume_applied,
+                            research_patient_id=case_id,
+                            artifacts_dir=state_dir,
+                            **kwargs,
+                        )
+                    except Exception as exc:
+                        records = L2._load_state_records(state_dir) if state_dir.exists() else []
+                        run_failed = L2.L1._scrub(f"{type(exc).__name__}: {exc}")
                     usage = L2.L1._token_usage_total(records)
                     mismatch = L2._record_model_mismatch(records)
-                    if mismatch:
+                    if mismatch and not run_failed:
                         raise FullV2Error(f"model mismatch: expected {L2.FROZEN_TALKER_MODEL}, saw {mismatch}; stopping")
                     computed = L2.cost_usd(usage)
                     if computed is None:
-                        if client_factory is None:
+                        if client_factory is None and not run_failed:
                             raise FullV2Error("token usage unavailable; refusing to continue (fail-closed cost guard)")
                         computed = 0.0
                     turn_cost = computed
@@ -396,6 +408,7 @@ def run_full_v2(
                             "completion_tokens": usage.get("completion_tokens"),
                             "total_tokens": usage.get("total_tokens"),
                             "cost_usd": round(turn_cost, 7),
+                            "failed": run_failed,
                         },
                     )
                     cost_seen = _ledger_sum(usage_ledger)
@@ -564,6 +577,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--confirm-full", default=None)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--pilot-tag", default=FULL_TAG_NAME)
+    parser.add_argument("--timeout", type=float, default=None)
     parser.add_argument("--env-file", default=None)
     return parser
 
@@ -585,6 +599,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         confirm=args.confirm_full,
         resume=args.resume,
         pilot_tag=args.pilot_tag,
+        timeout=args.timeout,
     )
     print(
         json.dumps(

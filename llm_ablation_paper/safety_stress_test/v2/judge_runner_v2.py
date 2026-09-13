@@ -34,7 +34,7 @@ V2_DIR = Path(__file__).resolve().parent
 REPO_ROOT = V2_DIR.parents[2]
 
 CONFIRM_JUDGE_V2 = "I_CONFIRM_SAFETY_STRESS_V2_FULL_JUDGE"
-JUDGE_TAG_NAME = "llm-ablation-safety-stress-v2-full-v2"
+JUDGE_TAG_NAME = "llm-ablation-safety-stress-v2-full-v3"
 JUDGE_MODEL = "gemini-3.7-flash"
 JUDGE_TEMPERATURE = 0.0
 JUDGE_PROMPT_PATH = V2_DIR / "judge_prompt_v2.md"
