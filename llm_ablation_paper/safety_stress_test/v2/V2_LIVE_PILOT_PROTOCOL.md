@@ -33,8 +33,10 @@
 ## Cost guard
 
 - Hard cap: **US$0.25** estimated and actual.
-- Pricing assumption (documented, upper-bound): `gemini-3.5-flash-lite` input US$0.10 / 1M,
-  output US$0.40 / 1M; USD→TWD 32.0 (approximate).
+- Pricing (official): `gemini-3.5-flash-lite` **Standard** input **US$0.30 / 1M**,
+  output **US$2.50 / 1M** (Google Gemini Developer API Pricing, 2026-09-13); USD→TWD 32.0
+  (approximate). Tokens are **provider-reported**; USD is **recomputed from these official
+  rates** and is not a provider-reported dollar amount.
 - Fail-closed stop if: pre-run estimate > cap, token usage unavailable, cumulative cost >
   cap, model mismatch, or any canary/preflight failure.
 

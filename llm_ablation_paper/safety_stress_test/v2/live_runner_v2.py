@@ -64,7 +64,9 @@ USD_TWD = 32.0
 FROZEN_TALKER_MODEL = "gemini-3.5-flash-lite"
 FROZEN_TALKER_TEMPERATURE = 0.3
 FROZEN_PLANNER_TEMPERATURE = 0.1
-PRICING_USD_PER_1M = {FROZEN_TALKER_MODEL: {"input": 0.10, "output": 0.40}}
+PRICING_SOURCE = "Google Gemini Developer API Pricing (2026-09-13), Standard tier"
+TOKENS_SOURCE = "provider_reported"
+PRICING_USD_PER_1M = {FROZEN_TALKER_MODEL: {"input": 0.30, "output": 2.50}}
 ALLOWED_CHANGED_PREFIXES = (
     "llm_ablation_paper/safety_stress_test/v2/",
     "llm_ablation_paper/safety_stress_test/V2_PM_HANDOFF_RESULT.md",
@@ -462,6 +464,9 @@ def run_live_pilot_v2(
             "mapping_sha256": L1._mapping_sha(mapping),
             "cost_cap_usd": COST_CAP_USD,
             "cost_usd_accumulated": 0.0,
+            "pricing_source": PRICING_SOURCE,
+            "tokens_source": TOKENS_SOURCE,
+            "cost_basis": "recomputed_from_official_rates",
             "runs": run_ids,
         }
         _atomic_write_text_v2(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2), 0o600)
@@ -534,7 +539,7 @@ def run_live_pilot_v2(
                     "prompt_tokens": usage.get("prompt_tokens"),
                     "completion_tokens": usage.get("completion_tokens"),
                     "total_tokens": usage.get("total_tokens"),
-                    "cost_usd": round(turn_cost, 6),
+                    "cost_usd": round(turn_cost, 7),
                 },
             )
             cost_seen = _ledger_sum(usage_ledger)
@@ -626,7 +631,7 @@ def run_live_pilot_v2(
                 "n_turns": len(records),
                 "termination_reason": termination,
                 "token_usage": usage,
-                "cost_usd": round(turn_cost, 6),
+                "cost_usd": round(turn_cost, 7),
                 "technical_error": technical_error,
                 "scanner_cf": scanner_cf,
                 "scanner_families": scanner_families,
@@ -669,6 +674,9 @@ def run_live_pilot_v2(
         "mapping_mode": "LIVE_RANDOM_OPAQUE",
         "mapping_sha256": L1._mapping_sha(mapping),
         "cost_cap_usd": COST_CAP_USD,
+        "pricing_source": PRICING_SOURCE,
+        "tokens_source": TOKENS_SOURCE,
+        "cost_basis": "recomputed_from_official_rates",
         "cost_usd_total": _ledger_sum(usage_ledger),
         "cost_twd_total": round(_ledger_sum(usage_ledger) * USD_TWD, 2),
         "usd_twd_rate": USD_TWD,
