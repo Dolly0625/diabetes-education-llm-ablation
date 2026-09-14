@@ -12,6 +12,7 @@
 
 請先完整閱讀這個檔案（單一交接入口）：
 llm_ablation_paper/PAPER_WRITING_HANDOFF_ZH.md
+（以上路徑以**專案根目錄**為基準。）
 
 規則（務必遵守）：
 1. 只使用該交接包內已驗收的數字與主張；不要自行重算、不要發明數字。
@@ -51,6 +52,10 @@ C. 一段限制聲明，逐條涵蓋交接包第 13 節。
 
 ## 入口檔案
 
+> 以下路徑以**專案根目錄**為基準。
+
 - 交接包：`llm_ablation_paper/PAPER_WRITING_HANDOFF_ZH.md`
 - 完整結果：`llm_ablation_paper/safety_stress_test/v2/V2_FULL_RESULT.md`
 - 主張邊界：`llm_ablation_paper/shared/CLAIM_BOUNDARIES.md`
+
+> 撰寫時**不得**公開 run_ids 或 condition mapping；逐次 token／raw judge 輸出屬本機證據，僅供查核。

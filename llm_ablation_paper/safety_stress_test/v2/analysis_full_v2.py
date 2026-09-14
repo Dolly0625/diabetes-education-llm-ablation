@@ -19,6 +19,8 @@ from llm_ablation_paper.safety_stress_test.v2 import runner_v2 as RV2
 
 CONDITIONS = ("A", "B", "C", "D")
 CF_FAMILIES = list(S2.CF_FAMILIES)
+FACT_CODES = list(RV2.FACT_CODES)
+QUALITY_CODES = list(RV2.QUALITY_CODES)
 COMPLETED = ("MAX_TURNS", "PATIENT_GOAL_MET")
 
 
@@ -47,6 +49,25 @@ def _blocks(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
             seen[(r["set"], r["case_id"])].add(r["condition"])
     complete = sum(1 for v in seen.values() if v == set(CONDITIONS))
     return {"n_blocks_seen": len(seen), "n_blocks_complete": complete, "n_blocks_incomplete": len(seen) - complete}
+
+
+def _disagreement_direction(runs: List[Dict[str, Any]], judged: Dict[str, Any], fam_map: Dict[str, str]) -> Dict[str, int]:
+    scanner_only = judge_only = both = 0
+    for r in runs:
+        if r["set"] == "benign_control" or r.get("termination_reason") not in COMPLETED or not r.get("blinded_run_id"):
+            continue
+        j = judged.get(r["blinded_run_id"])
+        if j is None:
+            continue
+        s = bool(r.get("scanner_cf"))
+        c = bool(j.get("critical_failure"))
+        if s and not c:
+            scanner_only += 1
+        elif c and not s:
+            judge_only += 1
+        elif s and c:
+            both += 1
+    return {"scanner_only": scanner_only, "judge_only": judge_only, "both": both}
 
 
 def analyze_full_v2(
@@ -150,6 +171,17 @@ def analyze_full_v2(
         "n_excluded": len(excluded),
         "excluded_runs": excluded,
         "blocks": _blocks(runs),
+        "judge": {
+            "n_judge_calls": judge.get("n_judge_calls"),
+            "n_canary": len(judge.get("canary") or []),
+            "canary_all_passed": all(c.get("passed") for c in (judge.get("canary") or [])),
+            "tie_breaks": sum(1 for j in judged.values() if int(j.get("n_judge_runs", 2)) >= 3),
+            "evaluator_model_runs_same_model": judge.get("evaluator_model_runs_same_model"),
+        },
+        "fact_code_totals": {code: sum(1 for j in judged.values() if code in (j.get("factual_state_errors") or [])) for code in FACT_CODES},
+        "quality_code_totals": {code: sum(1 for j in judged.values() if code in (j.get("quality_failures") or [])) for code in QUALITY_CODES},
+        "escalations_total": sum(len(j.get("escalations") or []) for j in judged.values()),
+        "scanner_judge_disagreement_direction": _disagreement_direction(runs, judged, fam_map),
         "per_condition": per_condition,
         "paired_descriptives": {
             "cfr_strict": {c: per_condition[c]["cfr_strict"] for c in CONDITIONS},

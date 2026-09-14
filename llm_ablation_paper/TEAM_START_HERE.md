@@ -39,7 +39,7 @@
 | 4 | 模擬病患 | 維護已驗收 profiles，完成 Patient Agent runner、終止條件與 checkpoint | 只做 WS4-B runner，不得重做 profiles |
 | 5 | Judge 與分析 | 盲評 rubric、Judge runner、統計表與論文結果素材 | 先完成 rubric、schema 與假資料測試 |
 
-WS1 Harness 已完成，且 WS1 runtime／config 與指紋已由 canonical tag `llm-ablation-ws1-freeze-v1.1` final freeze（2026-09-11）。成員 2–5 可開始各自的離線開發與驗收，但不得自行修改核心 production pipeline，也不得自行啟動正式 A–D 批次；正式 12×4 只由 WS1 在 WS2／WS3／WS5 與 opaque mapping 完成後啟動。
+WS1 Harness 已完成，且 WS1 runtime／config 與指紋已由 canonical tag `llm-ablation-ws1-freeze-v1.1` final freeze（2026-09-11）。成員 2–5 可開始各自的離線開發與驗收，但不得自行修改核心 production pipeline，也不得自行啟動正式 A–D 批次；正式 12×4 只由 WS1 在 WS2／WS3／WS5 與 opaque mapping 完成後啟動。（註：**探索性 v2 已用真實 API 完成 92 軌跡＋盲評**，見 `PAPER_WRITING_HANDOFF_ZH.md`；此段限制僅針對正式 12×4。）
 
 ## 你要怎麼把專案交給其他人？
 
@@ -53,7 +53,7 @@ WS1 Harness 已完成，且 WS1 runtime／config 與指紋已由 canonical tag `
 
 ### 固定協作順序
 
-1. WS2、WS3、WS4-B、WS5 可平行完成程式、契約與 fake-data 測試。
+1. WS2、WS3、WS4-B、WS5 可平行完成程式、契約與 fake-data 測試。（註：**探索性 v2 已用真實 API 完成 92 軌跡＋盲評**；此處指正式 12×4。）
 2. WS1 逐一驗收並整合上述成果；prompt、工具 schema 與正式 Git commit 指紋已凍結（canonical tag `llm-ablation-ws1-freeze-v1.1`）。
 3. 指紋凍結後，由 WS1 使用 WS4 runner 執行正式 12×4 軌跡並凍結 raw transcripts。
 4. WS1 產生不含 A/B/C/D 身分的 blinded transcripts，再交給 WS5；WS5 不得接觸 condition mapping。
@@ -81,12 +81,12 @@ diabetes-chatbot/
 ## 全員共同規則
 
 - 每個人使用同一份 `shared/RESEARCH_PROTOCOL.md`，不能自行發明不同的 A–D 定義。
-- 每個人先讀根目錄 `AGENTS.md`，再讀自己工作流的 `AGENTS.md`。
+- 每個人先讀上一層的 `AGENTS.md`（`llm_ablation_paper/AGENTS.md`），再讀自己工作流的 `AGENTS.md`。
 - 不把其他 AI 的自我評估當成完成證明；要看實際檔案、測試與 artifacts。
 - 不寫死任何人的電腦路徑。
 - 不把 RAG 組的研究結果混入這篇 LLM 消融論文。
 - 模型名稱與參數一律讀取 `shared/RESEARCH_PROTOCOL.md`，不得自行替換；正式指紋完成前先用 fake model 測試。
-- 成員 2–5 不得直接修改 `diabetes_chatbot/handlers.py`；需要接口時記錄需求，由成員 1 統一處理。
+- 成員 2–5 不得直接修改 `../diabetes_chatbot/server/handlers.py`；需要接口時記錄需求，由成員 1 統一處理。
 
 ## 群組公告範本
 

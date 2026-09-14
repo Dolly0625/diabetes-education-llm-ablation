@@ -43,7 +43,7 @@
 | 2026-09-10 | 驗收並合併 `ws4-runner`（`e9d0ac7`）至 `main`：WS4-B runner、checkpoint/resume/retry、fake dry-run | 離線測試 84 passed（含來源追溯 test_01–test_04，以固定上游 CSV SHA-256 驗證）；無越界修改；獨立稽核判定部分通過且無硬性 blocker | 技術主持 |
 | 2026-09-10 | 建立 `ws1-formal-readiness` 分支完成 WS1／WS4 正式就緒強化；判定 `READY_FOR_REVIEW` | 修正 provider 金鑰／endpoint 配對（Gemini-only）、統一 fake 與正式逐輪路徑、retry/timeout/research_patient_id/canary/CSV fail-closed，並重新產生 checked-in artifact；正式實驗維持 BLOCKED（P0-1） | Sisyphus |
 | 2026-09-10 | 合併 `ws1-formal-readiness`（`a7f4b72`）至 `main`；WS1／WS4 formal-readiness 判定 `APPROVED` | 驗收實測 WS1 59 passed／WS4 139 passed／backward 5 passed／validator PASS；canary `COMMON_INPUT_BLOCK`；無越界修改；正式 12×4 維持 `BLOCKED` | 技術主持 |
-| 2026-09-11 | 建立 `backup/original-features-20260911` 完整備份原功能（29 項），並自 `main@435c91f` 建立 `ws1-freeze-candidate`（僅核心實驗功能、排除 Demo／醫護／分享、share-free）；判定 `REVIEW` | 依 P0-1 Stage 2：先保護原功能再建可重現 freeze candidate；正式 12×4 維持 `BLOCKED` | 技術主持 |
+| 2026-09-11 | 建立歷史備份分支 `backup/original-features-20260911`（**分支名，非檔案路徑**）完整備份原功能（29 項），並自 `main@435c91f` 建立 `ws1-freeze-candidate`（僅核心實驗功能、排除 Demo／醫護／分享、share-free）；判定 `REVIEW` | 依 P0-1 Stage 2：先保護原功能再建可重現 freeze candidate；正式 12×4 維持 `BLOCKED` | 技術主持 |
 | 2026-09-11 | `ws1-freeze-candidate` 完成 final-freeze 就緒修正：凍結正式 config（模型／temperature／timeouts／seed）、第二次 Talker 改用凍結 temperature、同步 planner persist、單病患 formal pilot 入口；判定 `READY_FOR_FINAL_REVIEW` | 修正三項 runtime mismatch 與 Planner timeout；protocol／manifest 指紋回填；正式 12×4 維持 `BLOCKED` | 技術主持 |
 | 2026-09-11 | 合併 `ws1-freeze-candidate` 並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze；WS1 與 M1 改為 `APPROVED` | 補齊 runner patient agent 與 timeout fail-closed 閘門，測試全數通過（43/116/139/5），指紋精確一致，工作區乾淨；正式 12×4 維持 `BLOCKED`（等待 WS2/WS3/WS5 與 mapping） | 技術主持 |
 
