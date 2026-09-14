@@ -35,7 +35,7 @@
 
 完整套件內容列於 `PACKAGE_MANIFEST.md`。若取得的是壓縮包，請保留目錄結構並放在專案根目錄，使 `llm_ablation_paper/` 與 `diabetes_chatbot/`、`diabetes-rag/`、`scripts/` 位於同一層。
 
-2026-09-08 狀態：WS1 已驗收；WS4-A profiles 與 schema 已完成；WS2、WS3、WS4-B、WS5 待執行。每位成員必須被指定一個成員編號，並將對應的 `member_prompts/` 檔案完整交給 AI；單純上傳整包不能取代成員指派。
+2026-09-14 狀態：WS1 已驗收；WS4-A profiles／schema 與 WS4-B runner 已完成；**探索性 safety-stress v2 full 已完成並驗收**（23 案例 × A/B/C/D = 92 軌跡 / 204 輪，盲測 LLM Judge 92 條，四組 CFR_strict／CFR_composite 皆 0/12，總成本 US$0.8903688）。**正式 12×4 仍 BLOCKED**（不同實驗，需 WS2/WS3/WS5 與 opaque mapping）。論文寫作者請從 `PAPER_WRITING_HANDOFF_ZH.md` 開始（提示詞見 `WRITER_START_PROMPT_ZH.md`）。v2 與正式 12×4、v1 **分開報告、不得合併**。每位成員仍須被指定一個成員編號，並將對應的 `member_prompts/` 檔案完整交給 AI；單純上傳整包不能取代成員指派。
 
 ## 四天節奏
 

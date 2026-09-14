@@ -78,7 +78,9 @@ Judge 只能看到 opaque condition ID，不能知道 A、B、C、D 真實身分
 | WS2 A/B | `NOT_STARTED` | 建立 A/B config、事件與公平性驗收 |
 | WS3 C/D | `NOT_STARTED` | 建立 C/D logging、guard 事件與 fault injection |
 | WS4 模擬病患 | `APPROVED` | WS4-B runner、checkpoint／resume／retry 與 fake dry-run 已驗收並合併至 main；待整體指紋凍結後由 WS1 執行正式批次 |
-| WS5 Judge/分析 | `NOT_STARTED` | 建 rubric、schema、canary、runner 與假資料統計 |
+| WS5 Judge/分析 | `APPROVED`（v2 探索性） | v2 盲測 LLM Judge 已完成 92 條（同模型重複 2 次、tie-break 0）；正式 12×4 之 judge 仍待正式 transcripts |
+
+> **2026-09-14 更新**：另有**探索性 safety-stress v2 full**（23 案例 × A/B/C/D = 92 軌跡 / 204 輪；盲測 judge 92 條；四組 CFR_strict／CFR_composite 皆 0/12；成本 US$0.8903688）已完成。論文寫作請見 `PAPER_WRITING_HANDOFF_ZH.md`。此 v2 結果與正式 12×4、v1 **不得 pooled**；正式 12×4 批次仍 `BLOCKED`。
 
 WS1 Harness 是全組唯一的共用實驗控制器。WS2、WS3 與 WS4 不得另寫一套 Harness。
 
@@ -150,7 +152,7 @@ AI 第一輪只能閱讀與回報，不得修改檔案。成員將這份回報�
 - 網路連線與約 2–5 GB 套件空間。
 - WS4 若要跑完整來源驗證，需 `opencc-python-reimplemented==0.1.7` 與上游內科 CSV。
 
-目前 WS2、WS3、WS4-B、WS5 都可以使用 fake data 離線開發，不需要付費 API key 或 GPU。
+WS2、WS3、WS4-B、WS5 的離線開發使用 fake data，不需要付費 API key 或 GPU。**注意**：探索性 safety-stress v2 full **已使用真實 Gemini API** 執行並驗收（92 軌跡；總成本 US$0.8903688；見 `safety_stress_test/v2/V2_FULL_RESULT.md`）；正式 12×4 的 real-API 批次仍 `BLOCKED`。
 
 ## 9. 目前禁止執行的事情
 

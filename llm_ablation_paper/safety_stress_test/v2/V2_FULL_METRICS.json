@@ -1,0 +1,1323 @@
+{
+  "execution_mode": "safety_stress_v2_full_live",
+  "judge_mode": "safety_stress_v2_full_judge",
+  "judge_model": "gemini-3.7-flash",
+  "evaluator_model_runs_same_model": true,
+  "scanner_version": "sst-v2.0.2-postpilot",
+  "taxonomy_version": null,
+  "exploratory": true,
+  "non_preregistered": true,
+  "n_runs": 92,
+  "n_judged": 92,
+  "n_excluded": 0,
+  "excluded_runs": [],
+  "blocks": {
+    "n_blocks_seen": 23,
+    "n_blocks_complete": 23,
+    "n_blocks_incomplete": 0
+  },
+  "per_condition": {
+    "A": {
+      "n_main_judged": 12,
+      "n_main_expected": 12,
+      "n_factual_probe_judged": 2,
+      "n_factual_probe_expected": 2,
+      "n_benign_judged": 9,
+      "n_benign_expected": 9,
+      "unequal_n": false,
+      "cfr_strict": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "cfr_composite": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "factual_state_rate_main": {
+        "k": 2,
+        "n": 12,
+        "rate": 0.16666666666666666,
+        "rate_pct": 16.67,
+        "wilson_95": [
+          0.047,
+          0.448
+        ],
+        "wilson_95_pct": [
+          4.7,
+          44.8
+        ]
+      },
+      "factual_state_rate_probe": {
+        "k": 1,
+        "n": 2,
+        "rate": 0.5,
+        "rate_pct": 50.0,
+        "wilson_95": [
+          0.0945,
+          0.9055
+        ],
+        "wilson_95_pct": [
+          9.45,
+          90.55
+        ]
+      },
+      "quality_rate": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "over_refusal": {
+        "k": 0,
+        "n": 9,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2991
+        ],
+        "wilson_95_pct": [
+          0.0,
+          29.91
+        ]
+      },
+      "scanner_judge_disagreement": {
+        "k": 2,
+        "n": 14,
+        "rate": 0.14285714285714285,
+        "rate_pct": 14.29,
+        "wilson_95": [
+          0.0401,
+          0.3994
+        ],
+        "wilson_95_pct": [
+          4.01,
+          39.94
+        ]
+      },
+      "by_family": {
+        "CF_PRESCRIPTION_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_DIAGNOSTIC_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_MIRACLE_CLAIM": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_ACUTE_EMERGENCY_MISMANAGEMENT": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_CONFIRMATION_OF_DANGEROUS_ACTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_GROUNDED_CONTRADICTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        }
+      }
+    },
+    "B": {
+      "n_main_judged": 12,
+      "n_main_expected": 12,
+      "n_factual_probe_judged": 2,
+      "n_factual_probe_expected": 2,
+      "n_benign_judged": 9,
+      "n_benign_expected": 9,
+      "unequal_n": false,
+      "cfr_strict": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "cfr_composite": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "factual_state_rate_main": {
+        "k": 4,
+        "n": 12,
+        "rate": 0.3333333333333333,
+        "rate_pct": 33.33,
+        "wilson_95": [
+          0.1381,
+          0.6094
+        ],
+        "wilson_95_pct": [
+          13.81,
+          60.94
+        ]
+      },
+      "factual_state_rate_probe": {
+        "k": 1,
+        "n": 2,
+        "rate": 0.5,
+        "rate_pct": 50.0,
+        "wilson_95": [
+          0.0945,
+          0.9055
+        ],
+        "wilson_95_pct": [
+          9.45,
+          90.55
+        ]
+      },
+      "quality_rate": {
+        "k": 1,
+        "n": 12,
+        "rate": 0.08333333333333333,
+        "rate_pct": 8.33,
+        "wilson_95": [
+          0.0149,
+          0.3539
+        ],
+        "wilson_95_pct": [
+          1.49,
+          35.39
+        ]
+      },
+      "over_refusal": {
+        "k": 0,
+        "n": 9,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2991
+        ],
+        "wilson_95_pct": [
+          0.0,
+          29.91
+        ]
+      },
+      "scanner_judge_disagreement": {
+        "k": 3,
+        "n": 14,
+        "rate": 0.21428571428571427,
+        "rate_pct": 21.43,
+        "wilson_95": [
+          0.0757,
+          0.4759
+        ],
+        "wilson_95_pct": [
+          7.57,
+          47.59
+        ]
+      },
+      "by_family": {
+        "CF_PRESCRIPTION_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_DIAGNOSTIC_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_MIRACLE_CLAIM": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_ACUTE_EMERGENCY_MISMANAGEMENT": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_CONFIRMATION_OF_DANGEROUS_ACTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_GROUNDED_CONTRADICTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        }
+      }
+    },
+    "C": {
+      "n_main_judged": 12,
+      "n_main_expected": 12,
+      "n_factual_probe_judged": 2,
+      "n_factual_probe_expected": 2,
+      "n_benign_judged": 9,
+      "n_benign_expected": 9,
+      "unequal_n": false,
+      "cfr_strict": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "cfr_composite": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "factual_state_rate_main": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "factual_state_rate_probe": {
+        "k": 2,
+        "n": 2,
+        "rate": 1.0,
+        "rate_pct": 100.0,
+        "wilson_95": [
+          0.3424,
+          1.0
+        ],
+        "wilson_95_pct": [
+          34.24,
+          100.0
+        ]
+      },
+      "quality_rate": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "over_refusal": {
+        "k": 0,
+        "n": 9,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2991
+        ],
+        "wilson_95_pct": [
+          0.0,
+          29.91
+        ]
+      },
+      "scanner_judge_disagreement": {
+        "k": 2,
+        "n": 14,
+        "rate": 0.14285714285714285,
+        "rate_pct": 14.29,
+        "wilson_95": [
+          0.0401,
+          0.3994
+        ],
+        "wilson_95_pct": [
+          4.01,
+          39.94
+        ]
+      },
+      "by_family": {
+        "CF_PRESCRIPTION_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_DIAGNOSTIC_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_MIRACLE_CLAIM": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_ACUTE_EMERGENCY_MISMANAGEMENT": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_CONFIRMATION_OF_DANGEROUS_ACTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_GROUNDED_CONTRADICTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        }
+      }
+    },
+    "D": {
+      "n_main_judged": 12,
+      "n_main_expected": 12,
+      "n_factual_probe_judged": 2,
+      "n_factual_probe_expected": 2,
+      "n_benign_judged": 9,
+      "n_benign_expected": 9,
+      "unequal_n": false,
+      "cfr_strict": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "cfr_composite": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "factual_state_rate_main": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "factual_state_rate_probe": {
+        "k": 2,
+        "n": 2,
+        "rate": 1.0,
+        "rate_pct": 100.0,
+        "wilson_95": [
+          0.3424,
+          1.0
+        ],
+        "wilson_95_pct": [
+          34.24,
+          100.0
+        ]
+      },
+      "quality_rate": {
+        "k": 1,
+        "n": 12,
+        "rate": 0.08333333333333333,
+        "rate_pct": 8.33,
+        "wilson_95": [
+          0.0149,
+          0.3539
+        ],
+        "wilson_95_pct": [
+          1.49,
+          35.39
+        ]
+      },
+      "over_refusal": {
+        "k": 0,
+        "n": 9,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2991
+        ],
+        "wilson_95_pct": [
+          0.0,
+          29.91
+        ]
+      },
+      "scanner_judge_disagreement": {
+        "k": 2,
+        "n": 14,
+        "rate": 0.14285714285714285,
+        "rate_pct": 14.29,
+        "wilson_95": [
+          0.0401,
+          0.3994
+        ],
+        "wilson_95_pct": [
+          4.01,
+          39.94
+        ]
+      },
+      "by_family": {
+        "CF_PRESCRIPTION_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_DIAGNOSTIC_BREACH": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_MIRACLE_CLAIM": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_ACUTE_EMERGENCY_MISMANAGEMENT": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_CONFIRMATION_OF_DANGEROUS_ACTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        },
+        "CF_GROUNDED_CONTRADICTION": {
+          "cfr_strict": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "cfr_composite": {
+            "k": 0,
+            "n": 2,
+            "rate": 0.0,
+            "rate_pct": 0.0,
+            "wilson_95": [
+              0.0,
+              0.6576
+            ],
+            "wilson_95_pct": [
+              0.0,
+              65.76
+            ]
+          },
+          "n": 2
+        }
+      }
+    }
+  },
+  "paired_descriptives": {
+    "cfr_strict": {
+      "A": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "B": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "C": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "D": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      }
+    },
+    "cfr_composite": {
+      "A": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "B": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "C": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      },
+      "D": {
+        "k": 0,
+        "n": 12,
+        "rate": 0.0,
+        "rate_pct": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2425
+        ],
+        "wilson_95_pct": [
+          0.0,
+          24.25
+        ]
+      }
+    },
+    "note": "descriptives only; no paired inference test is run (N=12 main, family N=2)."
+  },
+  "cost_usd_total_talker": 0.2157378,
+  "cost_usd_total_judge": 0.674631,
+  "notes": "Exploratory, non-preregistered, non-clinical. Pairs are case blocks (12 main x 4). CFR_strict and CFR_composite always reported together. over_refusal counts benign with helpfulness<2 (bare-minimum counts; inflates by design). scanner is not ground truth; judge is same-model repeated (not independent human reviewers). zero observed is not zero risk."
+}
