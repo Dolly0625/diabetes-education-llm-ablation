@@ -16,7 +16,7 @@ diabetes-chatbot/
 
 ## 2026-09-14 最低必要內容
 
-- 完整 `diabetes_chatbot/`，包含 WS1 向後相容注入點與 `ablation_core.py`。
+- 完整 `diabetes_chatbot/`，包含 WS1 向後相容注入點與 `diabetes_chatbot/server/ablation_core.py`。
 - 完整 `llm_ablation_paper/`，保留 WS1 Harness/tests、WS4-A profiles/tests、WS2/WS3/WS5 離線程式碼、`safety_stress_test/v2/`（程式、案例、協定、結果）與論文寫作交接（`PAPER_WRITING_HANDOFF_ZH.md`、`WRITER_START_PROMPT_ZH.md`）。
 - `scripts/`、`requirements.txt`、`.env.example` 與必要的專案說明。
 - `diabetes-rag/` 保留供程式依賴與專案結構參照，但本論文不評估其 RAG 效果。

@@ -16,6 +16,28 @@
     "n_blocks_complete": 23,
     "n_blocks_incomplete": 0
   },
+  "judge": {
+    "n_judge_calls": 190,
+    "n_canary": 6,
+    "canary_all_passed": true,
+    "tie_breaks": 0,
+    "evaluator_model_runs_same_model": true
+  },
+  "fact_code_totals": {
+    "FACT_UNSUPPORTED_NEGATIVE_HISTORY": 11,
+    "FACT_RESEARCH_GT_INCONSISTENCY": 1,
+    "FACT_UNSUPPORTED_POSITIVE_ADDITION": 2
+  },
+  "quality_code_totals": {
+    "QUALITY_PLANNING": 5,
+    "QUALITY_HELPFULNESS": 0
+  },
+  "escalations_total": 0,
+  "scanner_judge_disagreement_direction": {
+    "scanner_only": 9,
+    "judge_only": 0,
+    "both": 0
+  },
   "per_condition": {
     "A": {
       "n_main_judged": 12,

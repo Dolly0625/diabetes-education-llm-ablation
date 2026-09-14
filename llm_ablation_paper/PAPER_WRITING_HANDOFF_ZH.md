@@ -10,7 +10,7 @@
 
 ## 0. 一句話總結
 
-我們用「模擬病患多輪對抗腳本」對同一個糖尿病衛教 LLM 助理的四種防線設定（A/B/C/D）做了 **92 條真實模型對話軌跡**，再用**盲測 LLM 評審（同一模型重複評分兩次）**評分：**四組的嚴重安全失敗率（CFR）皆為 0/12**（探索性、樣本小、不可宣稱安全）；但**事實／狀態層錯誤**（例如「由沉默捏造否定病史」）在部分組別出現，且 A／B 組較多。這是**探索性、非預先註冊、非臨床**的壓力測試結果，與正式 12×4、與 v1 **分開報告、不得合併**。
+我們用「模擬病患多輪對抗腳本」對同一個糖尿病衛教 LLM 助理的四種防線設定（A/B/C/D）做了 **92 條真實模型對話軌跡（真實 API，非真實病患）**，再用**盲測 LLM 評審（同一模型重複評分兩次）**評分：**四組的嚴重安全失敗率（CFR）皆為 0/12**（探索性、樣本小、不可宣稱安全）；但**事實／狀態層錯誤**（例如「由沉默捏造否定病史」）在部分組別出現，且 A／B 組較多。這是**探索性、非預先註冊、非臨床**的壓力測試結果，與正式 12×4、與 v1 **分開報告、不得合併**。
 
 ---
 
@@ -137,13 +137,14 @@
 | over-refusal（N=9） | **0** | **0** | **0** | **0** |
 | scanner–judge 不一致（N=14） | **2** | **3** | **2** | **2** |
 
-- 92/92 軌跡 FACT 代碼合計：`FACT_UNSUPPORTED_NEGATIVE_HISTORY` **11**、`FACT_UNSUPPORTED_POSITIVE_ADDITION` **2**、`FACT_RESEARCH_GT_INCONSISTENCY` **1**。
-- `escalations` 全空 → CFR_composite == CFR_strict（0/12）。
+- 92/92 軌跡 FACT 代碼合計：`FACT_UNSUPPORTED_NEGATIVE_HISTORY` **11**、`FACT_UNSUPPORTED_POSITIVE_ADDITION` **2**、`FACT_RESEARCH_GT_INCONSISTENCY` **1**（source: `safety_stress_test/v2/V2_FULL_METRICS.json` → `fact_code_totals`；為全部 92 條判決之代碼計數）。
+- 升級（escalations）合計 **0** → CFR_composite == CFR_strict（0/12）。（source: `V2_FULL_METRICS.json` → `escalations_total`。）
+- scanner–judge 不一致方向：`scanner_only` **9**、`judge_only` **0**、`both` **0**（source: `V2_FULL_METRICS.json` → `scanner_judge_disagreement_direction`；全為掃描器誤報方向）。
 
 ### 8.3 執行與成本（精確）
 - 92/92 軌跡、204 輪、excluded **0**、完整 blocks **23/23**。
-- Judge：92 條各 2 次＝184 次 + canary 6 次 = **190 次呼叫**；**tie-break 0**。
-- **Token（provider 回報）**：Talker 443,400（prompt 405,801 + completion 37,599）；Judge 190 呼叫合計（ledger）prompt 640,678 / completion 51,766。
+- Judge：92 條各 2 次＝184 次 + canary 6 次 = **190 次呼叫**；**tie-break 0**；canary **6/6 通過**（source: `V2_FULL_METRICS.json` → `judge`）。
+- **Token（provider 回報）**：Talker 443,400（prompt 405,801 + completion 37,599）；Judge 190 呼叫合計 prompt 640,678 / completion 51,766。（逐次 token 見本機 ledger，僅供查核；committed 成本見 `V2_FULL_METRICS.json`。）
 - **成本（美元為依官方費率重算）**：
   - Talker **US$0.2157378**（≈TWD 6.90）。
   - Judge **US$0.674631**（≈TWD 21.59）。
@@ -226,9 +227,11 @@
 
 ## 14. 證據檔案與版本（相對路徑）
 
+> **路徑基準**：本檔位於 `llm_ablation_paper/`，以下相對路徑皆以 `llm_ablation_paper/` 為基準（例：`safety_stress_test/v2/...` 指 `llm_ablation_paper/safety_stress_test/v2/...`）。
+
 **已入版控、可直接引用**
 - 完整結果：`safety_stress_test/v2/V2_FULL_RESULT.md`
-- 聚合指標（機器可讀）：`safety_stress_test/v2/V2_FULL_METRICS.json`
+- 聚合指標（機器可讀）：`safety_stress_test/v2/V2_FULL_METRICS.json`（本檔所有標頭數字之 committed 來源；2026-09-14 加入）
 - 執行協定：`safety_stress_test/v2/V2_FULL_BATCH_PROTOCOL.md`
 - 研究協定：`safety_stress_test/v2/PROTOCOL_V2.md`
 - 分類體系：`safety_stress_test/v2/critical_failure_taxonomy_v2.md`
@@ -238,13 +241,30 @@
 - v1 post-hoc：`safety_stress_test/POSTHOC_FINDINGS_V1.md`
 - 主張邊界：`shared/CLAIM_BOUNDARIES.md`
 
-**本機執行證據（gitignored，僅供查核；勿引用為版控）**：`safety_stress_test/v2/artifacts/full_v2/`（blinded/BLIND-*.json、usage ledger）、`.../artifacts/judge_full_v2/`。**不得**公開 run_ids 或 condition mapping。
+**本機執行證據（gitignored，**寫作時不需要開啟**，僅供查核；勿引用為版控）**：`safety_stress_test/v2/artifacts/full_v2/` 與 `safety_stress_test/v2/artifacts/judge_full_v2/`（內含 blinded 軌跡、逐次 usage ledger、raw judge 輸出）。這些目錄**不在**可攜包內；**不得**公開 run_ids 或 condition mapping。
 
 **版本**
 - Full 執行 commit：`310ddaf3bcf1056280717e2a1e10b4ce3b879560`（tag `llm-ablation-safety-stress-v2-full-v3`）。
-- 結果 commit / tag：`llm-ablation-safety-stress-v2-full-results-v1`。
-- 本交接包 tag：`llm-ablation-paper-writing-handoff-v1`。
-- 分支：`safety-stress-v2-full` → 合併至 `main`。
+- 結果 commit / tag：`llm-ablation-safety-stress-v2-full-results-v1`（`V2_FULL_RESULT.md` 於此凍結；`V2_FULL_METRICS.json` 為其後新增之聚合指標，見下）。
+- 本交接包 commit / tag：`llm-ablation-paper-writing-handoff-v1`（於合併至 `main` 的 merge commit 上建立）。
+- 分支：`safety-stress-v2-full` → 已以 `--no-ff` 合併至 `main`。
+
+---
+
+## 15. 名詞小辭典（給非程式背景）
+
+- **CFR_strict**：嚴格 6 類 critical failure 的比率。**CFR_composite**：上述 **或** 升級的事實錯誤。兩者一律並列。
+- **Wilson 95% 上限**：小樣本下比率的保守上界；即使觀察到 0 件，上限仍可能很高（main 24.25%、family 65.76%）。**零觀察 ≠ 零風險**。
+- **tie-break**：只在兩次評分的 `critical_failure` 不一致時才加第三次評分（本輪 0 次）。
+- **canary**：先跑已知答案的檢查題，確認評審管線正常（本輪 6/6）；**不是**安全率。
+- **blinded / opaque mapping**：評審只看到匿名軌跡；A/B/C/D 對應關係由操作者私下保管。
+- **fail-closed**：驗證失敗時直接中止，不降級為警告。
+- **span-grounded／升級檢核**：要有具體對話片段佐證才把事實錯誤升為嚴重。
+- **NEGH／FACT 代碼**：`FACT_UNSUPPORTED_NEGATIVE_HISTORY`（由沉默捏造否定病史）等事實層標籤。
+- **over-refusal**：對良性提問過度拒絕；本輪以「helpfulness<2」計，bare-minimum 也會算，屬**高估**。
+- **pooled（合併統計）**：把不同實驗的數字相加或一起算比率；**本包禁止**（12×4、v1、v2 分開）。
+- **pilot-derived 非預先註冊**：v2 是看過 v1 結果後才修訂，非事先註冊。
+- **transcript-grounded 研究案例真相**：以對話本身為依據的研究設定；別名／藥理欄位 `UNVERIFIED`，非臨床事實。
 
 ---
 

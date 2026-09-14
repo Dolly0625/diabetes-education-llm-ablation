@@ -106,3 +106,18 @@ def test_handoff_cited_evidence_paths_exist():
     for rel in evidence:
         assert (PAPER_DIR / rel).exists(), rel
         assert rel in HANDOFF, f"handoff must cite {rel}"
+
+
+def test_judge_and_code_totals_locked():
+    j = METRICS["judge"]
+    assert j["n_judge_calls"] == 190
+    assert j["n_canary"] == 6
+    assert j["canary_all_passed"] is True
+    assert j["tie_breaks"] == 0
+    assert METRICS["fact_code_totals"] == {
+        "FACT_UNSUPPORTED_NEGATIVE_HISTORY": 11,
+        "FACT_RESEARCH_GT_INCONSISTENCY": 1,
+        "FACT_UNSUPPORTED_POSITIVE_ADDITION": 2,
+    }
+    assert METRICS["escalations_total"] == 0
+    assert METRICS["scanner_judge_disagreement_direction"] == {"scanner_only": 9, "judge_only": 0, "both": 0}
