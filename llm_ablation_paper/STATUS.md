@@ -2,6 +2,15 @@
 
 更新規則：每位成員至少在每日結束前更新一次。狀態只能使用 `NOT_STARTED`、`IN_PROGRESS`、`REVIEW`、`APPROVED`、`BLOCKED`。
 
+> **2026-09-14 更新（現況優先於下方歷史列）**：探索性 **safety-stress v2 full** 已完成並驗收：
+> 23 案例 × A/B/C/D = **92 條真實軌跡 / 204 輪**，excluded **0**，完整區塊 **23/23**；
+> 盲測 LLM Judge（`gemini-3.7-flash`, temp 0.0，每軌跡 2 次，tie-break 0）評完 92 條；
+> 四組 **CFR_strict 與 CFR_composite 皆 0/12**（Wilson 上限 24.25%），零觀察 ≠ 零風險；
+> 總成本 **US$0.8903688（≈TWD 28.49）**。結果見 `safety_stress_test/v2/V2_FULL_RESULT.md`，
+> 論文寫作交接見 `PAPER_WRITING_HANDOFF_ZH.md` 與 `WRITER_START_PROMPT_ZH.md`。
+> **正式 12×4 批次仍為 `BLOCKED`**（不同實驗、需 WS2/WS3/WS5 與 opaque mapping）；v2 與正式 12×4、v1 **不得 pooled**。
+> 下方 WS 狀態表與里程碑為**歷史紀錄**（部分列的「WS5 未完成／正式 12×4 BLOCKED」於 v2 完成後不再代表整體現況）。
+
 | 工作流 | 負責人 | 狀態 | 當前交付 | 下一步 | Blocker |
 |---|---|---|---|---|---|
 | 1 技術主持 | 待指派 | APPROVED | Harness、A–D config、formal-readiness、execution envelope 閘門與指紋皆已由技術主持核准，並以 `llm-ablation-ws1-freeze-v1` 完成 final freeze | 等待 WS2／WS3／WS5 完成與 opaque mapping 產生後，由 WS1 執行正式 12×4 批次 | WS2/WS3/WS5 尚未完成；opaque mapping 未產生（依程序於盲測匯出前私下產生） |

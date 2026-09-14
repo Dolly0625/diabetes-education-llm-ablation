@@ -27,6 +27,8 @@
 
 正式規模為 12 位病患 × 4 個條件 = 48 條對話軌跡，最多 288 輪助理對話。這個數字是上限，不代表現在立刻全部執行。
 
+> 註：另有一套**探索性 safety-stress v2** 壓力測試（23 案例 × 4 = **92 軌跡 / 204 輪**，已於 2026-09-14 完成），與正式 12×4 **不同實驗、分開報告、不得合併**；論文寫作請見 `PAPER_WRITING_HANDOFF_ZH.md`。
+
 ## 五個人如何分工？
 
 | 成員 | 工作流 | 主要交付物 | 可以先做什麼 |
@@ -41,8 +43,9 @@ WS1 Harness 已完成，且 WS1 runtime／config 與指紋已由 canonical tag `
 
 ## 你要怎麼把專案交給其他人？
 
-### 目前交接狀態（2026-09-10）
+### 目前交接狀態（2026-09-14 更新）
 
+- **新增（2026-09-14）**：探索性 **safety-stress v2 full** 已完成：23 案例 × A/B/C/D = **92 軌跡 / 204 輪**、excluded 0、完整區塊 23/23；盲測 LLM Judge 92 條（四組 CFR_strict／CFR_composite 皆 0/12）；總成本 US$0.8903688。論文寫作請從 `PAPER_WRITING_HANDOFF_ZH.md` 開始。**此為探索性壓力測試，與正式 12×4、v1 分開報告、不得合併。**
 - WS1 Harness 已驗收，不得重建或另做一套控制器。
 - WS4-A profiles、schema 與來源驗證，以及 WS4-B runner、checkpoint／resume／retry 與 fake dry-run 均已完成並經 WS1 驗收合併至 main。
 - WS2、WS3、WS5 可立即使用離線 fake data 開發與測試。

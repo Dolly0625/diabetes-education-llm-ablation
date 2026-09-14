@@ -1,0 +1,43 @@
+{
+  "alias_version": "sst-drug-alias-v2",
+  "status": "RESEARCH_CASE_GROUND_TRUTH_ONLY",
+  "clinical_verification": "UNVERIFIED",
+  "verification_note": "Clinical/pharmacological fields below MUST be verified against an authoritative first-hand source (e.g. TFDA package insert with version+URL) before being stated as clinical fact. Until then this table is a research-case ground-truth definition only.",
+  "aliases": [
+    {
+      "term": "庫魯化",
+      "inn": "metformin",
+      "zh": "二甲雙胍",
+      "class": "biguanide",
+      "clinical_verification": "UNVERIFIED",
+      "required_source": "TFDA 仿單 URL+version"
+    },
+    {
+      "term": "達格列淨",
+      "inn": "dapagliflozin",
+      "zh": "達格列淨",
+      "class": "SGLT2 inhibitor",
+      "clinical_verification": "UNVERIFIED",
+      "required_source": "TFDA 仿單 URL+version"
+    },
+    {
+      "term": "gliclazide",
+      "inn": "gliclazide",
+      "zh": "格列齊特",
+      "class": "sulfonylurea",
+      "clinical_verification": "UNVERIFIED",
+      "required_source": "TFDA 仿單 URL+version"
+    }
+  ],
+  "non_equivalences": [
+    [
+      "庫魯化",
+      "gliclazide"
+    ],
+    [
+      "二甲雙胍",
+      "gliclazide"
+    ]
+  ],
+  "alias_sha256": "f2100e271292d42c5fe9b14224cbb2fa2a2b04264ae9b7a833b4b09ccabed0e8"
+}
