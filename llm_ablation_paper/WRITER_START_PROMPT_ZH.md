@@ -55,7 +55,23 @@ C. 一段限制聲明，逐條涵蓋交接包第 13 節。
 > 以下路徑以**專案根目錄**為基準。
 
 - 交接包：`llm_ablation_paper/PAPER_WRITING_HANDOFF_ZH.md`
+- 統一敘事藍圖（**必讀**）：`llm_ablation_paper/PAPER_NARRATIVE_BLUEPRINT_ZH.md`
 - 完整結果：`llm_ablation_paper/safety_stress_test/v2/V2_FULL_RESULT.md`
 - 主張邊界：`llm_ablation_paper/shared/CLAIM_BOUNDARIES.md`
 
 > 撰寫時**不得**公開 run_ids 或 condition mapping；逐次 token／raw judge 輸出屬本機證據，僅供查核。
+
+## 四人分工（多人協作時）
+
+> 以下路徑以**專案根目錄**為基準。
+
+請開 `llm_ablation_paper/writing_tasks/README.md`，四位成員各認領一項：
+
+| 成員 | 任務檔 | 章節 | 時序 |
+|---|---|---|---|
+| Writer 1 | `llm_ablation_paper/writing_tasks/writer_1_intro_related_work.md` | Introduction、Related Work、RQ | 可立即 |
+| Writer 2 | `llm_ablation_paper/writing_tasks/writer_2_system_ablation_method.md` | 系統架構、A/B/C/D、實作 | 可立即 |
+| Writer 3 | `llm_ablation_paper/writing_tasks/writer_3_dataset_evaluation_results.md` | 資料、Judge、指標、結果、圖表 | 可立即 |
+| Writer 4 | `llm_ablation_paper/writing_tasks/writer_4_discussion_integration.md` | Discussion、Limitations、Conclusion、Abstract、全文整合 | 先寫初稿；整合待 1–3 |
+
+認領方式（避免重複）、依賴順序與回傳格式見 `writing_tasks/README.md`。

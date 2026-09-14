@@ -271,3 +271,11 @@
 ## 15. 給寫作者的第一步
 
 請開 `WRITER_START_PROMPT_ZH.md`，把裡面的提示詞貼給你慣用的 AI 助手，即可用本包開始寫作。
+
+**四人分工（建議）**：若由多人協作，請開 `writing_tasks/README.md`。四位成員各認領一項任務：
+`writing_tasks/writer_1_intro_related_work.md`、`writing_tasks/writer_2_system_ablation_method.md`、
+`writing_tasks/writer_3_dataset_evaluation_results.md`、`writing_tasks/writer_4_discussion_integration.md`。
+前三人可立即平行；第四人先寫 Discussion／Limitations／Conclusion 初稿，Abstract 與全文整合須等前三人完成。
+認領方式、依賴順序與回傳格式見 `writing_tasks/README.md`。
+
+**統一敘事（必讀）**：全篇敘事以技術主持主筆的 `PAPER_NARRATIVE_BLUEPRINT_ZH.md` 為準（核心故事＝錯誤分布改變且非單調，**不是「D 最安全」**；含逐段寫法、四脈絡、Results 順序、三種禁止敘事、中英文摘要骨架）。四位作者**不得各自發明不同主結論**。
