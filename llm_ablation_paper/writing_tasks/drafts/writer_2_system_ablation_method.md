@@ -2,7 +2,7 @@
 
 # 2. System and Ablation Methods
 
-> 範圍聲明：本節描述系統架構、A/B/C/D 消融設計與 v2 實作／可重現性。所有數值為已驗收固定值，不重算。結果數字（CFR、FACT、QUALITY、over-refusal、scanner–judge 不一致）由 Writer 3 報告；本節不做任何 A–D 效果排序或因果推論。本研究為探索性、非預先註冊、非臨床，適用於指定模型與版本，在本研究的模擬情境中有效 [@REF-CLAIM-BOUND]。
+> 範圍聲明：本節描述系統架構、A/B/C/D 消融設計與 v2 實作／可重現性。所有數值為已驗收固定值，不重算。結果數字（CFR、FACT、QUALITY、over-refusal、scanner–judge 不一致）由 Writer 3 報告；本節不做任何 A–D 效果排序或因果推論。本研究為探索性、非預先註冊、非臨床，研究範圍僅限於指定模型版本與本研究的模擬情境 [@REF-CLAIM-BOUND]。
 
 ## 2.1 系統整體架構
 
@@ -14,7 +14,7 @@
 
 ## 2.2 A/B/C/D 消融設計與唯一差異原則
 
-A/B/C/D 僅依三個既有開關遞增，遵循唯一差異原則：相鄰條件之間恰新增一層，其餘（模型、temperature、prompt、工具 schema）固定不變（來源：`../shared/RESEARCH_PROTOCOL.md`；`../safety_stress_test/v2/PROTOCOL_V2.md`；`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節）[@REF-ABLATION]。
+A/B/C/D 僅依三個既有開關遞增，遵循唯一差異原則：相鄰條件之間恰新增一層，其餘控制變項（模型、temperature、基礎 prompt 版本、工具 schema 版本）固定不變（來源：`../shared/RESEARCH_PROTOCOL.md`；`../safety_stress_test/v2/PROTOCOL_V2.md`；`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節）[@REF-ABLATION]。
 
 | 條件 | enable_planner | enable_dynamic_tool_gate | enable_output_guard |
 |---|---|---|---|
@@ -58,13 +58,12 @@ flowchart LR
     TK --> OG["Output Guard<br/>S3 enable_output_guard"]
     OG --> OUT["回覆 / 就醫備忘錄"]
 
-    A["A OFF-OFF-OFF"] -.-> PL
-    B["B ON-OFF-OFF"] -.-> PL
-    C["C ON-ON-OFF"] -.-> TG
-    D["D ON-ON-ON"] -.-> OG
+    A["A：S1 OFF / S2 OFF / S3 OFF"] -->|加入 Planner| B["B：S1 ON / S2 OFF / S3 OFF"]
+    B -->|加入 Tool Gate| C["C：S1 ON / S2 ON / S3 OFF"]
+    C -->|加入 Output Guard| D["D：S1 ON / S2 ON / S3 ON"]
 ```
 
-**圖說（Caption）。** {FIG:1} 分層架構與逐層唯一差異。管線為感知層 → Input Guard（固定 ON，僅阻斷提示注入與自傷）→ Memory → Planner（S1 `enable_planner`）→ Tool Gate（S2 `enable_dynamic_tool_gate`）→ RAG／產卡工具 → Talker（`gemini-3.5-flash-lite`，temp 0.3；Planner temp 0.1）→ Output Guard（S3 `enable_output_guard`，`inspect_output_guard`）。A OFF-OFF-OFF、B ON-OFF-OFF、C ON-ON-OFF、D ON-ON-ON；相鄰條件僅新增一層，其餘固定不變：模型、temperature、prompt、工具 schema 固定；三項輔助行為（forced retrieval、固定警語追加、question-budget 後處理）固定 OFF。盲測評審僅見 `{blinded_run_id, patient_id, turns, reference_facts}`；`tools_exposed` 為 treatment-visible，已揭露為限制。本設計為探索性、非預先註冊、非臨床，適用於指定模型版本。
+**圖說（Caption）。** {FIG:1} 分層架構與逐層唯一差異。管線為感知層 → Input Guard（固定 ON，目前實作僅阻斷提示注入與自傷）→ Memory → Planner（S1 `enable_planner`）→ Tool Gate（S2 `enable_dynamic_tool_gate`）→ RAG／產卡工具 → Talker（`gemini-3.5-flash-lite`，temp 0.3；Planner temp 0.1）→ Output Guard（S3 `enable_output_guard`，`inspect_output_guard`）。A OFF-OFF-OFF、B ON-OFF-OFF、C ON-ON-OFF、D ON-ON-ON；相鄰條件僅新增一層，其餘控制變項固定不變：模型、temperature、基礎 prompt 版本與工具 schema 版本固定；三項輔助行為（forced retrieval、固定警語追加、question-budget 後處理）固定 OFF。盲測評審僅見 `{blinded_run_id, patient_id, turns, reference_facts}`；`tools_exposed` 為 treatment-visible，已揭露為限制。本設計為探索性、非預先註冊、非臨床，研究範圍僅限於指定模型版本與本研究的模擬情境。
 
 **資料來源。** 管線與 Input Guard 定義：`../shared/SYSTEM_OVERVIEW.md`；A–D 遞增語義：`../shared/RESEARCH_PROTOCOL.md`；開關表與固定項：`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節；v2 規模與 blind 限制：`../safety_stress_test/v2/V2_FULL_BATCH_PROTOCOL.md`；分類體系：`../safety_stress_test/v2/PROTOCOL_V2.md`；程式位置：`../../../diabetes_chatbot/planner.py`、`../../../diabetes_chatbot/state.py`、`../../../diabetes_chatbot/guard.py`、`../../../diabetes_chatbot/server/ablation_core.py`。
 
