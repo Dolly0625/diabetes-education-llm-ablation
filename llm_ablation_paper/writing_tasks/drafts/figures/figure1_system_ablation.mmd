@@ -1,0 +1,39 @@
+flowchart TB
+    subgraph Panel_A ["Panel (a): 系統執行期管線與工具調用架構 (Runtime Execution Flow)"]
+        direction TB
+
+        IN["感知層輸入 (Perception Input)<br/>文字 / 台語語音 (ASR) / 藥袋 (OCR)"] --> IG["Input Guard<br/>[四組固定 ON / 不消融]<br/>僅阻斷提示注入與自傷心理危機"]
+
+        IG -->|阻斷| BLK["COMMON_INPUT_BLOCK<br/>(終止對話回覆)"]
+        IG -->|放行| MEM["長期記憶庫 (Memory & Context)<br/>跨輪累積用藥、血糖、症狀事實"]
+
+        MEM --> S1_SW{"S1: enable_planner ?"}
+
+        S1_SW -->|ON: B, C, D| PL["臨床規劃員 (Clinical Planner)<br/>gemini-3.5-flash-lite (temp 0.1)<br/>意圖定界、槽位缺口、下一步導引"]
+        S1_SW -->|OFF: A (Bypass)| TK["衛教生成層 (Talker LLM)<br/>gemini-3.5-flash-lite (temp 0.3)<br/>護理師語氣共感衛教"]
+
+        PL -->|臨床導引 (Guidance)| TK
+        PL -.->|狀態與領域| S2_SW{"S2: dynamic_tool_gate ?"}
+
+        S2_SW -->|ON: C, D| TG_ON["動態門禁工具清單<br/>依領域與議程充分度過濾"]
+        S2_SW -->|OFF: A, B| TG_OFF["全工具暴露清單<br/>所有範圍內工具均暴露"]
+
+        TG_ON -->|可見工具 Schema| TK
+        TG_OFF -->|可見工具 Schema| TK
+
+        TK -->|tool call<br/>(自主調用)| TOOLS["受控外部工具 (Tools)<br/>• 雙軌 RAG: search_handbook (國健署/TFDA)<br/>• 門診摘要: generate_visit_summary"]
+        TOOLS -->|tool result<br/>(證據回傳/二次生成)| TK
+
+        TK --> S3_SW{"S3: enable_output_guard ?"}
+
+        S3_SW -->|ON: D| OG["輸出熔斷網 (Output Guard)<br/>inspect_output_guard 攔截調藥、確診與神效<br/>違規時強制安全覆寫 (Safety Override)"]
+        S3_SW -->|OFF: A, B, C (Passthrough)| RESP["最終病患端輸出 (Response)<br/>LINE 衛教回覆 / 就醫備忘錄"]
+
+        OG -->|合規放行或覆寫| RESP
+    end
+
+    subgraph Panel_B ["Panel (b): 逐層消融矩陣與嚴格控制變項 (Ablation Matrix & Invariants)"]
+        direction TB
+
+        MATRIX["<b>【A/B/C/D 逐層消融矩陣（唯一差異原則）】</b><br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/><b>條件 A（基準組）</b>：S1 OFF ┆ S2 OFF ┆ S3 OFF ┆ Talker 基準提示詞，全工具暴露<br/><b>條件 B（+規劃員）</b>：S1 ON  ┆ S2 OFF ┆ S3 OFF ┆ + 結構化 Planner 輸出與 Talker guidance<br/><b>條件 C（+工具門禁）</b>：S1 ON  ┆ S2 ON  ┆ S3 OFF ┆ + 依 Planner 狀態之動態工具暴露與議程門禁<br/><b>條件 D（+輸出熔斷）</b>：S1 ON  ┆ S2 ON  ┆ S3 ON  ┆ + 最終輸出違規攔截與安全覆寫<br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/><b>【實驗嚴格控制變項與不變量 (Controlled Invariants)】</b><br/>• <b>Input Guard 固定 ON</b>：四組共同基礎設施，不納入消融；阻斷案例獨立報告<br/>• <b>三項輔助功能固定 OFF</b>：forced retrieval、停藥固定警語、問句預算後處理<br/>• <b>模型與溫度凍結</b>：Talker/Planner temp 0.3/0.1；Judge gemini-3.7-flash temp 0.0<br/>• <b>規模與隔離</b>：92 軌跡 / 204 回合；固定腳本、無 Patient Agent；5 枚 frozen fingerprints"]
+    end
