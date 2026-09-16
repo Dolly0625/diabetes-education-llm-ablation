@@ -1,4 +1,4 @@
-預估頁數：2.0　圖表數：1（圖 1／表 0）　引用數：7　所屬頁數預算：2.2
+預估頁數：2.0　圖表數：2（圖 1／表 1）　引用數：7　所屬頁數預算：2.2
 
 # 2. System and Ablation Methods
 
@@ -14,22 +14,22 @@
 
 ## 2.2 A/B/C/D 消融設計與唯一差異原則
 
-A/B/C/D 僅依三個既有開關遞增，遵循唯一差異原則：相鄰條件之間恰新增一層，其餘控制變項（模型、temperature、基礎 prompt 版本、工具 schema 版本）固定不變（來源：`../shared/RESEARCH_PROTOCOL.md`；`../safety_stress_test/v2/PROTOCOL_V2.md`；`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節）[@REF-ABLATION]。
+A/B/C/D 僅依三個既有開關遞增，遵循唯一差異原則：相鄰條件之間恰新增一層，其餘控制變項（模型、temperature、基礎 prompt 版本、工具 schema 版本）固定不變（來源：`../shared/RESEARCH_PROTOCOL.md`；`../safety_stress_test/v2/PROTOCOL_V2.md`；`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節）[@REF-ABLATION]。執行期管線與受控工具調用架構如 {FIG:1} 所示（見 Figure 1）；對應之開關設定與逐層消融階層定義整理於 {TAB:1}（見 Table 1）。
 
-| 條件 | enable_planner | enable_dynamic_tool_gate | enable_output_guard |
-|---|---|---|---|
-| A | OFF | OFF | OFF |
-| B | ON | OFF | OFF |
-| C | ON | ON | OFF |
-| D | ON | ON | ON |
+### Table 1. A/B/C/D 逐層消融設計開關矩陣與唯一差異階層
+
+| 條件 | enable_planner | enable_dynamic_tool_gate | enable_output_guard | 階層定義與防線增量 |
+|---|---|---|---|---|
+| A | OFF | OFF | OFF | 基準組：完整安全提示詞 Talker，全工具暴露 |
+| B | ON | OFF | OFF | + 結構化 Planner 輸出與臨床導引（guidance） |
+| C | ON | ON | OFF | + 依 Planner 狀態之動態工具暴露與議程門禁 |
+| D | ON | ON | ON | + 最終輸出違規攔截與強制安全覆寫 |
 
 A 為基準組（完整安全提示詞之 Talker，所有範圍內工具均暴露）；B 在 A 之上加入結構化 Planner 輸出與 Talker guidance；C 在 B 之上加入依 Planner 狀態之動態工具暴露與議程門禁；D 在 C 之上加入最終輸出檢查與必要時的安全覆寫（`inspect_output_guard`）（來源：`../shared/RESEARCH_PROTOCOL.md`；`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節）。程式側將 `enable_dynamic_tool_gate` 與文件偶見之 `dynamic_tool_gate` 視為同一開關之別名（來源：`../../../diabetes_chatbot/server/ablation_core.py`），本文一律使用 `enable_dynamic_tool_gate`。
 
 Input Guard 不屬於消融層，四組固定 ON，不可消融；若某案例被 Input Guard 直接阻斷，預期四組結果相同，僅列為 invariant sanity check，不納入主消融比較（來源：`../shared/RESEARCH_PROTOCOL.md`；`../shared/SYSTEM_OVERVIEW.md`）。
 
 為維持純消融，三項 production 輔助行為在主要 A–D 實驗固定 OFF：(1) Planner-domain 驅動之 forced retrieval 與證據 system-prompt 注入（開關 `enable_forced_retrieval`）；(2) Output Guard 之外停藥固定警語追加（開關 `enable_fixed_warning_append`／`enable_noncompliance_append`）；(3) `enforce_single_question_budget` 與 emoji stripping 之問句預算後處理（開關 `enable_question_budget_postprocessing`）（來源：`../shared/RESEARCH_PROTOCOL.md`）。D 之唯一新增限定為 `inspect_output_guard` 及其安全覆寫。若實作無法維持唯一差異，須回報而非自行重定義組別。本文不對 A–D 做安全性排序，不宣稱任一組別較安全。
-
-{FIG:1} 視覺化此設計：執行期管線、工具動態調用與 A–D 唯一差異消融矩陣（見 Figure 1）。
 
 ## 2.3 v2 實作與可重現性
 
@@ -45,51 +45,29 @@ Input Guard 不屬於消融層，四組固定 ON，不可消融；若某案例�
 
 **可重現性閘門。** 正式執行前須通過 clean tree、base tag ancestor、scope 僅 v2、5 枚 frozen fingerprints、A–D unique-difference、`validate_all_v2`、model／temperature pins、endpoint allowlist 等 fail-closed 檢查；任一失敗即中止，不降級為警告（來源：`../safety_stress_test/v2/V2_FULL_BATCH_PROTOCOL.md`）[@REF-REPRO]。狀態隔離採每軌跡獨立 process、暫存 state directory 與唯一 run ID；checkpoint 原子寫入，已完成不重跑；resume 僅補未完成項。成本設硬上限（talker US$1.00、judge US$2.00、總計 US$3.00），token 為 provider 回報、美元依官方費率重算。Blinded 匯出僅含匿名軌跡，mapping 以受限權限保存，不公開 run_ids 或 condition mapping。所有固定指紋、工具 schema 與 prompt 版本詳見 `../shared/RESEARCH_PROTOCOL.md` 所列雜湊。
 
-### Figure 1. 系統執行期管線與逐層消融設計
+### Figure 1. 系統執行期管線與受控工具調用架構
 
 ```mermaid
 flowchart TB
-    subgraph Panel_A ["Panel (a): 系統執行期管線與工具調用架構 (Runtime Execution Flow)"]
-        direction TB
+    IN["感知層輸入 (Input)<br/>文字 / 語音 / 藥袋"] --> IG["Input Guard [固定 ON]<br/>提示注入與自傷阻斷"]
+    IG -->|阻斷| BLK["COMMON_INPUT_BLOCK<br/>(終止回覆 / 獨立報告)"]
+    IG -->|放行| MEM["長期記憶 (Memory)<br/>跨輪病患狀態累積"]
 
-        IN["感知層輸入 (Perception Input)<br/>文字 / 台語語音 (ASR) / 藥袋 (OCR)"] --> IG["Input Guard<br/>[四組固定 ON / 不消融]<br/>僅阻斷提示注入與自傷心理危機"]
+    MEM -->|病患狀態| TG["S2: 動態工具門禁 (Gate)<br/>ON(C,D): 動態過濾 ┆ OFF(A,B): 全暴露"]
+    MEM -->|OFF (直通: A)| TK["衛教生成層 (Talker LLM)<br/>護理師共感衛教核心<br/>自主決定是否調用工具"]
+    MEM -->|S1 ON: B, C, D| PL["S1: 臨床規劃員 (Planner)<br/>意圖定界與導引生成"]
+    PL -->|臨床導引| TK
 
-        IG -->|阻斷| BLK["COMMON_INPUT_BLOCK<br/>(終止對話回覆)"]
-        IG -->|放行| MEM["長期記憶庫 (Memory & Context)<br/>跨輪累積用藥、血糖、症狀事實"]
+    TG -->|可見工具| TK
+    TK -->|tool call| TOOLS["受控外部工具 (Tools)<br/>雙軌 RAG / 門診摘要"]
+    TOOLS -->|tool result| TK
 
-        MEM --> S1_SW{"S1: enable_planner ?"}
-
-        S1_SW -->|ON: B, C, D| PL["臨床規劃員 (Clinical Planner)<br/>gemini-3.5-flash-lite (temp 0.1)<br/>意圖定界、槽位缺口、下一步導引"]
-        S1_SW -->|OFF: A (Bypass)| TK["衛教生成層 (Talker LLM)<br/>gemini-3.5-flash-lite (temp 0.3)<br/>護理師語氣共感衛教"]
-
-        PL -->|臨床導引 (Guidance)| TK
-        PL -.->|狀態與領域| S2_SW{"S2: dynamic_tool_gate ?"}
-
-        S2_SW -->|ON: C, D| TG_ON["動態門禁工具清單<br/>依領域與議程充分度過濾"]
-        S2_SW -->|OFF: A, B| TG_OFF["全工具暴露清單<br/>所有範圍內工具均暴露"]
-
-        TG_ON -->|可見工具 Schema| TK
-        TG_OFF -->|可見工具 Schema| TK
-
-        TK -->|tool call<br/>(自主調用)| TOOLS["受控外部工具 (Tools)<br/>• 雙軌 RAG: search_handbook (國健署/TFDA)<br/>• 門診摘要: generate_visit_summary"]
-        TOOLS -->|tool result<br/>(證據回傳/二次生成)| TK
-
-        TK --> S3_SW{"S3: enable_output_guard ?"}
-
-        S3_SW -->|ON: D| OG["輸出熔斷網 (Output Guard)<br/>inspect_output_guard 攔截調藥、確診與神效<br/>違規時強制安全覆寫 (Safety Override)"]
-        S3_SW -->|OFF: A, B, C (Passthrough)| RESP["最終病患端輸出 (Response)<br/>LINE 衛教回覆 / 就醫備忘錄"]
-
-        OG -->|合規放行或覆寫| RESP
-    end
-
-    subgraph Panel_B ["Panel (b): 逐層消融矩陣與嚴格控制變項 (Ablation Matrix & Invariants)"]
-        direction TB
-
-        MATRIX["<b>【A/B/C/D 逐層消融矩陣（唯一差異原則）】</b><br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/><b>條件 A（基準組）</b>：S1 OFF ┆ S2 OFF ┆ S3 OFF ┆ Talker 基準提示詞，全工具暴露<br/><b>條件 B（+規劃員）</b>：S1 ON  ┆ S2 OFF ┆ S3 OFF ┆ + 結構化 Planner 輸出與 Talker guidance<br/><b>條件 C（+工具門禁）</b>：S1 ON  ┆ S2 ON  ┆ S3 OFF ┆ + 依 Planner 狀態之動態工具暴露與議程門禁<br/><b>條件 D（+輸出熔斷）</b>：S1 ON  ┆ S2 ON  ┆ S3 ON  ┆ + 最終輸出違規攔截與安全覆寫<br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/><b>【實驗嚴格控制變項與不變量 (Controlled Invariants)】</b><br/>• <b>Input Guard 固定 ON</b>：四組共同基礎設施，不納入消融；阻斷案例獨立報告<br/>• <b>三項輔助功能固定 OFF</b>：forced retrieval、停藥固定警語、問句預算後處理<br/>• <b>模型與溫度凍結</b>：Talker/Planner temp 0.3/0.1；Judge gemini-3.7-flash temp 0.0<br/>• <b>規模與隔離</b>：92 軌跡 / 204 回合；固定腳本、無 Patient Agent；5 枚 frozen fingerprints"]
-    end
+    TK -->|OFF (直通: A, B, C)| RESP["最終病患端輸出<br/>衛教回覆 / 備忘錄"]
+    TK -->|S3 ON: D| OG["S3: 輸出熔斷網 (Guard)<br/>違規攔截與覆寫"]
+    OG -->|安全覆寫| RESP
 ```
 
-**圖說（Caption）。** {FIG:1} 系統執行期管線與 A–D 唯一差異逐層消融設計。**Panel (a) 執行期管線與工具調用架構**：主路徑為感知層輸入 → Input Guard（四組固定 ON，目前實作僅阻斷提示注入與自傷心理危機；阻斷則回傳 `COMMON_INPUT_BLOCK` 終止）→ Memory 累積 → 可選 Planner（S1 開關 `enable_planner`；A 組為 OFF 採中立狀態 bypass 直通，B/C/D 組為 ON 產生意圖定界與臨床導引注入 Talker）→ Talker LLM 生成核心（`gemini-3.5-flash-lite`，temp 0.3）。動態工具門禁（S2 開關 `enable_dynamic_tool_gate`）為可見性控制器，A/B 組為 OFF 暴露全工具清單，C/D 組為 ON 依狀態動態過濾可見工具；Talker 依對話與導引自主決定直接生成文字或發出 `tool call` 調用受控外部工具（雙軌 RAG `search_handbook` 與門診摘要 `generate_visit_summary`），檢索結果回傳 Talker 進行第二輪生成。Talker 輸出進入可選 Output Guard（S3 開關 `enable_output_guard`；A/B/C 組為 OFF 直通輸出，D 組為 ON 執行 `inspect_output_guard`，違規時強制安全覆寫），最終輸出病患端回覆或就醫備忘錄。**Panel (b) 逐層消融矩陣**：A（OFF/OFF/OFF）、B（ON/OFF/OFF）、C（ON/ON/OFF）、D（ON/ON/ON），相鄰條件嚴格遵守單一新增防線之唯一差異原則；所有條件共用 Input Guard（固定 ON）、停用三項生產輔助（forced retrieval、停藥固定警語、問句預算後處理均固定 OFF）、並嚴格凍結模型版本、溫度（Talker 0.3、Planner 0.1、Judge 0.0）、提示詞指紋與 2 工具之 canonical schema。向量圖檔見 `figures/figure1_system_ablation.svg`。本設計為探索性、非預先註冊、非臨床，研究範圍僅限於指定模型版本與本研究的模擬情境。
+**圖說（Caption）。** {FIG:1} 衛教對話系統執行期管線與受控工具調用架構。主路徑依序為感知層輸入（文字、台語語音、藥袋影像）→ Input Guard（四組固定 ON，目前實作僅阻斷提示注入與自傷心理危機，阻斷時回傳 `COMMON_INPUT_BLOCK` 終止對話回覆並獨立報告）→ 長期記憶庫 Memory（跨輪累積用藥、血糖、症狀事實）→ Talker LLM 生成核心（`gemini-3.5-flash-lite`，temp 0.3，以護理師共感語氣衛教）。S1 開關（`enable_planner`）控制臨床規劃員（Planner）：A 組為 OFF 採中立狀態 bypass 直通，B/C/D 組為 ON 產生意圖定界與臨床導引注入 Talker。S2 開關（`enable_dynamic_tool_gate`）控制動態工具門禁：A/B 組為 OFF 暴露全工具清單，C/D 組為 ON 依 Planner 狀態動態過濾暴露工具；Talker 接收可見工具清單後，自主決定是直接生成文字或是發出 `tool call` 調用受控外部工具（雙軌 RAG `search_handbook` 與門診摘要 `generate_visit_summary`），檢索結果回傳 Talker 進行第二輪生成。Talker 輸出進入可選 Output Guard（S3 開關 `enable_output_guard`）：A/B/C 組為 OFF 直通輸出，D 組為 ON 執行 `inspect_output_guard`，攔截違規調藥/確診話術並強制安全覆寫；最終送出病患端衛教回覆或就醫備忘錄。詳細 A–D 逐層消融開關矩陣與控制不變量請參閱 {TAB:1}（Table 1）。向量圖檔見 `figures/figure1_system_ablation.svg`。本設計為探索性、非預先註冊、非臨床，研究範圍僅限於指定模型版本與本研究的模擬情境。
 
 **資料來源。** 管線與 Input Guard 實作邊界：`../shared/SYSTEM_OVERVIEW.md`；A–D 遞增語義：`../shared/RESEARCH_PROTOCOL.md`；開關表與固定項：`../PAPER_WRITING_HANDOFF_ZH.md` 第 4 節；v2 規模、盲測限制與 Judge 偏誤規範：`../safety_stress_test/v2/V2_FULL_BATCH_PROTOCOL.md`、`../safety_stress_test/v2/PROTOCOL_V2.md` 第 5 節；程式原始碼：`../../../diabetes_chatbot/server/ablation_core.py`、`../../../diabetes_chatbot/planner.py`、`../../../diabetes_chatbot/state.py`、`../../../diabetes_chatbot/guard.py`。
 
