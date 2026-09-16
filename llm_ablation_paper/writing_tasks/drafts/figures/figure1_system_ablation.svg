@@ -1,309 +1,281 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 680" width="1160" height="680" style="background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="100%" height="100%" style="background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif;">
   <defs>
-    <!-- Arrow Markers -->
-    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#334155" />
+    <marker id="arr-slate" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#334155"/>
     </marker>
-    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0369a1" />
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0369a1"/>
     </marker>
-    <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#991b1b" />
-    </marker>
-    <marker id="arrow-gray" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+    <marker id="arr-red" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#991b1b"/>
     </marker>
   </defs>
 
-  <!-- Background -->
-  <rect width="1160" height="680" fill="#ffffff"/>
+  <!-- Border -->
+  <rect x="1" y="1" width="958" height="598" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
 
-  <!-- ========================================================================= -->
-  <!-- PANEL (a): Runtime Flow & Dynamic Tool-Use Architecture                   -->
-  <!-- ========================================================================= -->
-  <rect x="20" y="20" width="695" height="640" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
-  <rect x="20" y="20" width="695" height="42" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <rect x="21" y="50" width="693" height="12" fill="#f8fafc"/>
-  <text x="35" y="47" font-size="15.5" font-weight="bold" fill="#0f172a">Panel (a): 系統執行期管線與工具調用架構 (Runtime Execution Flow)</text>
+  <!-- ==================== HEADER ==================== -->
+  <text x="20" y="32" font-size="21.0" font-weight="bold" fill="#0f172a">Panel (a): 系統執行期管線與工具調用架構 (Runtime Pipeline)</text>
+  <text x="615" y="32" font-size="21.0" font-weight="bold" fill="#0f172a">Panel (b): 逐層消融矩陣 (Ablation Matrix)</text>
+
+  <!-- Panel Divider Line -->
+  <line x1="595" y1="12" x2="595" y2="588" stroke="#e2e8f0" stroke-width="1.2"/>
+
+  <!-- ==================== PANEL (a) ==================== -->
 
   <!-- 1. Perception Input -->
-  <g transform="translate(50, 68)">
-    <rect width="210" height="44" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-    <text x="105" y="19" font-size="12" font-weight="bold" fill="#1e293b" text-anchor="middle">感知層輸入 (Perception)</text>
-    <text x="105" y="35" font-size="10.5" fill="#475569" text-anchor="middle">文字 / 台語語音 (ASR) / 藥袋 (OCR)</text>
+  <g transform="translate(20, 52)">
+    <rect width="165" height="46" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="82.5" y="21" font-size="18.0" font-weight="bold" fill="#1e293b" text-anchor="middle">感知輸入 (Input)</text>
+    <text x="82.5" y="38" font-size="15.0" fill="#475569" text-anchor="middle">文字 / 語音 / 藥袋</text>
   </g>
 
-  <!-- Flow Arrow: Input -> Input Guard -->
-  <path d="M 155 112 L 155 133" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <!-- Arrow Perception -> Input Guard -->
+  <path d="M 102.5 98 L 102.5 120" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arr-slate)"/>
 
-  <!-- 2. Input Guard (Fixed ON) - Clean White BG with Subdued Crimson Border -->
-  <g transform="translate(40, 135)">
-    <rect width="230" height="54" rx="6" fill="#ffffff" stroke="#991b1b" stroke-width="2"/>
-    <text x="115" y="20" font-size="11.5" font-weight="bold" fill="#991b1b" text-anchor="middle">Input Guard [四組固定 ON / 不消融]</text>
-    <text x="115" y="35" font-size="10" fill="#475569" text-anchor="middle">僅阻斷惡意提示注入與自傷心理危機</text>
-    <text x="115" y="48" font-size="9" fill="#64748b" text-anchor="middle">(未實作胸痛等急症正則；阻斷率四組相同)</text>
+  <!-- 2. Input Guard [Fixed ON] -->
+  <g transform="translate(18, 122)">
+    <rect width="170" height="52" rx="5" fill="#ffffff" stroke="#991b1b" stroke-width="1.6"/>
+    <text x="85" y="22" font-size="18.0" font-weight="bold" fill="#991b1b" text-anchor="middle">Input Guard [固定啟用]</text>
+    <text x="85" y="42" font-size="15.0" fill="#991b1b" text-anchor="middle">攔截提示注入與自傷危機</text>
   </g>
 
-  <!-- Branch: Input Guard Blocked -->
-  <path d="M 270 162 L 330 162" fill="none" stroke="#991b1b" stroke-width="1.8" marker-end="url(#arrow-red)"/>
-  <text x="338" y="159" font-size="10" font-weight="bold" fill="#991b1b">阻斷 (is_blocked)</text>
-  <text x="338" y="172" font-size="9" fill="#64748b">COMMON_INPUT_BLOCK (終止回覆)</text>
+  <!-- Arrow Input Guard -> Block -->
+  <path d="M 188 148 L 228 148" fill="none" stroke="#991b1b" stroke-width="1.6" marker-end="url(#arr-red)"/>
+  <text x="208" y="140" font-size="15.0" font-weight="bold" fill="#991b1b" text-anchor="middle">阻斷</text>
 
-  <!-- Flow Arrow: Input Guard -> Memory -->
-  <path d="M 155 189 L 155 210" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow)"/>
-  <text x="162" y="203" font-size="9.5" fill="#475569">放行</text>
-
-  <!-- 3. Memory Node -->
-  <g transform="translate(45, 212)">
-    <rect width="220" height="44" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-    <text x="110" y="19" font-size="12" font-weight="bold" fill="#1e293b" text-anchor="middle">長期記憶與對話事實 (Memory)</text>
-    <text x="110" y="34" font-size="10" fill="#475569" text-anchor="middle">抽取病患事實、用藥/血糖/症狀縱向儲存</text>
+  <!-- Block Outcome Box -->
+  <g transform="translate(230, 125)">
+    <rect width="175" height="46" rx="4" fill="#ffffff" stroke="#991b1b" stroke-width="1.2" stroke-dasharray="4,3"/>
+    <text x="87.5" y="20" font-size="15.0" font-weight="bold" fill="#991b1b" text-anchor="middle">COMMON_INPUT_BLOCK</text>
+    <text x="87.5" y="37" font-size="15.0" fill="#64748b" text-anchor="middle">(終止回覆 / 獨立報告)</text>
   </g>
 
-  <!-- Flow Arrow: Memory -> S1 Fork -->
-  <path d="M 155 256 L 155 278" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <!-- Arrow Input Guard -> Memory (Pass) -->
+  <path d="M 102.5 174 L 102.5 200" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arr-slate)"/>
+  <text x="110" y="192" font-size="15.0" font-weight="bold" fill="#334155">放行</text>
 
-  <!-- S1 Switch Fork (Classic Blue Emphasis) -->
-  <g transform="translate(85, 280)">
-    <rect width="140" height="26" rx="4" fill="#ffffff" stroke="#0369a1" stroke-width="1.5" stroke-dasharray="4 2"/>
-    <text x="70" y="17" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">S1: enable_planner ?</text>
+  <!-- 3. Memory & Patient State -->
+  <g transform="translate(18, 202)">
+    <rect width="170" height="50" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="85" y="22" font-size="18.0" font-weight="bold" fill="#1e293b" text-anchor="middle">長期記憶 (Memory)</text>
+    <text x="85" y="40" font-size="15.0" fill="#475569" text-anchor="middle">抽取病患事實/用藥/血糖</text>
   </g>
 
-  <!-- S1 Branch: ON (B, C, D) -> Planner Agent -->
-  <path d="M 225 293 L 268 293" fill="none" stroke="#0369a1" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
-  <text x="232" y="286" font-size="9.5" font-weight="bold" fill="#0369a1">ON</text>
+  <!-- Arrow Memory -> S1 Decision -->
+  <path d="M 102.5 252 L 102.5 280" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arr-slate)"/>
 
-  <!-- 4. Planner Agent Node (Subtle Grey Fill with Blue Border) -->
-  <g transform="translate(270, 260)">
-    <rect width="195" height="66" rx="6" fill="#f8fafc" stroke="#0369a1" stroke-width="1.8"/>
-    <text x="97" y="19" font-size="11.5" font-weight="bold" fill="#0369a1" text-anchor="middle">臨床規劃員 (Clinical Planner)</text>
-    <text x="97" y="34" font-size="10" fill="#334155" text-anchor="middle">gemini-3.5-flash-lite (temp 0.1)</text>
-    <text x="97" y="49" font-size="9.5" fill="#475569" text-anchor="middle">判定意圖領域、槽位缺口盤點</text>
-    <text x="97" y="60" font-size="9" fill="#0369a1" text-anchor="middle">輸出結構化下一步臨床溝通導引</text>
+  <!-- 4. S1 Switch Decision Diamond -->
+  <g transform="translate(102.5, 298)">
+    <polygon points="0,-18 30,0 0,18 -30,0" fill="#f0f7ff" stroke="#0369a1" stroke-width="1.5"/>
+    <text x="0" y="5" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">S1?</text>
+  </g>
+  <text x="142" y="295" font-size="15.0" font-weight="bold" fill="#0369a1">enable_planner</text>
+
+  <!-- S1 ON Arrow -> Planner -->
+  <path d="M 102.5 316 L 102.5 348" fill="none" stroke="#0369a1" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+  <text x="110" y="337" font-size="15.0" font-weight="bold" fill="#0369a1">ON</text>
+
+  <!-- Clinical Planner Box -->
+  <g transform="translate(18, 350)">
+    <rect width="170" height="64" rx="5" fill="#ffffff" stroke="#0369a1" stroke-width="1.8"/>
+    <text x="85" y="24" font-size="18.0" font-weight="bold" fill="#0369a1" text-anchor="middle">臨床規劃員 (Planner)</text>
+    <text x="85" y="43" font-size="15.0" fill="#334155" text-anchor="middle">意圖判定與槽位缺口盤點</text>
+    <text x="85" y="57" font-size="15.0" fill="#64748b" text-anchor="middle">gemini-3.5-flash-lite (0.1)</text>
   </g>
 
-  <!-- S1 Branch: OFF (A: Bypass) -->
-  <path d="M 95 306 L 95 383" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arrow-gray)"/>
-  <text x="35" y="342" font-size="10" font-weight="bold" fill="#475569">OFF (A: Bypass)</text>
-  <text x="35" y="355" font-size="9" fill="#64748b">中立狀態直通</text>
+  <!-- S1 OFF Bypass (A) -->
+  <path d="M 72.5 298 L 8 298 L 8 470 L 225 470 L 225 385 L 245 385" fill="none" stroke="#64748b" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arr-slate)"/>
+  <text x="12" y="325" font-size="15.0" font-weight="bold" fill="#64748b">OFF (A 直通)</text>
 
-  <!-- Planner to Talker: Guidance (Vertical clean drop) -->
-  <path d="M 330 326 L 330 383" fill="none" stroke="#0369a1" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
-  <text x="336" y="362" font-size="9.5" font-weight="bold" fill="#0369a1">臨床導引 (Guidance)</text>
+  <!-- Guidance Arrow: Planner -> Talker -->
+  <path d="M 188 382 L 245 382" fill="none" stroke="#0369a1" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+  <text x="216" y="374" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">臨床導引</text>
 
-  <!-- Planner to Tool Gate: State & Domain -->
-  <path d="M 465 293 L 500 293" fill="none" stroke="#0369a1" stroke-width="1.6" stroke-dasharray="3 3" marker-end="url(#arrow-blue)"/>
-  <text x="483" y="285" font-size="9" font-weight="bold" fill="#0369a1" text-anchor="middle">狀態</text>
+  <!-- State Arrow from Memory to S2 Tool Gate -->
+  <path d="M 188 227 L 245 227" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arr-slate)"/>
+  <text x="216" y="219" font-size="15.0" fill="#334155" text-anchor="middle">病患狀態</text>
 
-  <!-- 5. Tool Gate Node (S2) - Academic Blue Style -->
-  <g transform="translate(502, 256)">
-    <rect width="200" height="74" rx="6" fill="#f8fafc" stroke="#0369a1" stroke-width="1.8"/>
-    <text x="100" y="18" font-size="11.5" font-weight="bold" fill="#0369a1" text-anchor="middle">S2: 動態工具門禁 (Tool Gate)</text>
-    <text x="100" y="32" font-size="9.5" font-weight="bold" fill="#1e293b" text-anchor="middle">enable_dynamic_tool_gate</text>
-    <line x1="10" y1="38" x2="190" y2="38" stroke="#e2e8f0" stroke-width="1"/>
-    <text x="100" y="52" font-size="9.5" fill="#0369a1" text-anchor="middle">ON (C, D): 依領域與議程動態過濾</text>
-    <text x="100" y="66" font-size="9.5" fill="#64748b" text-anchor="middle">OFF (A, B): 暴露全部候選工具</text>
+  <!-- 5. S2 Tool Gate Box -->
+  <g transform="translate(247, 196)">
+    <rect width="158" height="62" rx="5" fill="#f0f7ff" stroke="#0369a1" stroke-width="1.5"/>
+    <text x="79" y="23" font-size="18.0" font-weight="bold" fill="#0369a1" text-anchor="middle">S2: 動態工具門禁</text>
+    <text x="79" y="41" font-size="15.0" fill="#0369a1" text-anchor="middle">ON(C,D): 動態暴露過濾</text>
+    <text x="79" y="55" font-size="15.0" fill="#64748b" text-anchor="middle">OFF(A,B): 候選工具全暴露</text>
   </g>
 
-  <!-- Tool Gate -> Allowed Tools Schema -> Talker -->
-  <path d="M 602 330 L 602 346 L 245 346 L 245 383" fill="none" stroke="#0369a1" stroke-width="1.6" stroke-dasharray="4 2" marker-end="url(#arrow-blue)"/>
-  <!-- Label with clean neutral badge -->
-  <g transform="translate(385, 336)">
-    <rect x="-5" y="-1" width="205" height="18" rx="3" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="97" y="12" font-size="9.5" font-weight="bold" fill="#0369a1" text-anchor="middle">可見工具清單 (Allowed Tools Schema)</text>
+  <!-- Allowed Tools to Talker -->
+  <path d="M 326 258 L 326 326" fill="none" stroke="#0369a1" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+  <text x="334" y="295" font-size="15.0" font-weight="bold" fill="#0369a1">可見工具清單</text>
+
+  <!-- 6. Controlled External Tools (Tools Execution) in UPPER RIGHT -->
+  <g transform="translate(425, 185)">
+    <rect width="158" height="74" rx="5" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
+    <text x="79" y="22" font-size="18.0" font-weight="bold" fill="#1e293b" text-anchor="middle">受控外部工具 (Tools)</text>
+    <text x="8" y="42" font-size="15.0" fill="#334155">• search_handbook</text>
+    <text x="8" y="58" font-size="15.0" fill="#334155">• generate_visit_summary</text>
+    <text x="8" y="70" font-size="15.0" fill="#64748b">(2工具 Schema 雜湊鎖定)</text>
   </g>
 
-  <!-- 6. Talker LLM Core Node -->
-  <g transform="translate(45, 385)">
-    <rect width="270" height="76" rx="8" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
-    <text x="135" y="22" font-size="13.5" font-weight="bold" fill="#0f172a" text-anchor="middle">衛教生成層 (Talker LLM 核心)</text>
-    <text x="135" y="40" font-size="11" fill="#334155" text-anchor="middle">gemini-3.5-flash-lite (temp 0.3)</text>
-    <text x="135" y="55" font-size="10" fill="#475569" text-anchor="middle">護理師共感衛教提示詞</text>
-    <text x="135" y="68" font-size="9.5" fill="#0369a1" text-anchor="middle">依對話與導引自主決定是否調用工具</text>
+  <!-- 7. Talker LLM Core -->
+  <g transform="translate(247, 328)">
+    <rect width="215" height="92" rx="6" fill="#ffffff" stroke="#0f172a" stroke-width="2.0"/>
+    <text x="107.5" y="26" font-size="18.5" font-weight="bold" fill="#0f172a" text-anchor="middle">衛教生成層 (Talker LLM)</text>
+    <text x="107.5" y="47" font-size="15.2" fill="#334155" text-anchor="middle">gemini-3.5-flash-lite (temp 0.3)</text>
+    <text x="107.5" y="65" font-size="15.0" fill="#475569" text-anchor="middle">護理師共感衛教提示詞</text>
+    <text x="107.5" y="83" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">自主決定是否調用外部工具</text>
   </g>
 
-  <!-- 7. External Tools Box (Neutral Grey Palette) -->
-  <g transform="translate(465, 385)">
-    <rect width="235" height="76" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.8"/>
-    <text x="117" y="20" font-size="12" font-weight="bold" fill="#1e293b" text-anchor="middle">受控外部工具 (Tools Execution)</text>
-    <text x="117" y="35" font-size="9.5" fill="#475569" text-anchor="middle">由 Talker 自主發起 Function Call 調用</text>
-    <line x1="12" y1="41" x2="223" y2="41" stroke="#e2e8f0" stroke-width="1"/>
-    <text x="16" y="55" font-size="9.8" fill="#334155">• 雙軌 RAG: search_handbook (國健署/TFDA)</text>
-    <text x="16" y="69" font-size="9.8" fill="#334155">• 門診摘要產卡: generate_visit_summary</text>
+  <!-- Two-way arrows Talker <-> Tools -->
+  <!-- Tool Call: Talker -> Tools (Upward) -->
+  <path d="M 462 345 L 485 345 L 485 261" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arr-slate)"/>
+  <text x="492" y="305" font-size="15.0" font-weight="bold" fill="#475569">tool call</text>
+
+  <!-- Tool Result: Tools -> Talker (Downward) -->
+  <path d="M 535 259 L 535 375 L 464 375" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arr-slate)"/>
+  <text x="542" y="318" font-size="15.0" font-weight="bold" fill="#475569">tool result</text>
+  <text x="542" y="335" font-size="15.0" fill="#64748b">(回傳證據)</text>
+
+  <!-- Talker to S3 Switch (Downward) -->
+  <path d="M 354 420 L 354 445" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arr-slate)"/>
+
+  <!-- S3 Decision Diamond -->
+  <g transform="translate(354, 462)">
+    <polygon points="0,-16 22,0 0,16 -22,0" fill="#f0f7ff" stroke="#0369a1" stroke-width="1.5"/>
+    <text x="0" y="5" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">S3?</text>
   </g>
 
-  <!-- Bidirectional Interaction between Talker and Tools across 150px gap -->
-  <!-- 1. Tool Call: Talker -> Tools -->
-  <path d="M 315 407 L 463 407" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
-  <!-- Label with clean badge -->
-  <g transform="translate(345, 395)">
-    <rect x="0" y="-1" width="90" height="15" rx="3" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="45" y="10.5" font-size="9" font-weight="bold" fill="#1e293b" text-anchor="middle">tool call (調用)</text>
+  <!-- S3 ON -> Output Guard (Downward) -->
+  <path d="M 354 478 L 354 502" fill="none" stroke="#991b1b" stroke-width="1.8" marker-end="url(#arr-red)"/>
+  <text x="362" y="492" font-size="15.0" font-weight="bold" fill="#991b1b">ON (D)</text>
+
+  <!-- S3 OFF Bypass -> Passthrough to Response (Right side loop) -->
+  <path d="M 376 462 L 530 462 L 530 545 L 485 545" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arr-slate)"/>
+  <text x="385" y="454" font-size="15.0" font-weight="bold" fill="#64748b">OFF (A-C: 直通不檢查)</text>
+
+  <!-- Output Guard Box -->
+  <g transform="translate(262, 504)">
+    <rect width="185" height="52" rx="5" fill="#ffffff" stroke="#991b1b" stroke-width="1.6"/>
+    <text x="92.5" y="22" font-size="18.0" font-weight="bold" fill="#991b1b" text-anchor="middle">S3: 輸出熔斷網 (Guard)</text>
+    <text x="92.5" y="39" font-size="15.0" fill="#991b1b" text-anchor="middle">攔截調藥/確診/宣稱 (覆寫)</text>
   </g>
 
-  <!-- 2. Tool Result: Tools -> Talker -->
-  <path d="M 465 437 L 317 437" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
-  <!-- Label with clean badge avoiding all borders -->
-  <g transform="translate(322, 442)">
-    <rect x="0" y="-1" width="138" height="25" rx="3" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="69" y="10.5" font-size="9" font-weight="bold" fill="#1e293b" text-anchor="middle">tool result (回傳結果)</text>
-    <text x="69" y="21.5" font-size="8.5" fill="#64748b" text-anchor="middle">檢索證據／二次生成／產卡確認</text>
+  <!-- Output Guard -> Response -->
+  <path d="M 447 530 L 480 530" fill="none" stroke="#991b1b" stroke-width="1.8" marker-end="url(#arr-red)"/>
+
+  <!-- Final Response -->
+  <g transform="translate(482, 506)">
+    <rect width="95" height="48" rx="5" fill="#f8fafc" stroke="#1e293b" stroke-width="1.8"/>
+    <text x="47.5" y="21" font-size="18.0" font-weight="bold" fill="#1e293b" text-anchor="middle">最終輸出</text>
+    <text x="47.5" y="38" font-size="15.0" fill="#475569" text-anchor="middle">病患衛教卡</text>
   </g>
 
-  <!-- Flow Arrow: Talker -> S3 Fork -->
-  <path d="M 180 461 L 180 481" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow)"/>
-
-  <!-- S3 Switch Fork (Classic Blue Emphasis) -->
-  <g transform="translate(105, 483)">
-    <rect width="150" height="26" rx="4" fill="#ffffff" stroke="#0369a1" stroke-width="1.5" stroke-dasharray="4 2"/>
-    <text x="75" y="17" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">S3: enable_output_guard ?</text>
-  </g>
-
-  <!-- S3 Branch: ON (D) -> Output Guard (Subdued Crimson Emphasis) -->
-  <path d="M 180 509 L 180 528" fill="none" stroke="#991b1b" stroke-width="1.8" marker-end="url(#arrow-red)"/>
-  <text x="186" y="522" font-size="9" font-weight="bold" fill="#991b1b">ON (D)</text>
-
-  <!-- 8. Output Guard Node - Clean White BG with Subdued Crimson Border -->
-  <g transform="translate(45, 530)">
-    <rect width="270" height="52" rx="6" fill="#ffffff" stroke="#991b1b" stroke-width="2"/>
-    <text x="135" y="20" font-size="12" font-weight="bold" fill="#991b1b" text-anchor="middle">S3: 輸出熔斷網 (Output Guard)</text>
-    <text x="135" y="35" font-size="10" fill="#475569" text-anchor="middle">inspect_output_guard 攔截調藥、確診與神效宣稱</text>
-    <text x="135" y="47" font-size="9" fill="#991b1b" text-anchor="middle">違規時物理覆蓋為合規安全話術 (Safety Override)</text>
-  </g>
-
-  <!-- S3 Branch: OFF (A, B, C: Passthrough) -->
-  <path d="M 255 496 L 360 496 L 360 617 L 277 617" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arrow-gray)"/>
-  <text x="368" y="550" font-size="10" font-weight="bold" fill="#475569">OFF (A, B, C: Passthrough)</text>
-  <text x="368" y="564" font-size="9" fill="#64748b">Talker 生成文字直通不檢查</text>
-
-  <!-- Output Guard -> Final Response -->
-  <path d="M 180 582 L 180 599" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow)"/>
-
-  <!-- 9. Final Response Node (Neutral Slate Grey, No Green) -->
-  <g transform="translate(75, 601)">
-    <rect width="200" height="42" rx="6" fill="#ffffff" stroke="#1e293b" stroke-width="2"/>
-    <text x="100" y="18" font-size="12" font-weight="bold" fill="#0f172a" text-anchor="middle">最終病患端輸出 (Response)</text>
-    <text x="100" y="34" font-size="10" fill="#475569" text-anchor="middle">LINE 衛教文字回覆 / 就醫備忘錄</text>
-  </g>
-
-  <!-- ========================================================================= -->
-  <!-- PANEL (b): Incremental Ablation Matrix & Invariants                       -->
-  <!-- ========================================================================= -->
-  <rect x="735" y="20" width="405" height="640" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
-  <rect x="735" y="20" width="405" height="42" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <rect x="736" y="50" width="403" height="12" fill="#f8fafc"/>
-  <text x="750" y="47" font-size="15.5" font-weight="bold" fill="#0f172a">Panel (b): 逐層消融矩陣 (Ablation Matrix)</text>
-
-  <!-- Subtitle -->
-  <text x="750" y="80" font-size="11.5" font-weight="bold" fill="#334155">【唯一差異原則：相鄰條件僅新增一層防線】</text>
+  <!-- ==================== PANEL (b) ==================== -->
+  <text x="615" y="56" font-size="15.0" font-weight="bold" fill="#0369a1">【唯一差異原則：相鄰條件僅新增一層防線】</text>
 
   <!-- Table Header -->
-  <g transform="translate(750, 92)">
-    <rect width="375" height="28" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="35" y="19" font-size="11" font-weight="bold" fill="#1e293b" text-anchor="middle">條件</text>
-    <text x="120" y="19" font-size="11" font-weight="bold" fill="#0369a1" text-anchor="middle">S1: Planner</text>
-    <text x="215" y="19" font-size="11" font-weight="bold" fill="#0369a1" text-anchor="middle">S2: Tool Gate</text>
-    <text x="315" y="19" font-size="11" font-weight="bold" fill="#991b1b" text-anchor="middle">S3: Out Guard</text>
+  <g transform="translate(615, 68)">
+    <rect width="325" height="34" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="30" y="22" font-size="15.0" font-weight="bold" fill="#1e293b" text-anchor="middle">條件</text>
+    <text x="98" y="22" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">S1: Planner</text>
+    <text x="183" y="22" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">S2: Gate</text>
+    <text x="272" y="22" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">S3: Guard</text>
   </g>
 
-  <!-- Row A (Neutral White) -->
-  <g transform="translate(750, 120)">
-    <rect width="375" height="42" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="35" y="22" font-size="13" font-weight="bold" fill="#1e293b" text-anchor="middle">A</text>
-    <text x="35" y="35" font-size="8.5" fill="#64748b" text-anchor="middle">(基準組)</text>
-    <rect x="90" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="120" y="25" font-size="10.5" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
-    <rect x="185" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="215" y="25" font-size="10.5" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
-    <rect x="285" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="315" y="25" font-size="10.5" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
+  <!-- Row A -->
+  <g transform="translate(615, 104)">
+    <rect width="325" height="38" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="30" y="19" font-size="18.0" font-weight="bold" fill="#334155" text-anchor="middle">A</text>
+    <text x="30" y="32" font-size="15.0" fill="#64748b" text-anchor="middle">(基準組)</text>
+    <rect x="73" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="98" y="24" font-size="15.0" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
+    <rect x="158" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="183" y="24" font-size="15.0" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
+    <rect x="247" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="272" y="24" font-size="15.0" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
   </g>
 
   <!-- Step arrow A -> B -->
-  <path d="M 765 163 L 765 174" fill="none" stroke="#0369a1" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
-  <text x="778" y="172" font-size="9" font-weight="bold" fill="#0369a1">+ 結構化規劃與臨床導引</text>
+  <path d="M 632 144 L 632 154" fill="none" stroke="#0369a1" stroke-width="1.6" marker-end="url(#arr-blue)"/>
+  <text x="644" y="152" font-size="15.0" font-weight="bold" fill="#0369a1">+ 結構化規劃與臨床導引</text>
 
-  <!-- Row B (Neutral Light Grey) -->
-  <g transform="translate(750, 176)">
-    <rect width="375" height="42" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="35" y="22" font-size="13" font-weight="bold" fill="#0369a1" text-anchor="middle">B</text>
-    <text x="35" y="35" font-size="8.5" fill="#0369a1" text-anchor="middle">(+規劃員)</text>
-    <rect x="90" y="10" width="60" height="22" rx="4" fill="#f0f7ff" stroke="#0369a1"/>
-    <text x="120" y="25" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
-    <rect x="185" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="215" y="25" font-size="10.5" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
-    <rect x="285" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="315" y="25" font-size="10.5" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
+  <!-- Row B -->
+  <g transform="translate(615, 157)">
+    <rect width="325" height="38" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="30" y="19" font-size="18.0" font-weight="bold" fill="#0369a1" text-anchor="middle">B</text>
+    <text x="30" y="32" font-size="15.0" fill="#0369a1" text-anchor="middle">(+規劃員)</text>
+    <rect x="73" y="8" width="50" height="23" rx="3" fill="#f0f7ff" stroke="#0369a1"/>
+    <text x="98" y="24" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
+    <rect x="158" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="183" y="24" font-size="15.0" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
+    <rect x="247" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="272" y="24" font-size="15.0" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
   </g>
 
   <!-- Step arrow B -> C -->
-  <path d="M 765 219 L 765 230" fill="none" stroke="#0369a1" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
-  <text x="778" y="228" font-size="9" font-weight="bold" fill="#0369a1">+ 依狀態之動態工具暴露與議程門禁</text>
+  <path d="M 632 197 L 632 207" fill="none" stroke="#0369a1" stroke-width="1.6" marker-end="url(#arr-blue)"/>
+  <text x="644" y="205" font-size="15.0" font-weight="bold" fill="#0369a1">+ 依狀態之動態工具門禁</text>
 
-  <!-- Row C (Neutral Light Grey) -->
-  <g transform="translate(750, 232)">
-    <rect width="375" height="42" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="35" y="22" font-size="13" font-weight="bold" fill="#0369a1" text-anchor="middle">C</text>
-    <text x="35" y="35" font-size="8.5" fill="#0369a1" text-anchor="middle">(+工具閥門)</text>
-    <rect x="90" y="10" width="60" height="22" rx="4" fill="#f0f7ff" stroke="#0369a1"/>
-    <text x="120" y="25" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
-    <rect x="185" y="10" width="60" height="22" rx="4" fill="#f0f7ff" stroke="#0369a1"/>
-    <text x="215" y="25" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
-    <rect x="285" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="315" y="25" font-size="10.5" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
+  <!-- Row C -->
+  <g transform="translate(615, 210)">
+    <rect width="325" height="38" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="30" y="19" font-size="18.0" font-weight="bold" fill="#0369a1" text-anchor="middle">C</text>
+    <text x="30" y="32" font-size="15.0" fill="#0369a1" text-anchor="middle">(+工具閥門)</text>
+    <rect x="73" y="8" width="50" height="23" rx="3" fill="#f0f7ff" stroke="#0369a1"/>
+    <text x="98" y="24" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
+    <rect x="158" y="8" width="50" height="23" rx="3" fill="#f0f7ff" stroke="#0369a1"/>
+    <text x="183" y="24" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
+    <rect x="247" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="272" y="24" font-size="15.0" font-weight="bold" fill="#64748b" text-anchor="middle">OFF</text>
   </g>
 
   <!-- Step arrow C -> D -->
-  <path d="M 765 275 L 765 286" fill="none" stroke="#991b1b" stroke-width="1.8" marker-end="url(#arrow-red)"/>
-  <text x="778" y="284" font-size="9" font-weight="bold" fill="#991b1b">+ 輸出違規攔截與安全覆寫</text>
+  <path d="M 632 250 L 632 260" fill="none" stroke="#991b1b" stroke-width="1.6" marker-end="url(#arr-red)"/>
+  <text x="644" y="258" font-size="15.0" font-weight="bold" fill="#991b1b">+ 輸出違規攔截與安全覆寫</text>
 
-  <!-- Row D (Neutral Light Grey, NO Red/Pink Fill for row!) -->
-  <g transform="translate(750, 288)">
-    <rect width="375" height="42" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="35" y="22" font-size="13" font-weight="bold" fill="#1e293b" text-anchor="middle">D</text>
-    <text x="35" y="35" font-size="8.5" fill="#991b1b" text-anchor="middle">(+輸出熔斷)</text>
-    <rect x="90" y="10" width="60" height="22" rx="4" fill="#f0f7ff" stroke="#0369a1"/>
-    <text x="120" y="25" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
-    <rect x="185" y="10" width="60" height="22" rx="4" fill="#f0f7ff" stroke="#0369a1"/>
-    <text x="215" y="25" font-size="10.5" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
-    <!-- S3 ON: Discrete Subdued Crimson Badge -->
-    <rect x="285" y="10" width="60" height="22" rx="4" fill="#ffffff" stroke="#991b1b" stroke-width="1.5"/>
-    <text x="315" y="25" font-size="10.5" font-weight="bold" fill="#991b1b" text-anchor="middle">ON</text>
+  <!-- Row D -->
+  <g transform="translate(615, 263)">
+    <rect width="325" height="38" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="30" y="19" font-size="18.0" font-weight="bold" fill="#1e293b" text-anchor="middle">D</text>
+    <text x="30" y="32" font-size="15.0" fill="#991b1b" text-anchor="middle">(+輸出熔斷)</text>
+    <rect x="73" y="8" width="50" height="23" rx="3" fill="#f0f7ff" stroke="#0369a1"/>
+    <text x="98" y="24" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
+    <rect x="158" y="8" width="50" height="23" rx="3" fill="#f0f7ff" stroke="#0369a1"/>
+    <text x="183" y="24" font-size="15.0" font-weight="bold" fill="#0369a1" text-anchor="middle">ON</text>
+    <!-- S3 ON discrete badge -->
+    <rect x="247" y="8" width="50" height="23" rx="3" fill="#ffffff" stroke="#991b1b" stroke-width="1.6"/>
+    <text x="272" y="24" font-size="15.0" font-weight="bold" fill="#991b1b" text-anchor="middle">ON</text>
   </g>
 
-  <!-- Invariants & Rigorous Controls Section -->
-  <g transform="translate(750, 348)">
-    <rect width="375" height="295" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-    <rect width="375" height="28" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-    <rect y="20" width="375" height="8" fill="#f8fafc"/>
-    <text x="187" y="19" font-size="11.5" font-weight="bold" fill="#1e293b" text-anchor="middle">實驗嚴格控制變項與不變量 (Controlled Invariants)</text>
+  <!-- Invariants Box -->
+  <g transform="translate(615, 314)">
+    <rect width="325" height="262" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+    <rect width="325" height="30" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <rect y="22" width="325" height="8" fill="#f8fafc"/>
+    <text x="162.5" y="21" font-size="15.5" font-weight="bold" fill="#1e293b" text-anchor="middle">實驗嚴格控制變項與不變量 (Invariants)</text>
 
     <!-- 1. Input Guard -->
-    <circle cx="20" cy="46" r="4" fill="#991b1b"/>
-    <text x="32" y="50" font-size="10.5" font-weight="bold" fill="#0f172a">四組共同基礎設施 (固定 ON / 不消融)：</text>
-    <text x="32" y="66" font-size="9.8" fill="#475569">• Input Guard: 四組全程固定啟用，攔截提示注入與自傷；</text>
-    <text x="40" y="80" font-size="9.3" fill="#64748b">觸發案例獨立報告 (sanity check)，不計入 A–D 效果。</text>
+    <circle cx="16" cy="46" r="3.5" fill="#991b1b"/>
+    <text x="26" y="50" font-size="15.0" font-weight="bold" fill="#0f172a">四組共同基礎 (固定啟用 / 不消融)：</text>
+    <text x="26" y="68" font-size="15.0" fill="#475569">• Input Guard: 全程啟用阻斷提示注入與自傷；</text>
+    <text x="34" y="85" font-size="15.0" fill="#64748b">阻斷案例獨立報告 (sanity check) 不計效果</text>
 
-    <line x1="15" y1="91" x2="360" y2="91" stroke="#e2e8f0" stroke-width="1"/>
+    <line x1="12" y1="98" x2="313" y2="98" stroke="#e2e8f0" stroke-width="1"/>
 
     <!-- 2. Auxiliaries Fixed OFF -->
-    <circle cx="20" cy="107" r="4" fill="#475569"/>
-    <text x="32" y="111" font-size="10.5" font-weight="bold" fill="#0f172a">三項生產輔助行為 (主要消融固定 OFF)：</text>
-    <text x="32" y="127" font-size="9.8" fill="#475569">• enable_forced_retrieval: 關閉前置強制檢索與注入</text>
-    <text x="32" y="142" font-size="9.8" fill="#475569">• enable_fixed_warning_append: 關閉停藥固定警語追加</text>
-    <text x="32" y="157" font-size="9.8" fill="#475569">• enable_question_budget_postproc: 關閉問句截斷與濾 emoji</text>
+    <circle cx="16" cy="116" r="3.5" fill="#475569"/>
+    <text x="26" y="120" font-size="15.0" font-weight="bold" fill="#0f172a">三項生產輔助 (主消融固定 OFF)：</text>
+    <text x="26" y="139" font-size="15.0" fill="#475569">• 關閉前置強制檢索 (enable_forced_retrieval)</text>
+    <text x="26" y="156" font-size="15.0" fill="#475569">• 關閉停藥警語追加與問句截斷後處理</text>
 
-    <line x1="15" y1="168" x2="360" y2="168" stroke="#e2e8f0" stroke-width="1"/>
+    <line x1="12" y1="169" x2="313" y2="169" stroke="#e2e8f0" stroke-width="1"/>
 
     <!-- 3. Model & Frozen Fingerprints -->
-    <circle cx="20" cy="184" r="4" fill="#0369a1"/>
-    <text x="32" y="188" font-size="10.5" font-weight="bold" fill="#0f172a">模型參數與設定指紋 (嚴格凍結)：</text>
-    <text x="32" y="204" font-size="9.8" fill="#475569">• Talker / Planner: gemini-3.5-flash-lite (temp 0.3 / 0.1)</text>
-    <text x="32" y="219" font-size="9.8" fill="#475569">• Judge: gemini-3.7-flash (temp 0.0, 雙評分 + tie-break)</text>
-    <text x="32" y="234" font-size="9.8" fill="#475569">• 規模: 92 軌跡 / 204 助理回合 (固定多輪對抗腳本)</text>
-    <text x="32" y="249" font-size="9.8" fill="#475569">• 無 Patient Agent (固定腳本確保病患事實不漂移)</text>
-    <text x="32" y="264" font-size="9.8" fill="#475569">• 5 枚 frozen fingerprints 與 fail-closed 預檢閘門</text>
-    <text x="32" y="279" font-size="9.3" fill="#64748b">• 2 工具 canonical schema 雜湊凍結 (e548a8...)</text>
+    <circle cx="16" cy="188" r="3.5" fill="#0369a1"/>
+    <text x="26" y="192" font-size="15.0" font-weight="bold" fill="#0f172a">模型參數與設定指紋 (嚴格凍結)：</text>
+    <text x="26" y="211" font-size="15.0" fill="#475569">• Talker/Planner: gemini-3.5-flash-lite (0.3/0.1)</text>
+    <text x="26" y="228" font-size="15.0" fill="#475569">• Judge: gemini-3.7-flash (0.0, 雙評分無tie)</text>
+    <text x="26" y="246" font-size="15.0" fill="#475569">• 92 軌跡/204 回合 (固定腳本無事實漂移)</text>
+    <text x="26" y="262" font-size="15.0" fill="#64748b">• 5 枚凍結指紋與 2 工具 schema 雜湊鎖定</text>
   </g>
-
 </svg>
