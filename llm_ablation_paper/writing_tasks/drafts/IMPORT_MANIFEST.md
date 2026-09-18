@@ -6,19 +6,24 @@
 
 | 作者 | 歸檔檔案 | 狀態 | 後續工作 |
 |---|---|---|---|
-| Writer 1 | `writer_1_intro_related_work.md` | 已原樣匯入，待引用與主張審核 | 查核 18 筆文獻、年份、DOI 與「研究缺口」範圍；將 A–D 改為描述性條件名稱並保留代碼對照 |
-| Writer 2 | `writer_2_system_ablation_method.md` | 已完成獨立驗收 | 整合時保留 Figure 1 與 Table 1；正文優先使用 Base、Planner、Planner + Gate、Full-stack 等描述性名稱 |
-| Writer 3 | `writer_3_dataset_evaluation_results.md` | 已原樣匯入，待結果與圖表審核 | 核對固定數字、來源標記與 Writer 2 的圖表編號；補交 Figure 2、3、4 的正式獨立圖檔 |
+| Writer 1 | `writer_1_intro_related_work.md` | 已完成文獻核驗與名稱對齊 | 18 筆文獻核驗通過，產出 `references.bib` 與 `review/writer1_citation_audit.md`；修正過度主張 |
+| Writer 2 | `writer_2_system_ablation_method.md` | 已完成獨立驗收 | 保留 Figure 1 與 Table 1；條件名稱統一為 Base (A) 至 Full-stack (D) |
+| Writer 3 | `writer_3_dataset_evaluation_results.md` | 已完成圖表重建與編號對齊 | 表格升級為 Table 2 與 Table 3；Figure 2、3、4 獨立 SVG 與 300 DPI PNG 已補齊，狀態更新為 COMPLETE |
 
 ## Writer 3 圖檔狀態
 
-收到的 `figures/previews/writer3_figures_preview.png` 是 Figure 2、3、4 的合併預覽圖，只供內容與版面檢查，不應直接作為投稿圖檔。Writer 3 正文目前引用下列三個尚未收到的正式檔案：
+原先合圖預覽已替換為符合學術發表品質之獨立出版級圖檔（向量 SVG 與 300 DPI PNG）：
 
-- `figures/writer3_figure_2_cfr.png`
-- `figures/writer3_figure_3_fact.png`
-- `figures/writer3_figure_4_scanner.png`
+- `figures/figure2_cfr.svg` 與 `figures/figure2_cfr.png`（CFR 森林圖，標註 0/12 與 24.25%）
+- `figures/figure3_fact.svg` 與 `figures/figure3_fact.png`（主案例與探針雙子圖）
+- `figures/figure4_scanner.svg` 與 `figures/figure4_scanner.png`（掃描器與評判者分歧方向與分佈）
 
-在三張正式圖檔補齊前，Writer 3 的圖表交付狀態為 `INCOMPLETE_ASSETS`。
+Writer 3 的圖表交付狀態已從 `INCOMPLETE_ASSETS` 更新為 `COMPLETE`。
+
+## 整合成果
+
+已完成 Section 1 至 Section 4 完整學術繁體中文整合正文：
+- `PAPER_SECTIONS_1_TO_4_INTEGRATED.md`（可直接交由 Writer 4 進行 Discussion 撰寫與全文整編）
 
 ## 原始檔案 SHA-256
 
